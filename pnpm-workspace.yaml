@@ -1,0 +1,11 @@
+packages:
+  - frontend/apps/*
+  - frontend/packages/*
+  - frontend/edge/cloudflare/*
+  - backend/applications/*
+  - backend/packages/*
+
+onlyBuiltDependencies:
+  - '@prisma/client'
+  - '@prisma/engines'
+  - prisma

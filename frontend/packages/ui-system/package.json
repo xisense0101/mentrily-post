@@ -1,0 +1,17 @@
+{
+  "name": "@mentrily/ui-system",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "lint": "eslint src",
+    "test": "vitest run --passWithNoTests",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "storybook": "storybook dev -p 6006"
+  },
+  "devDependencies": {
+    "@storybook/react-vite": "^9.0.8",
+    "storybook": "^9.0.8"
+  }
+}

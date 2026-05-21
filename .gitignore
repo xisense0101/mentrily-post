@@ -1,0 +1,34 @@
+node_modules/
+.pnpm-store/
+.turbo/
+.next/
+out/
+dist/
+coverage/
+playwright-report/
+test-results/
+# Test Output
+typecheck_output.txt
+vitest_output.txt
+**/vitest_output.txt
+**/*_output.txt
+*_test_output.txt
+*_test-output.txt
+*.log
+.env
+.env.local
+.env.*.local
+.env.test
+!.env.example
+!.env.test.example
+!.env.staging.example
+!.env.production.example
+.DS_Store
+.idea/
+.vscode/
+*.swp
+bin/
+
+# Generated & Scratch
+backend/packages/data-platform/src/generated/
+backend/packages/data-platform/scratch/

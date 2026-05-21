@@ -1,0 +1,39 @@
+{
+  "name": "@mentrily/data-platform",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "lint": "eslint src",
+    "test": "vitest run --config vitest.config.ts",
+    "test:integration": "sh -c 'find src -type f -name \"*.integration.spec.ts\" | sort | while read -r file; do POOL=forks vitest run --config vitest.integration.config.ts --no-isolate \"$file\" || exit 1; done'",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "prisma:generate": "DOTENV_CONFIG_PATH=../../../.env.test node -r dotenv/config $(node -p \"require.resolve('prisma/build/index.js')\") generate",
+    "prisma:validate": "DOTENV_CONFIG_PATH=../../../.env.test node -r dotenv/config $(node -p \"require.resolve('prisma/build/index.js')\") validate",
+    "prisma:migrate:dev": "prisma migrate dev",
+    "prisma:migrate:deploy": "DOTENV_CONFIG_PATH=../../../.env.test node -r dotenv/config $(node -p \"require.resolve('prisma/build/index.js')\") migrate deploy",
+    "prisma:migrate:reset": "prisma migrate reset",
+    "prisma:studio": "prisma studio"
+  },
+  "dependencies": {
+    "@mentrily/service-core": "workspace:*",
+    "@nestjs/common": "^11.0.11",
+    "@prisma/client": "^6.4.1"
+  },
+  "devDependencies": {
+    "@mentrily/testing-toolkit": "workspace:*",
+    "dotenv": "^17.4.2",
+    "prisma": "^6.4.1"
+  }
+}

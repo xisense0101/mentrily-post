@@ -1,0 +1,13 @@
+# Default ownership
+* @mentrily/suman-yadav
+
+# Frontend
+/frontend/ @mentrily/frontend
+
+# Backend
+/backend/ @mentrily/backend
+
+# Architecture and standards docs
+/docs/architecture/ @mentrily/architecture
+/docs/standards/ @mentrily/architecture
+/docs/decisions/ @mentrily/architecture

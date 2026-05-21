@@ -1,0 +1,33 @@
+{
+  "name": "@mentrily/portal",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "next build",
+    "dev": "next dev",
+    "lint": "eslint .",
+    "e2e": "playwright test",
+    "e2e:learning": "playwright test e2e/learning-delivery.spec.ts",
+    "e2e:content": "playwright test e2e/content-studio.spec.ts",
+    "e2e:assessment": "playwright test e2e/assessment-builder.spec.ts",
+    "e2e:assessment-attempt": "playwright test e2e/assessment-attempt.spec.ts",
+    "e2e:assessment-grading": "playwright test e2e/assessment-grading.spec.ts",
+    "e2e:assessment-result": "playwright test e2e/assessment-result.spec.ts",
+    "test": "vitest run",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@mentrily/domain-contracts": "workspace:*",
+    "next": "16.0.0",
+    "react": "19.2.0",
+    "react-dom": "19.2.0"
+  },
+  "devDependencies": {
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.0",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "jsdom": "^29.1.1"
+  }
+}

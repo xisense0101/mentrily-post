@@ -1,0 +1,5 @@
+export enum ContentVersionStatus {
+  DRAFT = 'DRAFT',
+  PUBLISHED_SNAPSHOT = 'PUBLISHED_SNAPSHOT',
+  SUPERSEDED = 'SUPERSEDED',
+}

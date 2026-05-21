@@ -1,0 +1,33 @@
+{
+  "extends": "../../../tsconfig.json",
+  "compilerOptions": {
+    "baseUrl": ".",
+    "jsx": "preserve",
+    "noEmit": true,
+    "incremental": true,
+    "types": ["node", "vitest/globals", "@testing-library/jest-dom"],
+    "plugins": [
+      {
+        "name": "next"
+      }
+    ],
+    "paths": {
+      "@/*": ["./src/*"],
+      "@/app/*": ["./src/app/*"],
+      "@/foundation/*": ["./src/foundation/*"],
+      "@/testing": ["./src/testing/index.ts"],
+      "@/contracts": ["./src/contracts/index.ts"],
+      "@/contracts/*": ["./src/contracts/*"],
+      "@/modules/*": ["./src/modules/*", "./src/modules/*/index.ts"],
+      "@mentrily/domain-contracts": ["../../packages/domain-contracts/src/index.ts"],
+      "@mentrily/ui-system": ["../../packages/ui-system/src/index.ts"]
+    }
+  },
+  "include": [
+    "next-env.d.ts",
+    "**/*.ts",
+    "**/*.tsx",
+    ".next/types/**/*.ts"
+  ],
+  "exclude": ["node_modules"]
+}

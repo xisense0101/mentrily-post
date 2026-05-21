@@ -1,0 +1,40 @@
+{
+  "name": "@mentrily/platform-api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "nest start --watch",
+    "build": "nest build",
+    "start": "node dist/main.js",
+    "lint": "eslint src",
+    "test": "vitest run --config vitest.config.ts",
+    "test:integration": "sh -c 'find src -type f \\( -name \"*.integration.spec.ts\" -o -name \"*.e2e.spec.ts\" \\) | sort | while read -r file; do POOL=forks vitest run --config vitest.integration.config.ts \"$file\" || exit 1; done'",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@clerk/backend": "^3.4.7",
+    "@mentrily/contract-catalog": "workspace:*",
+    "@mentrily/data-platform": "workspace:*",
+    "@mentrily/security-toolkit": "workspace:*",
+    "@mentrily/service-core": "workspace:*",
+    "@nestjs/common": "^11.1.1",
+    "@nestjs/core": "^11.1.1",
+    "@nestjs/platform-fastify": "^11.1.1",
+    "@prisma/client": "^6.4.1",
+    "fastify": "^5.3.3",
+    "reflect-metadata": "^0.2.2",
+    "rxjs": "^7.8.2",
+    "svix": "^1.93.0",
+    "uuid": "^14.0.0"
+  },
+  "devDependencies": {
+    "@mentrily/testing-toolkit": "workspace:*",
+    "@nestjs/cli": "^11.0.7",
+    "@nestjs/schematics": "^11.0.5",
+    "@nestjs/testing": "^11.1.1",
+    "@types/uuid": "^11.0.0",
+    "dotenv": "^17.4.2",
+    "vite-tsconfig-paths": "^5.1.4"
+  }
+}

@@ -1,0 +1,17 @@
+export const assessmentAttemptE2ESelectors = {
+  attemptsPage: '[data-testid="attempts-page"]',
+  attemptStartPage: '[data-testid="attempt-start-page"]',
+  attemptStartButton: '[data-testid="attempt-start-button"]',
+  attemptRunnerPage: '[data-testid="attempt-runner-page"]',
+  attemptRunnerShell: '[data-testid="attempt-runner-shell"]',
+  attemptQuestionCard: '[data-testid="attempt-question-card"]',
+  attemptAnswerInput: '[data-testid="attempt-answer-input"]',
+  attemptSaveAnswerButton: '[data-testid="attempt-save-answer-button"]',
+  attemptSubmitButton: '[data-testid="attempt-submit-button"]',
+  attemptStatusBadge: '[data-testid="attempt-status-badge"]',
+  attemptProgressPanel: '[data-testid="attempt-progress-panel"]',
+  attemptTimerBanner: '[data-testid="attempt-timer-banner"]',
+  attemptResultPlaceholder: '[data-testid="attempt-result-placeholder"]',
+  attemptErrorState: '[data-testid="attempt-error-state"]',
+  attemptEmptyState: '[data-testid="attempt-empty-state"]',
+} as const;
