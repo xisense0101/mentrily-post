@@ -32,3 +32,6 @@ bin/
 # Generated & Scratch
 backend/packages/data-platform/src/generated/
 backend/packages/data-platform/scratch/
+
+# TypeScript build cache
+*.tsbuildinfo
