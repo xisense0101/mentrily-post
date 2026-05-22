@@ -22,7 +22,7 @@ import {
   requireMediaActor,
   ensureMediaAssetOwnership,
 } from '../support/index.js';
-import { MediaEventPublisherService } from '../services/index.js';
+import { MediaEventPublisherService, MediaProcessingService, MediaSecurityScanService } from '../services/index.js';
 
 @Injectable()
 export class CompleteMediaUploadUseCase {
@@ -34,6 +34,8 @@ export class CompleteMediaUploadUseCase {
     @Inject(TRANSACTION_RUNNER) private readonly transactionRunner: TransactionRunner,
     @Inject(AUDIT_RECORDER) private readonly auditRecorder: AuditRecorder,
     @Inject(MediaEventPublisherService) private readonly eventPublisher: MediaEventPublisherService,
+    @Inject(MediaProcessingService) private readonly processingService: MediaProcessingService,
+    @Inject(MediaSecurityScanService) private readonly scanService: MediaSecurityScanService,
   ) {}
 
   async execute(
@@ -68,14 +70,26 @@ export class CompleteMediaUploadUseCase {
       ensureMediaAssetOwnership(asset, context);
 
       const savedIntent = await this.intentRepository.save(intent.complete(), tx);
-      const savedAsset = await this.assetRepository.save(
-        asset.markAvailable({
-          sizeBytes: input?.sizeBytes,
-          checksumSha256: input?.checksumSha256,
-          metadata: input?.metadata,
-        }),
-        tx,
-      );
+      
+      const uploadedAsset = asset.markUploaded({
+        sizeBytes: input?.sizeBytes,
+        checksumSha256: input?.checksumSha256,
+        metadata: input?.metadata,
+      });
+
+      await this.scanService.enqueueScanForAsset(context, uploadedAsset, tx);
+      const scannedAsset = uploadedAsset.queueScan();
+
+      const jobs = await this.processingService.enqueueJobsForAsset(context, scannedAsset, tx);
+      
+      let finalAsset = scannedAsset;
+      if (jobs.length > 0) {
+        finalAsset = finalAsset.queueProcessing();
+      } else {
+        finalAsset = finalAsset.markAvailable();
+      }
+
+      const savedAsset = await this.assetRepository.save(finalAsset, tx);
 
       await this.auditRecorder.record(
         {

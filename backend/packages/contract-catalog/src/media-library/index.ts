@@ -1,8 +1,15 @@
 export type MediaAssetStatusContract =
   | 'PENDING_UPLOAD'
+  | 'UPLOADED'
+  | 'PROCESSING_QUEUED'
+  | 'PROCESSING'
   | 'AVAILABLE'
+  | 'PROCESSING_FAILED'
   | 'ARCHIVED'
-  | 'FAILED';
+  | 'FAILED'
+  | 'ABANDONED'
+  | 'DELETE_QUEUED'
+  | 'DELETED';
 
 export type MediaUploadIntentStatusContract =
   | 'PENDING'
@@ -38,6 +45,9 @@ export interface MediaAssetContract {
   createdAt: string;
   updatedAt: string;
   archivedAt?: string | undefined;
+  scanStatus: MediaScanStatusContract;
+  scannedAt?: string | undefined;
+  quarantine?: MediaQuarantineStatusContract | undefined;
 }
 
 export interface MediaUploadIntentContract {
@@ -81,3 +91,147 @@ export interface MediaReadUrlContract {
   headers: Record<string, string>;
   expiresAt: string;
 }
+
+export type MediaProcessingJobTypeContract =
+  | 'METADATA_EXTRACTION'
+  | 'THUMBNAIL_GENERATION'
+  | 'TRANSCODING';
+
+export type MediaProcessingJobStatusContract =
+  | 'QUEUED'
+  | 'PROCESSING'
+  | 'SUCCEEDED'
+  | 'FAILED'
+  | 'RETRYING'
+  | 'DEAD';
+
+export interface MediaProcessingJobContract {
+  id: string;
+  jobType: MediaProcessingJobTypeContract;
+  status: MediaProcessingJobStatusContract;
+  attempts: number;
+  maxAttempts: number;
+  runAfter: string;
+  createdAt: string;
+  updatedAt: string;
+  errorCode?: string | undefined;
+  errorMessage?: string | undefined;
+}
+
+export type MediaRenditionKindContract =
+  | 'THUMBNAIL'
+  | 'PREVIEW'
+  | 'TRANSCODED_VIDEO'
+  | 'TRANSCODED_AUDIO';
+
+export interface MediaRenditionContract {
+  id: string;
+  kind: MediaRenditionKindContract;
+  mimeType: string;
+  sizeBytes: number;
+  width?: number | undefined;
+  height?: number | undefined;
+  durationSeconds?: number | undefined;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface MediaAssetWithProcessingContract extends MediaAssetContract {
+  processingJobs: MediaProcessingJobContract[];
+  renditions: MediaRenditionContract[];
+}
+
+export type MediaScanStatusContract =
+  | 'UNSCANNED'
+  | 'SCAN_QUEUED'
+  | 'SCANNING'
+  | 'CLEAN'
+  | 'SUSPICIOUS'
+  | 'INFECTED'
+  | 'QUARANTINED'
+  | 'SCAN_FAILED';
+
+export interface MediaQuarantineStatusContract {
+  isQuarantined: boolean;
+  quarantinedAt?: string | undefined;
+  quarantineReason?: string | undefined;
+}
+
+export type MediaLifecycleStatusContract =
+  | 'PENDING'
+  | 'ACTIVE'
+  | 'ARCHIVED'
+  | 'ABANDONED'
+  | 'DELETE_QUEUED'
+  | 'DELETED';
+
+export type MediaDeliveryModeContract =
+  | 'PRIVATE_SIGNED_URL'
+  | 'CDN_SIGNED_URL'
+  | 'PUBLIC_CDN_DISABLED';
+
+export interface MediaAccessPolicyContract {
+  deliveryMode: MediaDeliveryModeContract;
+  readUrlTtlSeconds?: number | undefined;
+}
+
+export interface MediaSecuritySummaryContract {
+  scanStatus: MediaScanStatusContract;
+  scannedAt?: string | undefined;
+  quarantine?: MediaQuarantineStatusContract | undefined;
+}
+
+export interface MediaAssetSecuritySummaryContract extends MediaSecuritySummaryContract {
+  assetId: string;
+}
+
+export interface MediaAssetLifecycleSummaryContract {
+  assetId: string;
+  status: MediaAssetStatusContract;
+  deleteAfter?: string | undefined;
+  archivedAt?: string | undefined;
+  deletedAt?: string | undefined;
+}
+
+export interface MediaQuarantineResponseContract {
+  assetId: string;
+  quarantined: boolean;
+  quarantineReason?: string | undefined;
+}
+
+export interface MediaRetryScanResponseContract {
+  assetId: string;
+  scanJobId: string;
+  status: string;
+}
+
+export interface MediaSecurityScanJobContract {
+  id: string;
+  workspaceId: string;
+  mediaAssetId: string;
+  status: 'QUEUED' | 'SCANNING' | 'CLEAN' | 'INFECTED' | 'FAILED' | 'RETRYING' | 'DEAD';
+  scannerProvider: 'NOOP' | 'FIXTURE' | 'CLAMAV_RESERVED' | 'EXTERNAL_RESERVED';
+  attempts: number;
+  maxAttempts: number;
+  runAfter: string;
+  resultCode?: string | undefined;
+  resultMessage?: string | undefined;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface MediaLifecycleJobContract {
+  id: string;
+  workspaceId: string;
+  mediaAssetId?: string | undefined;
+  jobType: 'EXPIRE_UPLOAD' | 'DELETE_ASSET' | 'DELETE_RENDITION' | 'CLEAN_FAILED' | 'CLEAN_ORPHANED';
+  status: 'QUEUED' | 'PROCESSING' | 'SUCCEEDED' | 'FAILED' | 'RETRYING' | 'DEAD';
+  attempts: number;
+  maxAttempts: number;
+  runAfter: string;
+  errorCode?: string | undefined;
+  errorMessage?: string | undefined;
+  createdAt: string;
+  updatedAt: string;
+}
+

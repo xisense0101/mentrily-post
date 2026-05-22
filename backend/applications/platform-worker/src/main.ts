@@ -6,6 +6,9 @@ import { createShutdownSignal } from './queues/shutdown-signal.js';
 import { startWorkerLoop } from './queues/worker-loop.js';
 import { InboxProcessingWorker } from './inbox-processing/inbox-processing.worker.js';
 import { OutboxRelayWorker } from './outbox-relay/outbox-relay.worker.js';
+import { MediaProcessingWorker } from './media-processing/media-processing.worker.js';
+import { MediaSecurityScanWorker } from './media-processing/media-security-scan.worker.js';
+import { MediaLifecycleWorker } from './media-processing/media-lifecycle.worker.js';
 import { WorkerModule } from './worker.module.js';
 
 async function bootstrapWorker(): Promise<void> {
@@ -28,6 +31,9 @@ async function bootstrapWorker(): Promise<void> {
 
   const outboxRelayWorker = app.get(OutboxRelayWorker);
   const inboxProcessingWorker = app.get(InboxProcessingWorker);
+  const mediaProcessingWorker = app.get(MediaProcessingWorker);
+  const mediaSecurityScanWorker = app.get(MediaSecurityScanWorker);
+  const mediaLifecycleWorker = app.get(MediaLifecycleWorker);
 
   const outboxLoop = startWorkerLoop(
     async () => {
@@ -49,10 +55,46 @@ async function bootstrapWorker(): Promise<void> {
     },
   );
 
+  const mediaLoop = startWorkerLoop(
+    async () => {
+      await mediaProcessingWorker.runOnce(10); // Hardcoded batch size for now
+    },
+    {
+      intervalMs: 5000, // Hardcoded poll interval for now
+      signal: shutdown.signal,
+    },
+  );
+
+  const securityScanLoop = startWorkerLoop(
+    async () => {
+      await mediaSecurityScanWorker.runOnce(10);
+    },
+    {
+      intervalMs: 5000,
+      signal: shutdown.signal,
+    },
+  );
+
+  const lifecycleLoop = startWorkerLoop(
+    async () => {
+      await mediaLifecycleWorker.runOnce(10);
+    },
+    {
+      intervalMs: 5000,
+      signal: shutdown.signal,
+    },
+  );
+
   logger.log('worker loops started');
 
   try {
-    await Promise.all([outboxLoop.completion, inboxLoop.completion]);
+    await Promise.all([
+      outboxLoop.completion,
+      inboxLoop.completion,
+      mediaLoop.completion,
+      securityScanLoop.completion,
+      lifecycleLoop.completion,
+    ]);
   } finally {
     shutdown.dispose();
     await app.close();

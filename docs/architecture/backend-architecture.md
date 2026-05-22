@@ -24,6 +24,9 @@ Each domain module uses:
 - Media Library follows the same layered module pattern as other backend domains.
 - Object storage is behind an adapter boundary; the default binding is noop and tests use a deterministic fixture adapter.
 - **Fail-Closed**: Evaluators must deny by default if a concrete policy or entitlement is not found.
+- **Asynchronous Security & Transcoding Pipelines**: Uploads are processed asynchronously. Media uploads start in the `UPLOADED` state and queue a `MediaSecurityScanJob`. The `MediaSecurityScanWorker` scans files and marks them `CLEAN` or `INFECTED`/`QUARANTINED`. Only clean files transition to `AVAILABLE` for reader consumption.
+- **Durable CDN Delivery**: Private asset reading is routed through `PrivateSignedUrlDeliveryAdapter`, while CDN assets leverage `ReservedCdnSignedUrlDeliveryAdapter` with edge-cached key signing.
+- **Reference-Aware Lifecycles**: Unused or abandoned media files are managed by the `MediaLifecycleWorker` to auto-prune storage. However, files referenced by external domains (lessons, content blocks, questions, and attempt answers) are excluded from pruning to protect user-facing course content.
 
 ## Commands and queries
 

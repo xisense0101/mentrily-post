@@ -46,3 +46,11 @@
 
 - Own-notification and own-preference APIs require authenticated actor context and explicit own-record permissions.
 - Provider configuration is backend-only and must not be surfaced in notification inbox/preferences routes, contracts, logs, or frontend UI.
+
+## Task 013C & 013C1 Updates (2026-05-22)
+
+- **Strict Scanning Enforcements**: Read URLs must never be generated for un-scanned (`SCAN_QUEUED`, `SCANNING`), failed (`SCAN_FAILED`), or malicious (`INFECTED`, `QUARANTINED`) media assets. Read URL access is strictly limited to assets marked as `AVAILABLE` and with a `CLEAN` scan status.
+- **Pre-selection Restrictions**: Interactive media selection components (e.g. Asset Picker, Content Editor, Learning Delivery) must block selectors from choosing assets with unsafe or pending scan states.
+- **Asset Reference and Safe Exclusions**: The `MediaLifecycleWorker` must not delete any media asset that is actively referenced in another module (such as `LearningLesson`, `ContentBlock`, `AssessmentQuestion`, or `AssessmentAttemptAnswer`). Lifecycle exclusion checks are mandatory to prevent active course/assessment file reference corruption.
+- **Verification Hook Rules**: Save/mutation requests in Content Studio or Learning Delivery must evaluate and validate the status of referenced media assets at validation time, failing if referenced assets are infected, deleted, or in unauthorized states.
+

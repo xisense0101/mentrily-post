@@ -245,6 +245,11 @@ describe.sequential('Assessment attempt API (integration)', () => {
     });
     expectHttpStatus(completeRes, 201);
 
+    await prisma.mediaAsset.update({
+      where: { id: intent.assetId },
+      data: { status: 'AVAILABLE', scanStatus: 'CLEAN' },
+    });
+
     return intent.assetId;
   }
 

@@ -14,7 +14,8 @@ export class MediaAccessPolicyService {
     if (
       asset.tenantId !== tenantId ||
       asset.workspaceId !== workspaceId ||
-      asset.status !== 'AVAILABLE'
+      asset.status !== 'AVAILABLE' ||
+      asset.scanStatus !== 'CLEAN'
     ) {
       return false;
     }

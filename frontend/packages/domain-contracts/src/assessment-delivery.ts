@@ -49,7 +49,7 @@ export interface AssessmentMediaAttachmentContract {
   contentType: string;
   fileCategory: 'DOCUMENT' | 'IMAGE' | 'VIDEO' | 'AUDIO' | 'ARCHIVE' | 'OTHER';
   sizeBytes?: number | undefined;
-  status: 'PENDING_UPLOAD' | 'AVAILABLE' | 'ARCHIVED' | 'FAILED';
+  status: 'PENDING_UPLOAD' | 'UPLOADED' | 'PROCESSING_QUEUED' | 'PROCESSING' | 'AVAILABLE' | 'PROCESSING_FAILED' | 'ARCHIVED' | 'FAILED' | 'ABANDONED' | 'DELETE_QUEUED' | 'DELETED';
   unavailable?: boolean | undefined;
 }
 

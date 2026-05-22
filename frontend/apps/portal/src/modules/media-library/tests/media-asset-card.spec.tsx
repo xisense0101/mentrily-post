@@ -25,6 +25,7 @@ function makeAsset(overrides: Partial<MediaAssetContract> = {}): MediaAssetContr
     storageProvider: 'FIXTURE',
     visibility: 'PRIVATE',
     status: 'AVAILABLE',
+    scanStatus: 'CLEAN',
     metadata: {},
     createdAt: '2026-05-21T00:00:00.000Z',
     updatedAt: '2026-05-21T00:00:00.000Z',
@@ -53,5 +54,21 @@ describe('MediaAssetCard', () => {
     render(<MediaAssetCard asset={makeAsset()} onArchive={vi.fn()} />);
     fireEvent.click(screen.getByTestId('media-open-button'));
     await waitFor(() => expect(screen.getByTestId('media-asset-preview')).toBeInTheDocument());
+  });
+
+  it('renders processing feedback for processing states', () => {
+    const { rerender } = render(<MediaAssetCard asset={makeAsset({ status: 'PROCESSING_QUEUED' })} onArchive={vi.fn()} />);
+    expect(screen.getByText('Media is currently being processed...')).toBeInTheDocument();
+
+    rerender(<MediaAssetCard asset={makeAsset({ status: 'PROCESSING' })} onArchive={vi.fn()} />);
+    expect(screen.getByText('Media is currently being processed...')).toBeInTheDocument();
+
+    rerender(<MediaAssetCard asset={makeAsset({ status: 'UPLOADED' })} onArchive={vi.fn()} />);
+    expect(screen.getByText('Media is currently being processed...')).toBeInTheDocument();
+  });
+
+  it('renders failure feedback for processing failed state', () => {
+    render(<MediaAssetCard asset={makeAsset({ status: 'PROCESSING_FAILED' })} onArchive={vi.fn()} />);
+    expect(screen.getByText('Media processing failed. File may be unreadable.')).toBeInTheDocument();
   });
 });

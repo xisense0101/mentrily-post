@@ -3376,3 +3376,121 @@ This document serves as a permanent continuity/backtrace system for the Mentrily
 - **Remaining Gaps**:
   - Full E2E flows verification with real media assets (transcoding/processing pipelines deferred to 013B).
 - **Next Recommended Task**: Task 013B — Media Transcoding and Processing Pipelines
+
+---
+
+### Task 013B — Media Transcoding and Processing Pipelines
+
+- **Task ID**: 013B
+- **Previous Task**: Task 013A1 — Content Studio and Learning Delivery Media Integration Remediation
+- **Work Completed**:
+  - defined `MediaProcessingJob` and `MediaRendition` domain entities with associated value objects
+  - added `MediaProcessingJobRepository` and `MediaRenditionRepository`
+  - implemented Prisma repository adapters and persistence mappers
+  - defined processing ports: `MediaMetadataExtractorPort`, `MediaRenditionGeneratorPort`, `MediaObjectReaderPort`, `MediaObjectWriterPort`
+  - added fixture/mock adapters for the processing ports
+  - implemented `MediaProcessingService` to orchestrate enqueuing metadata, thumbnail, and transcoding jobs
+  - added `PROCESSING_QUEUED`, `PROCESSING`, and `PROCESSING_FAILED` states to `MediaAssetStatusContract`
+  - updated `CompleteMediaUploadUseCase` to enqueue processing jobs and conditionally transition asset states instead of marking immediately as AVAILABLE
+  - updated Mentrily integrations and test fixtures to mock AVAILABLE state appropriately
+- **Validation Performed**:
+  - `pnpm lint`: **PASS**
+  - `pnpm typecheck`: **PASS**
+  - `pnpm build`: **PASS**
+  - `pnpm test:integration`: **PASS** (10,000+ tests including Media, Assessment, Content, Learning domains)
+  - `pnpm test:e2e`: **PASS** (all end-to-end suites pass)
+  - `pnpm test`: **PASS**
+- **Remaining Gaps**:
+  - Background worker is not yet implemented (Jobs are enqueued but not processed).
+  - No real cloud object storage adapter yet.
+  - No actual video transcoding or CDN integrations yet.
+- **Next Recommended Task**: Task 013B1 — Media Background Job Worker Implementation
+
+---
+
+### Task 013B1 — Media Background Job Worker Implementation
+
+- **Task ID**: 013B1
+- **Previous Task**: Task 013B — Media Transcoding and Processing Pipelines
+- **Work Completed**:
+  - synced `MediaProcessingJob` and `MediaRendition` contracts to `@mentrily/domain-contracts`
+  - added `MediaProcessingWorker` to `platform-worker` to consume `MediaProcessingJob` records
+  - implemented mocked logic for processing jobs (metadata extraction, thumbnail generation, transcoding) using delays
+  - implemented proper state transitions for jobs (`PROCESSING`, `SUCCEEDED`, `RETRYING`, `DEAD`)
+  - implemented asset status evaluation to mark `MediaAsset` as `AVAILABLE` or `PROCESSING_FAILED` based on job outcomes
+  - added `MediaProcessingWorker` unit tests to `platform-worker` covering success, retries, and max-attempt failure conditions
+  - updated `MediaAssetStatusBadge` to handle `UPLOADED`, `PROCESSING_QUEUED`, `PROCESSING`, and `PROCESSING_FAILED` colors
+  - updated `AssetPickerItem` to visually disable selection of processing or failed assets
+  - updated `MediaAssetCard` to display loading feedback for processing states and error messages for failed processing
+  - added React component tests for processing and failed UI states in `media-asset-card.spec.tsx`
+- **Validation Performed**:
+  - `pnpm lint`: **PASS**
+  - `pnpm typecheck`: **PASS**
+  - `pnpm test`: **PASS** (all package unit tests passed, including new worker and portal tests)
+  - `pnpm test:integration`: **PASS**
+  - `pnpm test:e2e`: **PASS**
+- **Remaining Gaps**:
+  - Real metadata extraction using ffprobe/sharp is not yet implemented.
+  - Real transcoding via external services or workers is not yet implemented.
+  - No actual CDN integrations yet.
+  - Virus scanning is still not implemented.
+- **Next Recommended Task**: Task 013C — Media Security, CDN, and Lifecycle Hardening
+
+---
+
+### Task 013C — Media Security, CDN, and Lifecycle Hardening
+
+- **Task ID**: 013C
+- **Previous Task**: Task 013B1 — Media Background Job Worker Implementation
+- **Work Completed**:
+  - Implemented backend security scanning and lifecycle management framework, defining `MediaSecurityScanJob` and `MediaLifecycleJob` domain entities, repository interfaces, and Prisma mappings.
+  - Created `FixtureMediaVirusScanner` and `ReservedCdnSignedUrlDeliveryAdapter` to support scan simulation and CDN signed URL delivery.
+  - Updated `CompleteMediaUploadUseCase` to enqueue security scan jobs and transition complete uploads to `SCAN_QUEUED` instead of `AVAILABLE`.
+  - Configured `MediaSecurityScanWorker` and `MediaLifecycleWorker` in `platform-worker` to consume jobs, perform scans, and execute lifecycle age-based exclusions.
+  - Added new integration test suite `media-security-lifecycle.integration.spec.ts` for verifying end-to-end upload and background scanning.
+  - Extended domain contracts and contract catalog with the new statuses (`ABANDONED`, `DELETE_QUEUED`, `DELETED`), as well as scan status metadata.
+  - Added mappings for new statuses in `MediaAssetStatusBadge`.
+  - Corrected mock asset definitions in frontend tests (`media-asset-card.spec.tsx`, `learning-section-list.spec.tsx`, `asset-picker-dialog.spec.tsx`, `media-library-state.spec.ts`, and `contracts-import.spec.ts`) to include required `scanStatus` attributes.
+- **Validation Performed**:
+  - `pnpm lint`: **PASS**
+  - `pnpm typecheck`: **PASS** (all packages including `platform-api`, `platform-worker`, and `@mentrily/portal` compiled successfully)
+  - `pnpm test`: **PASS** (all tests pass, including new workers unit tests and portal component tests)
+  - `pnpm test:integration`: **PASS** (integration test suite executed successfully)
+- **Remaining Gaps**:
+  - Real antivirus provider integration (e.g., ClamAV).
+  - Real CDN-signed URL signing using cloud provider APIs.
+- **Next Recommended Task**: Task 013C1 — Media Security, CDN, and Storage Lifecycle Hardening Remediation
+
+---
+
+### Task 013C1 — Media Security, CDN, and Storage Lifecycle Hardening Remediation
+
+- **Task ID**: 013C1
+- **Previous Task**: Task 013C — Media Security, CDN, and Lifecycle Hardening
+- **Work Completed**:
+  - Remedied the security gap where read URLs could be generated for un-scanned (`SCAN_QUEUED`, `SCANNING`), failed (`SCAN_FAILED`), or malicious (`INFECTED`, `QUARANTINED`) media assets. Restructured `GetMediaReadUrlUseCase` and `MediaAccessPolicyService` to block reads of any asset that is not scanned and marked `CLEAN` (or null for legacy files), failing with conflict (409) or forbidden (403) appropriately.
+  - Aligned `CompleteMediaUploadUseCase` to enqueue security scan jobs with `scanStatus` initially set to `SCAN_QUEUED` but without permitting read access until scanning succeeds.
+  - Hardened the `MediaLifecycleWorker` to actively query other domain modules (`LearningLesson`, `ContentBlock`, `AssessmentQuestion`, and `AssessmentAttemptAnswer`) before deleting any asset to prevent files referenced in active courses or assessments from being permanently deleted.
+  - Introduced asset reference validation hooks inside `LearningMediaReferenceValidator` and `ContentMediaReferenceValidator` to reject draft or published saves referencing deleted, quarantined, or non-existent media assets.
+  - Expanded and fixed all backend unit and integration test suites:
+    - Expanded Content Studio and Learning Delivery media validators tests to verify correct reference rejection.
+    - Updated `media-lifecycle.worker.spec.ts` unit tests to mock and test the reference lookup logic, confirming active assets are skipped and marked with the `ASSET_REFERENCED` error code.
+    - Added extensive integration test coverage in `media-security-lifecycle.integration.spec.ts` verifying read URL generation blocking for queued, quarantined, and failed scan states.
+- **Validation Performed**:
+  - `pnpm lint`: **PASS**
+  - `pnpm typecheck`: **PASS**
+  - `pnpm build`: **PASS**
+  - `pnpm test`: **PASS**
+  - `pnpm test:integration`: **PASS**
+  - `pnpm test:e2e`: **PASS**
+  - `pnpm e2e:content`: **PASS**
+  - `pnpm e2e:learning`: **PASS**
+  - `pnpm e2e:assessment`: **PASS**
+  - `pnpm e2e:assessment-attempt`: **PASS**
+  - `pnpm e2e:assessment-grading`: **PASS**
+  - `pnpm e2e:assessment-result`: **PASS**
+  - `pnpm e2e:assessment-reliability`: **PASS**
+- **Remaining Gaps**:
+  - Real antivirus provider integration (e.g., ClamAV).
+  - Real CDN-signed URL signing using cloud provider APIs.
+- **Next Recommended Task**: Task 013D — Media Transcoding Custom Templates & Hook Integration

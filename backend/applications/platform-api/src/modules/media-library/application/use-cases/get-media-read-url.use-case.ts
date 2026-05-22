@@ -39,8 +39,28 @@ export class GetMediaReadUrlUseCase {
     }
     ensureMediaAssetOwnership(asset, context);
 
+    if (asset.status === 'DELETED' || asset.status === 'DELETE_QUEUED') {
+      throw new AppError('CONFLICT', 'media asset has been deleted', 409);
+    }
+    if (asset.status === 'ARCHIVED') {
+      throw new AppError('CONFLICT', 'media asset has been archived', 409);
+    }
     if (asset.status !== 'AVAILABLE') {
       throw new AppError('CONFLICT', 'media asset cannot issue read url', 409);
+    }
+
+    if (
+      asset.scanStatus === 'UNSCANNED' ||
+      asset.scanStatus === 'SCAN_QUEUED' ||
+      asset.scanStatus === 'SCANNING'
+    ) {
+      throw new AppError('CONFLICT', 'media asset security scan is in progress', 409);
+    }
+    if (asset.scanStatus === 'INFECTED' || asset.scanStatus === 'QUARANTINED') {
+      throw new AppError('FORBIDDEN', 'media asset is blocked due to security quarantine', 403);
+    }
+    if (asset.scanStatus === 'SCAN_FAILED') {
+      throw new AppError('CONFLICT', 'media asset security scan failed', 409);
     }
 
     const workspaceRead = await this.permissionEvaluator.evaluate(

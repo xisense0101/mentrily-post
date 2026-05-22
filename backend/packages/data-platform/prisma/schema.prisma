@@ -1,4 +1,4 @@
-                          // This is your Prisma schema file,
+// This is your Prisma schema file,
 // learn more about it in the docs: https://pris.ly/d/prisma-schema
 
 generator client {
@@ -46,7 +46,7 @@ model ExternalIdentity {
   id          String           @id @default(uuid()) @db.Uuid
   principalId String           @db.Uuid
   provider    ExternalProvider
-  externalId  String           // e.g. Clerk User ID
+  externalId  String // e.g. Clerk User ID
   email       String
   metadata    Json?
   createdAt   DateTime         @default(now())
@@ -166,8 +166,8 @@ model WorkspaceMember {
   createdAt   DateTime         @default(now())
   updatedAt   DateTime         @updatedAt
 
-  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  principal Principal @relation(fields: [principalId], references: [id], onDelete: Cascade)
+  workspace       Workspace             @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  principal       Principal             @relation(fields: [principalId], references: [id], onDelete: Cascade)
   teamMemberships TeamMember[]
   roles           WorkspaceMemberRole[]
 
@@ -177,10 +177,10 @@ model WorkspaceMember {
 }
 
 model WorkspaceMemberRole {
-  id              String   @id @default(uuid()) @db.Uuid
-  memberId        String   @db.Uuid
-  roleId          String   @db.Uuid
-  createdAt       DateTime @default(now())
+  id        String   @id @default(uuid()) @db.Uuid
+  memberId  String   @db.Uuid
+  roleId    String   @db.Uuid
+  createdAt DateTime @default(now())
 
   member WorkspaceMember @relation(fields: [memberId], references: [id], onDelete: Cascade)
   role   WorkspaceRole   @relation(fields: [roleId], references: [id], onDelete: Cascade)
@@ -289,18 +289,18 @@ model WorkspaceBranding {
 // --- Audit & Event Foundation Models ---
 
 model AuditRecord {
-  id             String    @id @default(uuid()) @db.Uuid
-  action         String
-  actorId        String?   @db.Uuid
-  targetType     String
-  targetId       String?
-  tenantId       String?   @db.Uuid
-  workspaceId    String?   @db.Uuid
-  requestId      String?
-  correlationId  String?
-  metadata       Json?
-  occurredAt     DateTime
-  createdAt      DateTime  @default(now())
+  id            String   @id @default(uuid()) @db.Uuid
+  action        String
+  actorId       String?  @db.Uuid
+  targetType    String
+  targetId      String?
+  tenantId      String?  @db.Uuid
+  workspaceId   String?  @db.Uuid
+  requestId     String?
+  correlationId String?
+  metadata      Json?
+  occurredAt    DateTime
+  createdAt     DateTime @default(now())
 
   @@index([workspaceId])
   @@index([actorId])
@@ -316,22 +316,22 @@ enum OutboxMessageStatus {
 }
 
 model OutboxMessage {
-  id             String                 @id @default(uuid()) @db.Uuid
+  id             String              @id @default(uuid()) @db.Uuid
   eventId        String
   eventName      String
   eventVersion   Int
-  tenantId       String?                @db.Uuid
-  workspaceId    String?                @db.Uuid
+  tenantId       String?             @db.Uuid
+  workspaceId    String?             @db.Uuid
   correlationId  String
   idempotencyKey String?
   payload        Json
   occurredAt     DateTime
-  status         OutboxMessageStatus    @default(PENDING)
-  attemptCount   Int                    @default(0)
-  availableAt    DateTime               @default(now())
+  status         OutboxMessageStatus @default(PENDING)
+  attemptCount   Int                 @default(0)
+  availableAt    DateTime            @default(now())
   publishedAt    DateTime?
-  createdAt      DateTime               @default(now())
-  updatedAt      DateTime               @updatedAt
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
 
   @@unique([eventId])
   @@index([status])
@@ -348,17 +348,17 @@ enum InboxMessageStatus {
 }
 
 model InboxMessage {
-  id             String              @id @default(uuid()) @db.Uuid
-  source         String
+  id              String             @id @default(uuid()) @db.Uuid
+  source          String
   externalEventId String
-  eventName      String
-  idempotencyKey String?
-  payloadHash    String
-  status         InboxMessageStatus  @default(RECEIVED)
-  receivedAt     DateTime
-  processedAt    DateTime?
-  createdAt      DateTime            @default(now())
-  updatedAt      DateTime            @updatedAt
+  eventName       String
+  idempotencyKey  String?
+  payloadHash     String
+  status          InboxMessageStatus @default(RECEIVED)
+  receivedAt      DateTime
+  processedAt     DateTime?
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
 
   @@unique([source, externalEventId])
   @@index([status])
@@ -507,21 +507,21 @@ enum AssessmentResultReleasePolicy {
 }
 
 model LearningCourse {
-  id                 String                 @id @default(uuid()) @db.Uuid
-  tenantId           String                 @db.Uuid
-  workspaceId        String                 @db.Uuid
-  creatorPrincipalId String                 @db.Uuid
+  id                 String               @id @default(uuid()) @db.Uuid
+  tenantId           String               @db.Uuid
+  workspaceId        String               @db.Uuid
+  creatorPrincipalId String               @db.Uuid
   title              String
   slug               String
   description        String?
-  status             LearningCourseStatus   @default(DRAFT)
-  visibility         LearningVisibility     @default(WORKSPACE)
-  createdAt          DateTime               @default(now())
-  updatedAt          DateTime               @updatedAt
+  status             LearningCourseStatus @default(DRAFT)
+  visibility         LearningVisibility   @default(WORKSPACE)
+  createdAt          DateTime             @default(now())
+  updatedAt          DateTime             @updatedAt
   publishedAt        DateTime?
   archivedAt         DateTime?
 
-  sections LearningSection[]
+  sections    LearningSection[]
   enrollments LearningEnrollment[]
 
   @@unique([workspaceId, slug])
@@ -535,15 +535,15 @@ model LearningCourse {
 }
 
 model LearningSection {
-  id        String         @id @default(uuid()) @db.Uuid
-  courseId  String         @db.Uuid
+  id        String   @id @default(uuid()) @db.Uuid
+  courseId  String   @db.Uuid
   title     String
   position  Int
-  createdAt DateTime       @default(now())
-  updatedAt DateTime       @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  course   LearningCourse @relation(fields: [courseId], references: [id], onDelete: Cascade)
-  lessons  LearningLesson[]
+  course  LearningCourse   @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  lessons LearningLesson[]
 
   @@unique([courseId, position])
   @@index([courseId])
@@ -572,20 +572,20 @@ model LearningLesson {
 }
 
 model LearningEnrollment {
-  id                String           @id @default(uuid()) @db.Uuid
-  tenantId          String           @db.Uuid
-  workspaceId       String           @db.Uuid
-  courseId          String           @db.Uuid
-  learnerPrincipalId String          @db.Uuid
-  status            EnrollmentStatus @default(ACTIVE)
-  enrolledAt        DateTime         @default(now())
-  startedAt         DateTime?
-  completedAt       DateTime?
-  cancelledAt       DateTime?
-  createdAt         DateTime         @default(now())
-  updatedAt         DateTime         @updatedAt
+  id                 String           @id @default(uuid()) @db.Uuid
+  tenantId           String           @db.Uuid
+  workspaceId        String           @db.Uuid
+  courseId           String           @db.Uuid
+  learnerPrincipalId String           @db.Uuid
+  status             EnrollmentStatus @default(ACTIVE)
+  enrolledAt         DateTime         @default(now())
+  startedAt          DateTime?
+  completedAt        DateTime?
+  cancelledAt        DateTime?
+  createdAt          DateTime         @default(now())
+  updatedAt          DateTime         @updatedAt
 
-  course   LearningCourse   @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  course     LearningCourse     @relation(fields: [courseId], references: [id], onDelete: Cascade)
   progresses LearningProgress[]
 
   @@unique([workspaceId, courseId, learnerPrincipalId])
@@ -599,19 +599,19 @@ model LearningEnrollment {
 }
 
 model LearningProgress {
-  id                String                 @id @default(uuid()) @db.Uuid
-  tenantId          String                 @db.Uuid
-  workspaceId       String                 @db.Uuid
-  courseId          String                 @db.Uuid
-  enrollmentId      String                 @db.Uuid
-  lessonId          String                 @db.Uuid
-  learnerPrincipalId String                @db.Uuid
-  status            LearningProgressStatus @default(NOT_STARTED)
-  startedAt         DateTime?
-  completedAt       DateTime?
-  lastSeenAt        DateTime?
-  createdAt         DateTime               @default(now())
-  updatedAt         DateTime               @updatedAt
+  id                 String                 @id @default(uuid()) @db.Uuid
+  tenantId           String                 @db.Uuid
+  workspaceId        String                 @db.Uuid
+  courseId           String                 @db.Uuid
+  enrollmentId       String                 @db.Uuid
+  lessonId           String                 @db.Uuid
+  learnerPrincipalId String                 @db.Uuid
+  status             LearningProgressStatus @default(NOT_STARTED)
+  startedAt          DateTime?
+  completedAt        DateTime?
+  lastSeenAt         DateTime?
+  createdAt          DateTime               @default(now())
+  updatedAt          DateTime               @updatedAt
 
   enrollment LearningEnrollment @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
 
@@ -628,23 +628,23 @@ model LearningProgress {
 }
 
 model ContentDocument {
-  id                    String                @id @default(uuid()) @db.Uuid
-  tenantId              String                @db.Uuid
-  workspaceId           String                @db.Uuid
-  ownerPrincipalId      String                @db.Uuid
+  id                    String                 @id @default(uuid()) @db.Uuid
+  tenantId              String                 @db.Uuid
+  workspaceId           String                 @db.Uuid
+  ownerPrincipalId      String                 @db.Uuid
   purpose               ContentDocumentPurpose
-  status                ContentDocumentStatus @default(DRAFT)
+  status                ContentDocumentStatus  @default(DRAFT)
   title                 String
-  currentDraftVersionId String?               @unique @db.Uuid
-  publishedSnapshotId   String?               @unique @db.Uuid
-  createdAt             DateTime              @default(now())
-  updatedAt             DateTime              @updatedAt
+  currentDraftVersionId String?                @unique @db.Uuid
+  publishedSnapshotId   String?                @unique @db.Uuid
+  createdAt             DateTime               @default(now())
+  updatedAt             DateTime               @updatedAt
   publishedAt           DateTime?
   archivedAt            DateTime?
 
-  currentDraftVersion ContentVersion?           @relation("ContentDocumentCurrentDraftVersion", fields: [currentDraftVersionId], references: [id], onDelete: SetNull)
-  publishedSnapshot   ContentPublishedSnapshot? @relation("ContentDocumentPublishedSnapshot", fields: [publishedSnapshotId], references: [id], onDelete: SetNull)
-  versions            ContentVersion[]          @relation("ContentDocumentVersions")
+  currentDraftVersion ContentVersion?            @relation("ContentDocumentCurrentDraftVersion", fields: [currentDraftVersionId], references: [id], onDelete: SetNull)
+  publishedSnapshot   ContentPublishedSnapshot?  @relation("ContentDocumentPublishedSnapshot", fields: [publishedSnapshotId], references: [id], onDelete: SetNull)
+  versions            ContentVersion[]           @relation("ContentDocumentVersions")
   blocks              ContentBlock[]
   snapshots           ContentPublishedSnapshot[] @relation("ContentDocumentSnapshots")
 
@@ -667,10 +667,10 @@ model ContentVersion {
   publishedAt          DateTime?
   supersededAt         DateTime?
 
-  document            ContentDocument           @relation("ContentDocumentVersions", fields: [documentId], references: [id], onDelete: Cascade)
-  currentForDocument  ContentDocument?          @relation("ContentDocumentCurrentDraftVersion")
-  blocks              ContentBlock[]
-  snapshots           ContentPublishedSnapshot[] @relation("ContentVersionSnapshots")
+  document           ContentDocument            @relation("ContentDocumentVersions", fields: [documentId], references: [id], onDelete: Cascade)
+  currentForDocument ContentDocument?           @relation("ContentDocumentCurrentDraftVersion")
+  blocks             ContentBlock[]
+  snapshots          ContentPublishedSnapshot[] @relation("ContentVersionSnapshots")
 
   @@unique([documentId, versionNumber])
   @@index([documentId])
@@ -716,8 +716,8 @@ model ContentPublishedSnapshot {
   publishedAt            DateTime
   createdAt              DateTime @default(now())
 
-  document            ContentDocument  @relation("ContentDocumentSnapshots", fields: [documentId], references: [id], onDelete: Cascade)
-  version             ContentVersion   @relation("ContentVersionSnapshots", fields: [versionId], references: [id], onDelete: Cascade)
+  document             ContentDocument  @relation("ContentDocumentSnapshots", fields: [documentId], references: [id], onDelete: Cascade)
+  version              ContentVersion   @relation("ContentVersionSnapshots", fields: [versionId], references: [id], onDelete: Cascade)
   publishedForDocument ContentDocument? @relation("ContentDocumentPublishedSnapshot")
 
   @@index([documentId])
@@ -748,9 +748,9 @@ model Assessment {
   publishedAt           DateTime?
   archivedAt            DateTime?
 
-  currentDraftVersion AssessmentVersion?           @relation("AssessmentCurrentDraftVersion", fields: [currentDraftVersionId], references: [id], onDelete: SetNull)
-  publishedSnapshot   AssessmentPublishedSnapshot? @relation("AssessmentPublishedSnapshot", fields: [publishedSnapshotId], references: [id], onDelete: SetNull)
-  versions            AssessmentVersion[]          @relation("AssessmentVersions")
+  currentDraftVersion AssessmentVersion?            @relation("AssessmentCurrentDraftVersion", fields: [currentDraftVersionId], references: [id], onDelete: SetNull)
+  publishedSnapshot   AssessmentPublishedSnapshot?  @relation("AssessmentPublishedSnapshot", fields: [publishedSnapshotId], references: [id], onDelete: SetNull)
+  versions            AssessmentVersion[]           @relation("AssessmentVersions")
   sections            AssessmentSection[]
   questions           AssessmentQuestion[]
   gradingRubrics      AssessmentGradingRubric[]
@@ -779,11 +779,11 @@ model AssessmentVersion {
   publishedAt          DateTime?
   supersededAt         DateTime?
 
-  assessment         Assessment                    @relation("AssessmentVersions", fields: [assessmentId], references: [id], onDelete: Cascade)
-  currentForAssessment Assessment?                @relation("AssessmentCurrentDraftVersion")
-  sections           AssessmentSection[]
-  questions          AssessmentQuestion[]
-  snapshots          AssessmentPublishedSnapshot[] @relation("AssessmentVersionSnapshots")
+  assessment           Assessment                    @relation("AssessmentVersions", fields: [assessmentId], references: [id], onDelete: Cascade)
+  currentForAssessment Assessment?                   @relation("AssessmentCurrentDraftVersion")
+  sections             AssessmentSection[]
+  questions            AssessmentQuestion[]
+  snapshots            AssessmentPublishedSnapshot[] @relation("AssessmentVersionSnapshots")
 
   @@unique([assessmentId, versionNumber])
   @@index([assessmentId])
@@ -804,8 +804,8 @@ model AssessmentSection {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  assessment Assessment        @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
-  version    AssessmentVersion @relation(fields: [versionId], references: [id], onDelete: Cascade)
+  assessment Assessment           @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
+  version    AssessmentVersion    @relation(fields: [versionId], references: [id], onDelete: Cascade)
   questions  AssessmentQuestion[]
 
   @@unique([versionId, id])
@@ -815,10 +815,10 @@ model AssessmentSection {
 }
 
 model AssessmentQuestion {
-  id           String                @id @default(uuid()) @db.Uuid
-  assessmentId String                @db.Uuid
-  versionId    String                @db.Uuid
-  sectionId    String?               @db.Uuid
+  id           String                 @id @default(uuid()) @db.Uuid
+  assessmentId String                 @db.Uuid
+  versionId    String                 @db.Uuid
+  sectionId    String?                @db.Uuid
   kind         AssessmentQuestionKind
   title        String
   prompt       Json
@@ -828,8 +828,8 @@ model AssessmentQuestion {
   gradingMode  AssessmentGradingMode
   position     Int
   metadata     Json
-  createdAt    DateTime              @default(now())
-  updatedAt    DateTime              @updatedAt
+  createdAt    DateTime               @default(now())
+  updatedAt    DateTime               @updatedAt
 
   assessment Assessment         @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
   version    AssessmentVersion  @relation(fields: [versionId], references: [id], onDelete: Cascade)
@@ -887,9 +887,9 @@ model AssessmentPublishedSnapshot {
   publishedAt            DateTime
   createdAt              DateTime @default(now())
 
-  assessment             Assessment        @relation("AssessmentSnapshots", fields: [assessmentId], references: [id], onDelete: Cascade)
-  version                AssessmentVersion @relation("AssessmentVersionSnapshots", fields: [versionId], references: [id], onDelete: Cascade)
-  publishedForAssessment Assessment?       @relation("AssessmentPublishedSnapshot")
+  assessment             Assessment          @relation("AssessmentSnapshots", fields: [assessmentId], references: [id], onDelete: Cascade)
+  version                AssessmentVersion   @relation("AssessmentVersionSnapshots", fields: [versionId], references: [id], onDelete: Cascade)
+  publishedForAssessment Assessment?         @relation("AssessmentPublishedSnapshot")
   attempts               AssessmentAttempt[]
 
   @@index([assessmentId])
@@ -963,13 +963,13 @@ model AssessmentAttempt {
   createdAt             DateTime                @default(now())
   updatedAt             DateTime                @updatedAt
 
-  assessment Assessment                @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
-  snapshot   AssessmentPublishedSnapshot @relation(fields: [snapshotId], references: [id], onDelete: Cascade)
-  answers    AssessmentAttemptAnswer[]
-  session    AssessmentAttemptSession?
-  result     AssessmentAttemptResult?
-  gradingRuns   AssessmentGradingRun[]
-  answerGrades  AssessmentAnswerGrade[]
+  assessment   Assessment                  @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
+  snapshot     AssessmentPublishedSnapshot @relation(fields: [snapshotId], references: [id], onDelete: Cascade)
+  answers      AssessmentAttemptAnswer[]
+  session      AssessmentAttemptSession?
+  result       AssessmentAttemptResult?
+  gradingRuns  AssessmentGradingRun[]
+  answerGrades AssessmentAnswerGrade[]
 
   @@index([tenantId])
   @@index([workspaceId])
@@ -995,7 +995,7 @@ model AssessmentAttemptAnswer {
   submittedAt  DateTime?
   metadata     Json
 
-  attempt AssessmentAttempt @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+  attempt AssessmentAttempt       @relation(fields: [attemptId], references: [id], onDelete: Cascade)
   grades  AssessmentAnswerGrade[]
 
   @@unique([attemptId, questionId])
@@ -1055,7 +1055,7 @@ model AssessmentGradingRun {
   createdAt              DateTime                   @default(now())
   updatedAt              DateTime                   @updatedAt
 
-  attempt      AssessmentAttempt @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+  attempt      AssessmentAttempt       @relation(fields: [attemptId], references: [id], onDelete: Cascade)
   answerGrades AssessmentAnswerGrade[]
 
   @@index([tenantId])
@@ -1072,25 +1072,25 @@ model AssessmentGradingRun {
 }
 
 model AssessmentAnswerGrade {
-  id                  String                       @id @default(uuid()) @db.Uuid
-  gradingRunId        String                       @db.Uuid
-  attemptId           String                       @db.Uuid
-  answerId            String                       @db.Uuid
-  questionId          String                       @db.Uuid
+  id                  String                      @id @default(uuid()) @db.Uuid
+  gradingRunId        String                      @db.Uuid
+  attemptId           String                      @db.Uuid
+  answerId            String                      @db.Uuid
+  questionId          String                      @db.Uuid
   questionKind        AssessmentQuestionKind
-  status              AssessmentAnswerGradeStatus  @default(NOT_GRADED)
+  status              AssessmentAnswerGradeStatus @default(NOT_GRADED)
   method              AssessmentGradingMethod
   score               Float?
   maxScore            Float
   feedback            Json?
-  gradedByPrincipalId String?                      @db.Uuid
+  gradedByPrincipalId String?                     @db.Uuid
   gradedAt            DateTime?
   metadata            Json
-  createdAt           DateTime                     @default(now())
-  updatedAt           DateTime                     @updatedAt
+  createdAt           DateTime                    @default(now())
+  updatedAt           DateTime                    @updatedAt
 
-  gradingRun AssessmentGradingRun  @relation(fields: [gradingRunId], references: [id], onDelete: Cascade)
-  attempt    AssessmentAttempt     @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+  gradingRun AssessmentGradingRun    @relation(fields: [gradingRunId], references: [id], onDelete: Cascade)
+  attempt    AssessmentAttempt       @relation(fields: [attemptId], references: [id], onDelete: Cascade)
   answer     AssessmentAttemptAnswer @relation(fields: [answerId], references: [id], onDelete: Cascade)
 
   @@unique([gradingRunId, answerId])
@@ -1105,9 +1105,16 @@ model AssessmentAnswerGrade {
 
 enum MediaAssetStatus {
   PENDING_UPLOAD
+  UPLOADED
+  PROCESSING_QUEUED
+  PROCESSING
   AVAILABLE
+  PROCESSING_FAILED
   ARCHIVED
   FAILED
+  ABANDONED
+  DELETE_QUEUED
+  DELETED
 }
 
 enum MediaUploadIntentStatus {
@@ -1190,7 +1197,20 @@ model MediaAsset {
   updatedAt        DateTime             @updatedAt
   archivedAt       DateTime?
 
-  uploadIntents MediaUploadIntent[]
+  scanStatus       MediaScanStatus      @default(UNSCANNED)
+  scannedAt        DateTime?
+  scanErrorCode    String?
+  scanErrorMessage String?
+  quarantineReason String?
+  quarantinedAt    DateTime?
+  deleteAfter      DateTime?
+  deletedAt        DateTime?
+
+  uploadIntents    MediaUploadIntent[]
+  processingJobs   MediaProcessingJob[]
+  renditions       MediaRendition[]
+  securityScanJobs MediaSecurityScanJob[]
+  lifecycleJobs    MediaLifecycleJob[]
 
   @@index([tenantId])
   @@index([workspaceId])
@@ -1234,6 +1254,165 @@ model MediaUploadIntent {
   @@index([expiresAt])
   @@index([workspaceId, ownerPrincipalId])
   @@index([assetId, status])
+}
+
+enum MediaProcessingJobType {
+  METADATA_EXTRACTION
+  THUMBNAIL_GENERATION
+  TRANSCODING
+}
+
+enum MediaProcessingJobStatus {
+  QUEUED
+  PROCESSING
+  SUCCEEDED
+  FAILED
+  RETRYING
+  DEAD
+}
+
+model MediaProcessingJob {
+  id             String                   @id @default(uuid()) @db.Uuid
+  workspaceId    String                   @db.Uuid
+  mediaAssetId   String                   @db.Uuid
+  jobType        MediaProcessingJobType
+  status         MediaProcessingJobStatus @default(QUEUED)
+  attempts       Int                      @default(0)
+  maxAttempts    Int                      @default(3)
+  runAfter       DateTime                 @default(now())
+  lockedAt       DateTime?
+  lockedBy       String?
+  idempotencyKey String                   @unique
+  errorCode      String?
+  errorMessage   String?
+  createdAt      DateTime                 @default(now())
+  updatedAt      DateTime                 @updatedAt
+
+  asset MediaAsset @relation(fields: [mediaAssetId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId])
+  @@index([mediaAssetId])
+  @@index([status, runAfter])
+}
+
+enum MediaRenditionKind {
+  THUMBNAIL
+  PREVIEW
+  TRANSCODED_VIDEO
+  TRANSCODED_AUDIO
+}
+
+model MediaRendition {
+  id              String             @id @default(uuid()) @db.Uuid
+  workspaceId     String             @db.Uuid
+  mediaAssetId    String             @db.Uuid
+  kind            MediaRenditionKind
+  mimeType        String
+  sizeBytes       BigInt
+  width           Int?
+  height          Int?
+  durationSeconds Int?
+  storageKey      String             @unique
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+
+  asset MediaAsset @relation(fields: [mediaAssetId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId])
+  @@index([mediaAssetId])
+}
+
+enum MediaScanStatus {
+  UNSCANNED
+  SCAN_QUEUED
+  SCANNING
+  CLEAN
+  SUSPICIOUS
+  INFECTED
+  QUARANTINED
+  SCAN_FAILED
+}
+
+enum MediaLifecycleJobType {
+  EXPIRE_UPLOAD
+  DELETE_ASSET
+  DELETE_RENDITION
+  CLEAN_FAILED
+  CLEAN_ORPHANED
+}
+
+enum MediaLifecycleJobStatus {
+  QUEUED
+  PROCESSING
+  SUCCEEDED
+  FAILED
+  RETRYING
+  DEAD
+}
+
+enum MediaSecurityScanJobStatus {
+  QUEUED
+  SCANNING
+  CLEAN
+  INFECTED
+  FAILED
+  RETRYING
+  DEAD
+}
+
+enum MediaSecurityScannerProvider {
+  NOOP
+  FIXTURE
+  CLAMAV_RESERVED
+  EXTERNAL_RESERVED
+}
+
+model MediaSecurityScanJob {
+  id              String                       @id @default(uuid()) @db.Uuid
+  workspaceId     String                       @db.Uuid
+  mediaAssetId    String                       @db.Uuid
+  status          MediaSecurityScanJobStatus   @default(QUEUED)
+  scannerProvider MediaSecurityScannerProvider @default(NOOP)
+  attempts        Int                          @default(0)
+  maxAttempts     Int                          @default(3)
+  runAfter        DateTime                     @default(now())
+  lockedAt        DateTime?
+  lockedBy        String?
+  idempotencyKey  String                       @unique
+  resultCode      String?
+  resultMessage   String?
+  createdAt       DateTime                     @default(now())
+  updatedAt       DateTime                     @updatedAt
+
+  asset MediaAsset @relation(fields: [mediaAssetId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId])
+  @@index([mediaAssetId])
+  @@index([status, runAfter])
+}
+
+model MediaLifecycleJob {
+  id             String                  @id @default(uuid()) @db.Uuid
+  workspaceId    String                  @db.Uuid
+  mediaAssetId   String?                 @db.Uuid
+  jobType        MediaLifecycleJobType
+  status         MediaLifecycleJobStatus @default(QUEUED)
+  attempts       Int                     @default(0)
+  maxAttempts    Int                     @default(3)
+  runAfter       DateTime                @default(now())
+  lockedAt       DateTime?
+  lockedBy       String?
+  idempotencyKey String                  @unique
+  errorCode      String?
+  errorMessage   String?
+  createdAt      DateTime                @default(now())
+  updatedAt      DateTime                @updatedAt
+
+  asset MediaAsset? @relation(fields: [mediaAssetId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId])
+  @@index([mediaAssetId])
+  @@index([status, runAfter])
 }
 
 model NotificationTemplate {
@@ -1287,7 +1466,7 @@ model NotificationIntent {
   createdAt            DateTime                 @default(now())
   updatedAt            DateTime                 @updatedAt
 
-  template         NotificationTemplate?       @relation(fields: [templateId], references: [id], onDelete: SetNull)
+  template         NotificationTemplate?         @relation(fields: [templateId], references: [id], onDelete: SetNull)
   deliveryAttempts NotificationDeliveryAttempt[]
 
   @@index([tenantId])
@@ -1339,4 +1518,3 @@ model NotificationPreference {
   @@index([workspaceId])
   @@index([userId])
 }
-

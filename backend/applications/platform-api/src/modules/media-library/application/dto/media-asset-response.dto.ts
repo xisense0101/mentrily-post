@@ -3,6 +3,8 @@ import type {
   MediaAssetVisibilityContract,
   MediaFileCategoryContract,
   MediaStorageProviderContract,
+  MediaScanStatusContract,
+  MediaQuarantineStatusContract,
 } from '@mentrily/contract-catalog';
 
 export interface MediaAssetResponse {
@@ -20,4 +22,7 @@ export interface MediaAssetResponse {
   createdAt: string;
   updatedAt: string;
   archivedAt?: string | undefined;
+  scanStatus: MediaScanStatusContract;
+  scannedAt?: string | undefined;
+  quarantine?: MediaQuarantineStatusContract | undefined;
 }

@@ -5,3 +5,7 @@ export * from './media-file-category.vo.js';
 export * from './media-storage-provider.vo.js';
 export * from './media-content-type.vo.js';
 export * from './media-object-key.vo.js';
+export * from './media-processing-job-status.vo.js';
+export * from './media-processing-job-type.vo.js';
+export * from './media-rendition-kind.vo.js';
+export * from './media-scan-status.vo.js';

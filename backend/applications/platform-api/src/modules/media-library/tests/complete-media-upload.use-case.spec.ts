@@ -7,7 +7,7 @@ import type {
 } from '@mentrily/service-core';
 import { CompleteMediaUploadUseCase } from '../application/use-cases/complete-media-upload.use-case.js';
 import { MediaAsset, MediaUploadIntent } from '../domain/entities/index.js';
-import { MediaEventPublisherService } from '../application/services/index.js';
+import { MediaEventPublisherService, MediaProcessingService, MediaSecurityScanService } from '../application/services/index.js';
 
 const context: RequestContext = {
   requestId: 'r1',
@@ -63,9 +63,12 @@ describe('CompleteMediaUploadUseCase', () => {
       } as TransactionRunner,
       { record: vi.fn() } as AuditRecorder,
       { publishDomainEvent: vi.fn() } as unknown as MediaEventPublisherService,
+      { enqueueJobsForAsset: vi.fn(async () => []) } as unknown as MediaProcessingService,
+      { enqueueScanForAsset: vi.fn(async () => ({})) } as unknown as MediaSecurityScanService,
     );
 
     const response = await useCase.execute(context, 'u1');
     expect(response.status).toBe('AVAILABLE');
   });
 });
+

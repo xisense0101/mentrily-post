@@ -194,7 +194,7 @@ describe('Content Studio API (integration)', () => {
       },
     });
     expectHttpStatus(replaceRes, 400);
-    expect(replaceRes.json().message).toContain('referenced media asset not found');
+    expect(replaceRes.json().error.message).toContain('referenced media asset not found');
   });
 
   it('creator succeeds to replace blocks if referenced media asset exists and is AVAILABLE', async () => {
@@ -212,6 +212,7 @@ describe('Content Studio API (integration)', () => {
         objectKey: `tenants/${headers['x-tenant-id']}/workspaces/${headers['x-workspace-id']}/media/test-key-image`,
         visibility: 'PRIVATE',
         status: 'AVAILABLE',
+        scanStatus: 'CLEAN',
         metadata: {},
       },
     });

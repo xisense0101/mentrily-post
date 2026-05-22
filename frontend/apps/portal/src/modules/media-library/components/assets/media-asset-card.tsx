@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { formatMediaFileSize, getMediaAssetDisplayName, isPreviewableMediaAsset } from '../../state';
-import { MediaAssetStatusBadge } from './media-asset-status-badge';
+import { MediaAssetStatusBadge, MediaSecurityScanBadge } from './media-asset-status-badge';
 import { MediaAssetPreview } from './media-asset-preview';
 import { useMediaReadUrl } from '../../hooks';
 import type { MediaAssetContract } from '../../types';
@@ -30,7 +30,10 @@ export function MediaAssetCard({ asset, onArchive }: MediaAssetCardProps) {
             {asset.fileCategory} · {asset.contentType} · {formatMediaFileSize(asset.sizeBytes)}
           </p>
         </div>
-        <MediaAssetStatusBadge status={asset.status} />
+        <div style={{ display: 'flex', gap: '0.35rem', flexDirection: 'column', alignItems: 'flex-end' }}>
+          <MediaAssetStatusBadge status={asset.status} />
+          {asset.scanStatus ? <MediaSecurityScanBadge scanStatus={asset.scanStatus} /> : null}
+        </div>
       </div>
       <div style={{ fontSize: '0.9rem', color: '#64748b' }}>
         <div>Created: {new Date(asset.createdAt).toLocaleString()}</div>
@@ -44,6 +47,12 @@ export function MediaAssetCard({ asset, onArchive }: MediaAssetCardProps) {
         ) : (
           <MediaAssetPreview asset={asset} readUrl={readUrl} />
         )
+      ) : null}
+      {!canPreview && ['UPLOADED', 'PROCESSING_QUEUED', 'PROCESSING'].includes(asset.status) ? (
+        <p style={{ color: '#854d0e', margin: 0, fontSize: '0.9rem' }}>Media is currently being processed...</p>
+      ) : null}
+      {asset.status === 'PROCESSING_FAILED' ? (
+        <p style={{ color: '#9f1239', margin: 0, fontSize: '0.9rem' }}>Media processing failed. File may be unreadable.</p>
       ) : null}
       <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
         {canPreview ? (

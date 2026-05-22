@@ -338,7 +338,7 @@ describe('Learning Delivery API (integration)', () => {
       payload: { title: 'Lesson 1', kind: 'VIDEO', contentRef: '11111111-1111-4111-8111-111111111111', isRequired: true },
     });
     expectHttpStatus(lessonRes, 400);
-    expect(lessonRes.json().message).toContain('referenced media asset not found');
+    expect(lessonRes.json().error.message).toContain('referenced media asset not found');
   });
 
   it('creator succeeds to add a lesson with a valid video media asset reference', async () => {
@@ -353,9 +353,10 @@ describe('Learning Delivery API (integration)', () => {
         contentType: 'video/mp4',
         fileCategory: 'VIDEO',
         storageProvider: 'FIXTURE',
-        objectKey: 'test-key-video',
+        objectKey: `tenants/${baseHeaders['x-tenant-id']}/workspaces/${baseHeaders['x-workspace-id']}/media/test-key-video`,
         visibility: 'PRIVATE',
         status: 'AVAILABLE',
+        scanStatus: 'CLEAN',
         metadata: {},
       },
     });

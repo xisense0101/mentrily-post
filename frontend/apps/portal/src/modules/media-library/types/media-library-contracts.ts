@@ -9,6 +9,7 @@ import type {
   MediaStorageProviderContract,
   MediaUploadIntentContract,
   MediaUploadIntentStatusContract,
+  MediaScanStatusContract,
 } from '../../../contracts';
 
 export type {
@@ -22,6 +23,7 @@ export type {
   MediaStorageProviderContract,
   MediaUploadIntentContract,
   MediaUploadIntentStatusContract,
+  MediaScanStatusContract,
 };
 
 export type MediaUploadQueueItemStatus =

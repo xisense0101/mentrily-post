@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { RequestContext } from '@mentrily/service-core';
 import { MediaAssetRepository } from '../../media-library/domain/repositories/index.js';
 import { validateContentMediaReferences } from '../application/support/content-media-reference.validator.js';
-import { BlockContentKind } from '../domain/index.js';
+
 
 describe('validateContentMediaReferences', () => {
   const context: RequestContext = {
@@ -118,6 +118,7 @@ describe('validateContentMediaReferences', () => {
       tenantId: 'tenant-1',
       workspaceId: 'workspace-1',
       status: 'AVAILABLE',
+      scanStatus: 'CLEAN',
       fileCategory: 'VIDEO',
     };
     const repo = {
@@ -143,6 +144,7 @@ describe('validateContentMediaReferences', () => {
       tenantId: 'tenant-1',
       workspaceId: 'workspace-1',
       status: 'AVAILABLE',
+      scanStatus: 'CLEAN',
       fileCategory: 'IMAGE',
     };
     const repo = {
@@ -168,6 +170,7 @@ describe('validateContentMediaReferences', () => {
       tenantId: 'tenant-1',
       workspaceId: 'workspace-1',
       status: 'AVAILABLE',
+      scanStatus: 'CLEAN',
       fileCategory: 'IMAGE',
     };
     const repo = {

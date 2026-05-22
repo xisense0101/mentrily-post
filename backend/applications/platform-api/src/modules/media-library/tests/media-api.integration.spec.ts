@@ -102,6 +102,11 @@ describe('Media Library API (integration)', () => {
     });
     expectHttpStatus(completeRes, 201);
 
+    await prisma.mediaAsset.update({
+      where: { id: created.assetId },
+      data: { status: 'AVAILABLE', scanStatus: 'CLEAN' },
+    });
+
     const listRes = await app.inject({ method: 'GET', url: '/workspace/media/assets', headers });
     expectHttpStatus(listRes, 200);
     expect(listRes.json()).toHaveLength(1);

@@ -109,6 +109,7 @@ describe('validateLearningMediaReference', () => {
       tenantId: 'tenant-1',
       workspaceId: 'workspace-1',
       status: 'AVAILABLE',
+      scanStatus: 'CLEAN',
       fileCategory: 'DOCUMENT',
     };
     const repo = {
@@ -130,6 +131,7 @@ describe('validateLearningMediaReference', () => {
       tenantId: 'tenant-1',
       workspaceId: 'workspace-1',
       status: 'AVAILABLE',
+      scanStatus: 'CLEAN',
       fileCategory: 'VIDEO',
     };
     const repo = {

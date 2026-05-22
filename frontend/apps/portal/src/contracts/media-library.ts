@@ -9,4 +9,5 @@ export type {
   MediaStorageProviderContract,
   MediaUploadIntentContract,
   MediaUploadIntentStatusContract,
+  MediaScanStatusContract,
 } from '@mentrily/domain-contracts';

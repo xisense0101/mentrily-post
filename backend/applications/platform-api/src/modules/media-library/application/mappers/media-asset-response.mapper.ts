@@ -17,5 +17,12 @@ export function mapMediaAssetToResponse(asset: MediaAsset): MediaAssetResponse {
     createdAt: asset.createdAt.toISOString(),
     updatedAt: asset.updatedAt.toISOString(),
     ...(asset.archivedAt ? { archivedAt: asset.archivedAt.toISOString() } : {}),
+    scanStatus: asset.scanStatus,
+    ...(asset.scannedAt ? { scannedAt: asset.scannedAt.toISOString() } : {}),
+    quarantine: {
+      isQuarantined: asset.scanStatus === 'QUARANTINED',
+      ...(asset.quarantinedAt ? { quarantinedAt: asset.quarantinedAt.toISOString() } : {}),
+      ...(asset.quarantineReason ? { quarantineReason: asset.quarantineReason } : {}),
+    },
   };
 }

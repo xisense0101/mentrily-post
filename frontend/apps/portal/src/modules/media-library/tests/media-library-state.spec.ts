@@ -21,6 +21,7 @@ function makeAsset(overrides: Partial<MediaAssetContract> = {}): MediaAssetContr
     storageProvider: 'FIXTURE',
     visibility: 'PRIVATE',
     status: 'AVAILABLE',
+    scanStatus: 'CLEAN',
     metadata: {},
     createdAt: '2026-05-21T00:00:00.000Z',
     updatedAt: '2026-05-21T00:00:00.000Z',

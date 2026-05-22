@@ -182,10 +182,11 @@ function assertWorkspaceOwnership(asset: MediaAsset, context: RequestContext): v
 }
 
 function assertAvailable(asset: MediaAsset): void {
-  if (asset.status !== 'AVAILABLE') {
-    throw new AppError('VALIDATION_ERROR', 'referenced media asset is not available', 400, {
+  if (asset.status !== 'AVAILABLE' || asset.scanStatus !== 'CLEAN') {
+    throw new AppError('VALIDATION_ERROR', 'referenced media asset is not available or clean', 400, {
       assetId: asset.id,
       status: asset.status,
+      scanStatus: asset.scanStatus,
     });
   }
 }
