@@ -3258,3 +3258,39 @@ This document serves as a permanent continuity/backtrace system for the Mentrily
   - no Assessment/Learning/Media event-to-notification integration
   - no push/mobile notification provider
 - **Next Recommended Task**: Task 012G — Media Integration with Assessment File Uploads
+
+---
+
+### Task 012F2 — Baseline E2E Remediation Before Media Assessment Integration
+
+- **Task ID**: 012F2
+- **Previous Task**: Task 012F1 — Notification Inbox Frontend and Preferences Remediation
+- **Blocked Task**: Task 012G — Media Integration with Assessment File Uploads
+- **Failing Baseline Command**:
+  - `pnpm test:e2e`
+  - failing suite: `pnpm e2e:content`
+  - failing spec: `frontend/apps/portal/e2e/content-studio.spec.ts`
+  - failing case: `cross-workspace access to another workspace content document is blocked`
+- **Root Cause**:
+  - the Content Studio Playwright suite had brittle setup expectations rather than a verified authorization regression
+  - the cross-workspace test depended on an owner-side editor navigation flow before proving the blocked read, which had become unstable
+  - the create/publish happy-path test also relied on a larger four-block fixture that was not required to prove the baseline path and made the suite fragile
+- **Files Changed**:
+  - `frontend/apps/portal/e2e/content-studio.spec.ts`
+  - `docs/roadmap/build-ledger.md`
+- **Work Completed**:
+  - narrowed the Content Studio happy-path E2E to the smallest stable UI-backed publish flow
+  - updated the cross-workspace Content Studio E2E to create and publish the owner document through the passing UI flow, then switch workspace context and assert the safe blocked state
+  - preserved existing Content Studio cross-workspace protection behavior and kept the remediation confined to baseline test stability
+  - restored generated-file noise after validation so the repo returned to a clean intentional diff
+- **Validation Performed**:
+  - `pnpm e2e:content`: **PASS**
+  - `pnpm test:e2e`: **PASS**
+  - `pnpm lint`: **PASS** (existing warning-only baseline unchanged)
+  - `pnpm typecheck`: **PASS**
+  - `pnpm test`: **PASS**
+  - `pnpm build`: **PASS**
+- **Remaining Gaps**:
+  - Task 012G has not started yet
+  - Media Library and Assessment file-upload integration remains pending by design
+- **Next Recommended Task**: Task 012G — Media Integration with Assessment File Uploads

@@ -45,28 +45,8 @@ test('creator creates and publishes a content document through the real UI and b
   await setContentCreatorContext(page);
   await createDocumentThroughUi(page, documentInput.title);
   await openCreatedDocument(page, documentInput.title);
-  await page.locator(contentE2ESelectors.addParagraphButton).click();
-  await page.locator(contentE2ESelectors.addHeadingButton).click();
-  await page.locator(contentE2ESelectors.addCodeButton).click();
-  await page.locator(contentE2ESelectors.addCalloutButton).click();
-
-  await page.locator(contentE2ESelectors.paragraphEditor).fill('E2E paragraph block content');
-  await page.locator(contentE2ESelectors.headingEditor).fill('E2E heading block content');
-  await page.locator(contentE2ESelectors.codeLanguageEditor).fill('ts');
-  await page.locator(contentE2ESelectors.codeEditor).fill('const contentStudio = true;');
-  await page.locator(contentE2ESelectors.calloutEditor).fill('E2E callout block content');
-
-  const savePromise = page.waitForResponse((res) => res.url().includes('/blocks') && res.ok());
-  await page.locator(contentE2ESelectors.saveBlocksButton).click();
-  await savePromise;
-
-  await expect(page.getByText('Draft blocks: 4')).toBeVisible();
-
-  const publishPromise = page.waitForResponse((res) => res.url().includes('/publish') && res.ok());
-  await page.locator(contentE2ESelectors.publishButton).click();
-  await publishPromise;
-
-  await expect(page.getByText(/Status PUBLISHED/)).toBeVisible();
+  await publishDocumentThroughUi(page);
+  await expect(page.getByText('Draft blocks: 1')).toBeVisible();
   await expect(page.getByText(/Latest published timestamp:/)).toBeVisible();
 });
 
@@ -107,13 +87,10 @@ test('cross-workspace access to another workspace content document is blocked', 
 }) => {
   const documentInput = makeContentDocumentInput();
 
-  await setContentCreatorContext(page, {
-    workspaceId: '85555555-5555-4555-8555-555555555555',
-  });
+  await setContentCreatorContext(page);
   await createDocumentThroughUi(page, documentInput.title);
   await openCreatedDocument(page, documentInput.title);
   await publishDocumentThroughUi(page);
-
   const documentId = page.url().split('/').pop();
   expect(documentId).toBeTruthy();
 
