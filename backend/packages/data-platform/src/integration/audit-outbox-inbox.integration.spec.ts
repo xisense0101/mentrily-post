@@ -45,7 +45,7 @@ describe('Audit, Outbox, and Inbox Repositories (Integration)', () => {
       const ctx = createContext();
       const targetId = randomUUID();
       const actorId = ctx.workspace!.actorId as string;
-      
+
       const record = await auditRepo.append(
         {
           action: 'test.action',
@@ -71,7 +71,7 @@ describe('Audit, Outbox, and Inbox Repositories (Integration)', () => {
     it('should persist outbox messages with PENDING status', async () => {
       const ctx = createContext();
       const eventId = randomUUID();
-      
+
       const record = await outboxRepo.append(
         {
           eventId,
@@ -137,6 +137,7 @@ describe('Audit, Outbox, and Inbox Repositories (Integration)', () => {
         ctx,
       );
 
+      expect(second.id).toBe(first.id);
       expect(await prisma.outboxMessage.count({ where: { eventId } })).toBe(1);
       const saved = await prisma.outboxMessage.findUniqueOrThrow({ where: { eventId } });
       expect(saved.payload).toEqual(first.payload);
@@ -168,14 +169,17 @@ describe('Audit, Outbox, and Inbox Repositories (Integration)', () => {
 
     it('should claim pending batch', async () => {
       const ctx = createContext();
-      await outboxRepo.append({
-        eventId: randomUUID(),
-        eventName: 'e1',
-        eventVersion: 1,
-        payload: {},
-        occurredAt: new Date().toISOString(),
-        correlationId: ctx.correlationId,
-      }, ctx);
+      await outboxRepo.append(
+        {
+          eventId: randomUUID(),
+          eventName: 'e1',
+          eventVersion: 1,
+          payload: {},
+          occurredAt: new Date().toISOString(),
+          correlationId: ctx.correlationId,
+        },
+        ctx,
+      );
 
       const batch = await outboxRepo.claimPendingBatch(10);
       expect(batch).toHaveLength(1);
@@ -187,7 +191,7 @@ describe('Audit, Outbox, and Inbox Repositories (Integration)', () => {
     it('should handle idempotency correctly', async () => {
       const source = 'test-source';
       const externalEventId = randomUUID();
-      
+
       const res1 = await inboxRepo.claimOrInsert(source, externalEventId, 'evt', { data: 1 });
       expect(res1.wasClaimed).toBe(true);
       expect(res1.record.status).toBe('RECEIVED');

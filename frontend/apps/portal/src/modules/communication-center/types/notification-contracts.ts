@@ -1,0 +1,21 @@
+import type {
+  NotificationInboxItemContract,
+  NotificationInboxListResponseContract,
+  NotificationInboxStatusContract,
+  NotificationPreferenceCategoryContract,
+  NotificationPreferenceChannelContract,
+  NotificationPreferenceContract,
+  NotificationPreferencesResponseContract,
+  NotificationUnreadCountResponseContract,
+  UpdateNotificationPreferencesRequestContract,
+} from '@mentrily/domain-contracts';
+
+export type NotificationInboxItem = NotificationInboxItemContract;
+export type NotificationInboxListResponse = NotificationInboxListResponseContract;
+export type NotificationInboxStatus = NotificationInboxStatusContract;
+export type NotificationUnreadCountResponse = NotificationUnreadCountResponseContract;
+export type NotificationPreference = NotificationPreferenceContract;
+export type NotificationPreferencesResponse = NotificationPreferencesResponseContract;
+export type NotificationPreferenceChannel = NotificationPreferenceChannelContract;
+export type NotificationPreferenceCategory = NotificationPreferenceCategoryContract;
+export type UpdateNotificationPreferencesRequest = UpdateNotificationPreferencesRequestContract;

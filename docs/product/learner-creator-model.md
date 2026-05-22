@@ -50,6 +50,7 @@ Learner and creator are interaction modes, not permanent identities.
 - Code execution and AI generation are also deferred, even though code and notebook questions are structurally modeled in the domain.
 
 ## Task 011G Update (2026-05-19)
+
 - Manual grading UI now exists for creator/admin review.
 - Creator/admin can view pending manual-review answers, open grading runs, and submit manual score + feedback.
 - Learner result page now exists.
@@ -58,7 +59,6 @@ Learner and creator are interaction modes, not permanent identities.
 - No learner execution endpoint exists.
 - Learning Delivery is not connected to Assessment grading.
 - Content Studio is not connected to Assessment grading.
-
 
 ## Assessment Result Roles
 
@@ -77,6 +77,7 @@ Learners can read only their own released assessment results. Creators, admins, 
 - Learner attempt UX now exposes timer urgency, local expiry disablement, save retry feedback, submit retry feedback, and offline/reconnect warnings.
 - Unsupported assessment question kinds now fail safely in both creator and learner UIs.
 - Real uploads, Media Library, real code execution, notebook execution, AI grading, proctoring, and Learning Delivery/Content Studio linkage remain deferred.
+
 ## Task 012B Update (2026-05-21)
 
 - Creator/admin users now have a workspace Media Library management surface.
@@ -92,3 +93,8 @@ Learners can read only their own released assessment results. Creators, admins, 
 - Scheduler processing is reserved for internal/system actors only; creators, viewers, and learners do not receive a scheduler trigger surface in 012D.
 - Learners and creators do not receive any direct provider-configuration capability in Task 012E.
 - Communication provider enablement remains environment-only and internal to backend operations.
+
+# Notification Ownership
+
+- Learners, creators, admins, and workspace owners can only view and update their own notification inbox and preference records through the portal.
+- Notification preferences remain tenant/workspace scoped and do not grant access to provider operations or workspace-wide notification administration.

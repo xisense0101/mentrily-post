@@ -1,15 +1,22 @@
 import type { TransactionContext } from '@mentrily/service-core';
-import type {
-  NotificationChannel,
-  NotificationIntentStatus,
-} from '../value-objects/index.js';
+import type { NotificationChannel, NotificationIntentStatus } from '../value-objects/index.js';
 import type { NotificationIntent } from '../entities/index.js';
 
 export abstract class NotificationIntentRepository {
-  abstract save(intent: NotificationIntent, transaction?: TransactionContext): Promise<NotificationIntent>;
-  abstract findById(id: string, transaction?: TransactionContext): Promise<NotificationIntent | null>;
+  abstract save(
+    intent: NotificationIntent,
+    transaction?: TransactionContext,
+  ): Promise<NotificationIntent>;
+  abstract findById(
+    id: string,
+    transaction?: TransactionContext,
+  ): Promise<NotificationIntent | null>;
   abstract listByWorkspace(
-    input: { workspaceId: string; channel?: NotificationChannel | undefined; status?: NotificationIntentStatus | undefined },
+    input: {
+      workspaceId: string;
+      channel?: NotificationChannel | undefined;
+      status?: NotificationIntentStatus | undefined;
+    },
     transaction?: TransactionContext,
   ): Promise<NotificationIntent[]>;
   abstract findDueQueued(
@@ -39,4 +46,22 @@ export abstract class NotificationIntentRepository {
     },
     transaction?: TransactionContext,
   ): Promise<NotificationIntent | null>;
+
+  abstract listByRecipient(
+    input: {
+      workspaceId: string;
+      recipientId: string;
+      status?: 'ALL' | 'UNREAD' | 'READ' | 'ARCHIVED';
+      limit?: number;
+    },
+    transaction?: TransactionContext,
+  ): Promise<NotificationIntent[]>;
+
+  abstract countUnreadByRecipient(
+    input: {
+      workspaceId: string;
+      recipientId: string;
+    },
+    transaction?: TransactionContext,
+  ): Promise<number>;
 }

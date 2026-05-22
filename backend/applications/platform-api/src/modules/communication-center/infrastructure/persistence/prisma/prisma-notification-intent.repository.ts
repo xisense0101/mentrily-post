@@ -1,8 +1,13 @@
 import { Inject, Injectable } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PrismaService, getPrismaClient, mapPrismaError } from '@mentrily/data-platform';
 import type { TransactionContext } from '@mentrily/service-core';
 import { NotificationIntentRepository } from '../../../domain/repositories/index.js';
-import type { NotificationChannel, NotificationIntent, NotificationIntentStatus } from '../../../domain/index.js';
+import type {
+  NotificationChannel,
+  NotificationIntent,
+  NotificationIntentStatus,
+} from '../../../domain/index.js';
 import {
   toDomainNotificationIntent,
   toPersistenceNotificationIntentCreate,
@@ -15,10 +20,14 @@ type CommunicationPrismaClient = {
     findUnique: PrismaService['notificationIntent']['findUnique'];
     findMany: PrismaService['notificationIntent']['findMany'];
     updateMany: PrismaService['notificationIntent']['updateMany'];
+    count: PrismaService['notificationIntent']['count'];
   };
 };
 
-function resolveClient(prisma: PrismaService, transaction?: TransactionContext): CommunicationPrismaClient {
+function resolveClient(
+  prisma: PrismaService,
+  transaction?: TransactionContext,
+): CommunicationPrismaClient {
   return getPrismaClient(prisma, transaction) as unknown as CommunicationPrismaClient;
 }
 
@@ -26,7 +35,10 @@ function resolveClient(prisma: PrismaService, transaction?: TransactionContext):
 export class PrismaNotificationIntentRepository implements NotificationIntentRepository {
   constructor(@Inject(PrismaService) private readonly prisma: PrismaService) {}
 
-  async save(intent: NotificationIntent, transaction?: TransactionContext): Promise<NotificationIntent> {
+  async save(
+    intent: NotificationIntent,
+    transaction?: TransactionContext,
+  ): Promise<NotificationIntent> {
     const client = resolveClient(this.prisma, transaction);
     try {
       const record = await client.notificationIntent.upsert({
@@ -51,7 +63,11 @@ export class PrismaNotificationIntentRepository implements NotificationIntentRep
   }
 
   async listByWorkspace(
-    input: { workspaceId: string; channel?: NotificationChannel | undefined; status?: NotificationIntentStatus | undefined },
+    input: {
+      workspaceId: string;
+      channel?: NotificationChannel | undefined;
+      status?: NotificationIntentStatus | undefined;
+    },
     transaction?: TransactionContext,
   ): Promise<NotificationIntent[]> {
     const client = resolveClient(this.prisma, transaction);
@@ -125,7 +141,9 @@ export class PrismaNotificationIntentRepository implements NotificationIntentRep
           dispatchedAt: input.occurredAt,
           updatedAt: input.occurredAt,
           metadata: {
-            ...(typeof current.metadata === 'object' && current.metadata !== null && !Array.isArray(current.metadata)
+            ...(typeof current.metadata === 'object' &&
+            current.metadata !== null &&
+            !Array.isArray(current.metadata)
               ? (current.metadata as Record<string, unknown>)
               : {}),
             ...(input.metadata ?? {}),
@@ -174,7 +192,9 @@ export class PrismaNotificationIntentRepository implements NotificationIntentRep
           failedAt: input.occurredAt,
           updatedAt: input.occurredAt,
           metadata: {
-            ...(typeof current.metadata === 'object' && current.metadata !== null && !Array.isArray(current.metadata)
+            ...(typeof current.metadata === 'object' &&
+            current.metadata !== null &&
+            !Array.isArray(current.metadata)
               ? (current.metadata as Record<string, unknown>)
               : {}),
             ...(input.metadata ?? {}),
@@ -188,6 +208,117 @@ export class PrismaNotificationIntentRepository implements NotificationIntentRep
 
       const updated = await client.notificationIntent.findUnique({ where: { id: input.intentId } });
       return updated ? toDomainNotificationIntent(updated) : null;
+    } catch (error) {
+      throw mapPrismaError(error);
+    }
+  }
+
+  async listByRecipient(
+    input: {
+      workspaceId: string;
+      recipientId: string;
+      status?: 'ALL' | 'UNREAD' | 'READ' | 'ARCHIVED';
+      limit?: number;
+    },
+    transaction?: TransactionContext,
+  ): Promise<NotificationIntent[]> {
+    const client = resolveClient(this.prisma, transaction);
+    const limit = input.limit ? Math.min(Math.max(input.limit, 1), 100) : 50;
+
+    const where: Prisma.NotificationIntentWhereInput = {
+      workspaceId: input.workspaceId,
+      channel: 'IN_APP',
+      status: 'DISPATCHED',
+      recipient: {
+        path: ['principalId'],
+        equals: input.recipientId,
+      },
+    };
+
+    const conditions: Prisma.NotificationIntentWhereInput[] = [];
+    if (input.status === 'ARCHIVED') {
+      conditions.push({
+        metadata: {
+          path: ['archivedAt'],
+          not: Prisma.DbNull,
+        },
+      });
+    } else {
+      conditions.push({
+        metadata: {
+          path: ['archivedAt'],
+          equals: Prisma.DbNull,
+        },
+      });
+
+      if (input.status === 'UNREAD') {
+        conditions.push({
+          metadata: {
+            path: ['readAt'],
+            equals: Prisma.DbNull,
+          },
+        });
+      } else if (input.status === 'READ') {
+        conditions.push({
+          metadata: {
+            path: ['readAt'],
+            not: Prisma.DbNull,
+          },
+        });
+      }
+    }
+
+    if (conditions.length > 0) {
+      where.AND = conditions;
+    }
+
+    try {
+      const records = await client.notificationIntent.findMany({
+        where,
+        orderBy: [{ createdAt: 'desc' }, { id: 'asc' }],
+        take: limit,
+      });
+      return records.map(toDomainNotificationIntent);
+    } catch (error) {
+      throw mapPrismaError(error);
+    }
+  }
+
+  async countUnreadByRecipient(
+    input: {
+      workspaceId: string;
+      recipientId: string;
+    },
+    transaction?: TransactionContext,
+  ): Promise<number> {
+    const client = resolveClient(this.prisma, transaction);
+    try {
+      const count = await client.notificationIntent.count({
+        where: {
+          workspaceId: input.workspaceId,
+          channel: 'IN_APP',
+          status: 'DISPATCHED',
+          recipient: {
+            path: ['principalId'],
+            equals: input.recipientId,
+          },
+          AND: [
+            {
+              metadata: {
+                path: ['archivedAt'],
+                equals: Prisma.DbNull,
+              },
+            },
+            {
+              metadata: {
+                path: ['readAt'],
+                equals: Prisma.DbNull,
+              },
+            },
+          ],
+        },
+      });
+      return count;
     } catch (error) {
       throw mapPrismaError(error);
     }

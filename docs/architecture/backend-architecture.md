@@ -148,17 +148,19 @@ Duplicate insert retries are handled by the repository itself, including Prisma 
 
 ## Assessment Builder domain slice
 
- **010A–010B2 state**: Assessment domain foundation is complete with full Prisma persistence, migrations, repository adapters, application use cases, HTTP controllers, and API integration test coverage. Assessment Builder domain does not import Content Studio or Learning Delivery domain objects (boundary enforced).
-  - All assessment entities, value objects, policies, and events are in `backend/applications/platform-api/src/modules/assessment-delivery/domain/`.
-  - Prisma repositories and adapters handle create, read, publish, archive, restore, and snapshot operations.
-  - HTTP controllers validate tenant/workspace context, permissions, and audit requirements.
-  - Full integration test coverage proves APIs work through real backend with test Postgres.
-  - Assessment domain is safe for reuse by other modules that need question/grading logic (e.g., future LMS integrations).
- 
- **010C–010C2 state**: Assessment Builder frontend authoring shell is complete with creator-side full draft/publish/archive/restore lifecycle support through the real backend API.
-  - The first Assessment Builder cross-stack E2E proof now exists and runs the real portal UI, real `platform-api` backend, and real test Postgres database.
- 
- **011C–011G state**: Assessment Builder authoring remains proven end to end, learner attempt backend and learner attempt frontend/E2E both exist, grading runtime foundation exists on the backend, result release exists, and assessment-delivery now exposes backend-only code execution request/get/cancel use cases behind a safe provider port. Submitted attempts can be graded synchronously into persisted grading runs and answer-grade records, but code/notebook grading still does not execute source.
+**010A–010B2 state**: Assessment domain foundation is complete with full Prisma persistence, migrations, repository adapters, application use cases, HTTP controllers, and API integration test coverage. Assessment Builder domain does not import Content Studio or Learning Delivery domain objects (boundary enforced).
+
+- All assessment entities, value objects, policies, and events are in `backend/applications/platform-api/src/modules/assessment-delivery/domain/`.
+- Prisma repositories and adapters handle create, read, publish, archive, restore, and snapshot operations.
+- HTTP controllers validate tenant/workspace context, permissions, and audit requirements.
+- Full integration test coverage proves APIs work through real backend with test Postgres.
+- Assessment domain is safe for reuse by other modules that need question/grading logic (e.g., future LMS integrations).
+
+**010C–010C2 state**: Assessment Builder frontend authoring shell is complete with creator-side full draft/publish/archive/restore lifecycle support through the real backend API.
+
+- The first Assessment Builder cross-stack E2E proof now exists and runs the real portal UI, real `platform-api` backend, and real test Postgres database.
+
+**011C–011G state**: Assessment Builder authoring remains proven end to end, learner attempt backend and learner attempt frontend/E2E both exist, grading runtime foundation exists on the backend, result release exists, and assessment-delivery now exposes backend-only code execution request/get/cancel use cases behind a safe provider port. Submitted attempts can be graded synchronously into persisted grading runs and answer-grade records, but code/notebook grading still does not execute source.
 
 ## Foundation runtime conventions
 
@@ -217,7 +219,7 @@ Transactional write paths are verified through a dual-testing strategy:
   - Tests run against a dedicated `mentrily_test` database.
   - The `automation/run-integration-tests.mjs` runner ensures a truthful, fail-fast execution order.
   - Schema cleanup (`truncatePublicSchema`) is mandatory between tests to ensure repeatable results.
-   - Schema cleanup acquires an advisory lock to prevent concurrent truncation deadlocks.
+  - Schema cleanup acquires an advisory lock to prevent concurrent truncation deadlocks.
   - Generated Prisma clients are build-time artifacts and are NEVER committed to version control.
 
 ## Assessment attempt backend truth
@@ -251,8 +253,8 @@ Transactional write paths are verified through a dual-testing strategy:
   - Advisory-lock serialization is applied to database truncation during test runs to avoid deadlocks.
   - Restored workspace `@mentrily/domain-contracts` and exported validated Media contracts.
 
-
 ## Task 011G Update (2026-05-19)
+
 - Manual grading UI now exists for creator/admin review.
 - Creator/admin can view pending manual-review answers, open grading runs, and submit manual score + feedback.
 - Learner result page now exists.
@@ -263,10 +265,10 @@ Transactional write paths are verified through a dual-testing strategy:
 - Learning Delivery is not connected to Assessment grading.
 - Content Studio is not connected to Assessment grading.
 
-
 ## Assessment Result Release Workflow
 
 The platform API now exposes result release and result read use cases inside the assessment-delivery module. Result release mutates the existing attempt result record inside a single transaction with audit logging and outbox event persistence.
+
 ## Task 012B Update (2026-05-21)
 
 - Media Library backend APIs now explicitly support `fileCategory` filtering on the workspace asset list endpoint to serve portal asset-picker and filtering workflows.
@@ -279,3 +281,9 @@ The platform API now exposes result release and result read use cases inside the
 - Real delivery workers and real provider adapters are deferred to later tasks; 012C only adds the provider port plus noop/fixture implementations.
 - 012D adds a scheduler policy, due-intent selection, delivery-attempt persistence, and an internal batch-processing use case inside `platform-api`.
 - No new public scheduler endpoint is required in this phase, and platform-worker remains unchanged to avoid cross-application coupling.
+
+# Communication Center Inbox/Preferences
+
+- The Communication Center backend exposes own-notification inbox and own-preference endpoints through the platform API.
+- In-app inbox items are sourced from existing `NotificationIntent` records with sanitized metadata-derived read/archive state.
+- Provider configuration and provider secrets remain outside frontend-safe contracts and are not returned by inbox/preferences APIs.

@@ -1,5 +1,9 @@
 import { Module } from '@nestjs/common';
-import { AuditRecordRepository, DataPlatformModule, OutboxRepository } from '@mentrily/data-platform';
+import {
+  AuditRecordRepository,
+  DataPlatformModule,
+  OutboxRepository,
+} from '@mentrily/data-platform';
 import {
   AUDIT_RECORDER,
   OUTBOX_PUBLISHER,
@@ -25,6 +29,14 @@ import {
   NotificationTemplateRendererService,
   ProcessDueNotificationIntentsUseCase,
   RenderNotificationTemplateUseCase,
+  ListNotificationsUseCase,
+  GetNotificationUseCase,
+  MarkNotificationReadUseCase,
+  MarkNotificationUnreadUseCase,
+  MarkNotificationArchivedUseCase,
+  GetUnreadCountUseCase,
+  GetPreferencesUseCase,
+  UpdatePreferencesUseCase,
 } from './application/index.js';
 import {
   NOTIFICATION_PROVIDER_CONFIG,
@@ -39,6 +51,7 @@ import {
   NotificationSchedulerPolicyService,
   NotificationTemplatePolicyService,
   NotificationTemplateRepository,
+  NotificationPreferenceRepository,
 } from './domain/index.js';
 import {
   FixtureNotificationDeliveryProvider,
@@ -50,6 +63,7 @@ import {
   PrismaNotificationTemplateRepository,
   ReservedEmailNotificationDeliveryProvider,
   ReservedSmsNotificationDeliveryProvider,
+  PrismaNotificationPreferenceRepository,
 } from './infrastructure/index.js';
 import { CommunicationCenterController } from './presentation/index.js';
 
@@ -63,7 +77,11 @@ import { CommunicationCenterController } from './presentation/index.js';
     NotificationTemplateRendererService,
     { provide: NotificationTemplateRepository, useClass: PrismaNotificationTemplateRepository },
     { provide: NotificationIntentRepository, useClass: PrismaNotificationIntentRepository },
-    { provide: NotificationDeliveryAttemptRepository, useClass: PrismaNotificationDeliveryAttemptRepository },
+    {
+      provide: NotificationDeliveryAttemptRepository,
+      useClass: PrismaNotificationDeliveryAttemptRepository,
+    },
+    { provide: NotificationPreferenceRepository, useClass: PrismaNotificationPreferenceRepository },
     {
       provide: NOTIFICATION_PROVIDER_CONFIG,
       useFactory: () => loadNotificationProviderConfig(process.env),
@@ -85,7 +103,11 @@ import { CommunicationCenterController } from './presentation/index.js';
           context: RequestContext,
           transaction?: TransactionContext,
         ): Promise<void> {
-          await repository.append(event as OutboxEvent<Record<string, unknown>>, context, transaction);
+          await repository.append(
+            event as OutboxEvent<Record<string, unknown>>,
+            context,
+            transaction,
+          );
         },
       }),
       inject: [OutboxRepository],
@@ -103,6 +125,14 @@ import { CommunicationCenterController } from './presentation/index.js';
     MarkNotificationIntentFailedUseCase,
     NotificationSchedulerService,
     ProcessDueNotificationIntentsUseCase,
+    ListNotificationsUseCase,
+    GetNotificationUseCase,
+    MarkNotificationReadUseCase,
+    MarkNotificationUnreadUseCase,
+    MarkNotificationArchivedUseCase,
+    GetUnreadCountUseCase,
+    GetPreferencesUseCase,
+    UpdatePreferencesUseCase,
     NoopNotificationDeliveryProvider,
     FixtureNotificationDeliveryProvider,
     {
@@ -148,6 +178,7 @@ import { CommunicationCenterController } from './presentation/index.js';
     NotificationTemplateRepository,
     NotificationIntentRepository,
     NotificationDeliveryAttemptRepository,
+    NotificationPreferenceRepository,
     NOTIFICATION_PROVIDER_CONFIG,
     NOTIFICATION_DELIVERY_PROVIDER_REGISTRY,
     NoopNotificationDeliveryProvider,

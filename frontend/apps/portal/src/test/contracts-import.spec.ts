@@ -1,4 +1,7 @@
-import type { MediaAssetContract } from '@mentrily/domain-contracts';
+import type {
+  MediaAssetContract,
+  NotificationPreferenceContract,
+} from '@mentrily/domain-contracts';
 
 describe('portal contract import boundary', () => {
   it('accepts MediaAssetContract imports from @mentrily/domain-contracts', () => {
@@ -20,5 +23,18 @@ describe('portal contract import boundary', () => {
     };
 
     expect(asset.filename).toBe('example.png');
+  });
+
+  it('accepts NotificationPreferenceContract imports from @mentrily/domain-contracts', () => {
+    const preference: NotificationPreferenceContract = {
+      id: 'pref_123',
+      channel: 'IN_APP',
+      category: 'SYSTEM',
+      enabled: true,
+      createdAt: '2026-05-22T00:00:00.000Z',
+      updatedAt: '2026-05-22T00:00:00.000Z',
+    };
+
+    expect(preference.category).toBe('SYSTEM');
   });
 });

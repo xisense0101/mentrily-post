@@ -76,37 +76,40 @@ A person can act as learner and creator at different times. These are product ex
 
 ## Assessment Builder domain model
 
- **010A–010B2 state**: Assessment domain is complete with Prisma persistence, Postgres migrations, API controllers, and full integration test coverage. Backend APIs support create, read, publish, archive, restore, and snapshot operations.
-  **010C–010C2 state**: Assessment Builder now has a complete creator-side frontend authoring shell, typed API client boundary, backend-compatible assessment question payloads for draft/published authoring, and local state management for multi-type question composition.
-  - Test IDs and components are in place; draft/publish/archive/restore lifecycle actions work through the typed API client.
-  - Assessment Builder authoring exists.
-  - Assessment attempt backend exists.
-  - Learner attempt frontend/E2E exists.
-  - Grading runtime foundation did not exist before 011C and now exists as backend-only grading infrastructure.
- - The first cross-stack Assessment Builder E2E proof now exists and is validated against the real portal UI, real backend API, and real test Postgres database.
- - Core Assessment domain concepts:
-  - `Assessment`: tenant/workspace-owned aggregate for exams, quizzes, and practice assignments. Status lifecycle: DRAFT → PUBLISHED (via snapshot) → ARCHIVED.
-  - `AssessmentVersion`: represents a draft or published snapshot of assessment content. Versions are immutable once published.
-  - `AssessmentSection`: groups related questions within an assessment with title and metadata.
-  - `AssessmentQuestion`: represents a single question. Kinds include MCQ, multi-select, true/false, short answer, long answer, code, file upload, notebook, reading passage, and rubric-only.
-  - `AssessmentPublishedSnapshot`: immutable published copy of a version, intended for learner-facing attempt runtime later.
-  - `QuestionKind` enum: MCQ, MULTI_SELECT, TRUE_FALSE, SHORT_ANSWER, LONG_ANSWER, CODE, NOTEBOOK, FILE_UPLOAD, READING_PASSAGE, RUBRIC_ONLY.
-  - `GradingRubric` and `GradingRule`: define grading behavior for manual/hybrid/auto-graded questions.
-  - `AttemptPolicy`: controls retry, shuffle behavior.
-  - `TimeLimit`: specifies duration in minutes.
-  - `ResultReleasePolicy`: controls when learners see results (immediate, manual, after deadline, etc.).
-  - `QuestionAnswerKey`: defines correct answers for auto-graded questions or accepted answers for short answer.
+**010A–010B2 state**: Assessment domain is complete with Prisma persistence, Postgres migrations, API controllers, and full integration test coverage. Backend APIs support create, read, publish, archive, restore, and snapshot operations.
+**010C–010C2 state**: Assessment Builder now has a complete creator-side frontend authoring shell, typed API client boundary, backend-compatible assessment question payloads for draft/published authoring, and local state management for multi-type question composition.
+
+- Test IDs and components are in place; draft/publish/archive/restore lifecycle actions work through the typed API client.
+- Assessment Builder authoring exists.
+- Assessment attempt backend exists.
+- Learner attempt frontend/E2E exists.
+- Grading runtime foundation did not exist before 011C and now exists as backend-only grading infrastructure.
+- The first cross-stack Assessment Builder E2E proof now exists and is validated against the real portal UI, real backend API, and real test Postgres database.
+- Core Assessment domain concepts:
+- `Assessment`: tenant/workspace-owned aggregate for exams, quizzes, and practice assignments. Status lifecycle: DRAFT → PUBLISHED (via snapshot) → ARCHIVED.
+- `AssessmentVersion`: represents a draft or published snapshot of assessment content. Versions are immutable once published.
+- `AssessmentSection`: groups related questions within an assessment with title and metadata.
+- `AssessmentQuestion`: represents a single question. Kinds include MCQ, multi-select, true/false, short answer, long answer, code, file upload, notebook, reading passage, and rubric-only.
+- `AssessmentPublishedSnapshot`: immutable published copy of a version, intended for learner-facing attempt runtime later.
+- `QuestionKind` enum: MCQ, MULTI_SELECT, TRUE_FALSE, SHORT_ANSWER, LONG_ANSWER, CODE, NOTEBOOK, FILE_UPLOAD, READING_PASSAGE, RUBRIC_ONLY.
+- `GradingRubric` and `GradingRule`: define grading behavior for manual/hybrid/auto-graded questions.
+- `AttemptPolicy`: controls retry, shuffle behavior.
+- `TimeLimit`: specifies duration in minutes.
+- `ResultReleasePolicy`: controls when learners see results (immediate, manual, after deadline, etc.).
+- `QuestionAnswerKey`: defines correct answers for auto-graded questions or accepted answers for short answer.
 
 - **010D state**: Cross-stack Assessment Builder E2E is implemented and proves create/edit/save/publish, archive/restore, missing-context failure, and cross-workspace protection through the real portal UI, real backend API, and real test Postgres.
 
 ** Assessment Builder does NOT yet have:**
-  - Production execution provider or sandbox
-  - Proctoring integration
-  - AI generation
-  - Drag-and-drop question ordering
-  - Slash-command authoring
-  - Connection to Learning Delivery (learners taking assessments in courses)
-  - Content Studio integration (yet)
+
+- Production execution provider or sandbox
+- Proctoring integration
+- AI generation
+- Drag-and-drop question ordering
+- Slash-command authoring
+- Connection to Learning Delivery (learners taking assessments in courses)
+- Content Studio integration (yet)
+
 ## Assessment Attempt Runtime (011A foundation)
 
 - **Current 011A scope**: `AssessmentAttempt`, `AssessmentAttemptAnswer`, `AssessmentAttemptSession`, and `AssessmentAttemptResult` now exist as backend runtime models with Prisma persistence, backend APIs, permissions, audit/outbox events, and unit/integration test coverage.
@@ -132,6 +135,7 @@ A person can act as learner and creator at different times. These are product ex
 - This slice is still intentionally foundational only; it does not yet include the advanced content editor, assessments/exams, analytics dashboard, media uploads, certificates, full production auth/session frontend integration, or advanced learner catalog UX.
 
 ## Task 011G Update (2026-05-19)
+
 - Manual grading UI now exists for creator/admin review.
 - Creator/admin can view pending manual-review answers, open grading runs, and submit manual score + feedback.
 - Learner result page and result release workflow now exist.
@@ -144,10 +148,10 @@ A person can act as learner and creator at different times. These are product ex
 - Learners still have no execution endpoint.
 
 ## Task 011F Update (2026-05-19)
+
 - Execution runtime prep added: execution kind/status/language/resource-limit contracts, reserved execution requests/results, and provider ports.
 - CODE/NOTEBOOK grading remains pending manual review; no execution provider or sandbox exists yet.
 - Learners still have no execution endpoints.
-
 
 ## Assessment Result Release
 
@@ -172,6 +176,7 @@ Creators and admins can release graded assessment results to learners. Learners 
 - `FILE_UPLOAD` now exists only as a placeholder boundary with metadata and disabled learner UX until Media Library work lands.
 - Real uploads, Media Library, object storage adapters, signed URLs, real code execution, notebook execution, AI grading, proctoring, and Learning Delivery/Content Studio linkage still do not exist.
 - Next planned task is Task 012A — Media Library Domain and Storage Adapter.
+
 ## Task 012B Update (2026-05-21)
 
 - Creator/admin workspace users can now open a Media Library route in the portal.
@@ -190,3 +195,9 @@ Creators and admins can release graded assessment results to learners. Learners 
 - Assessment, Learning Delivery, Media Library, and Content Studio events are not connected to Communication Center yet.
 - Communication Center supports queued notification intents and delivery-attempt tracking, but real email/SMS provider activation remains future work.
 - Notification inbox UI, preferences UI, and campaign/broadcast tooling are still not part of the current product slice.
+
+# Notification Inbox and Preferences
+
+- Authenticated workspace users now have an in-app notification inbox foundation in the portal.
+- Users can manage their own workspace-scoped notification preferences for `IN_APP`, `EMAIL`, and `SMS` channels without enabling live provider delivery.
+- Provider configuration remains backend-only and environment-controlled; no real email or SMS sending is enabled by this product surface.

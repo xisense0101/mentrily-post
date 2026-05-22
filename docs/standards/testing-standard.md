@@ -212,3 +212,8 @@ Assessment result release requires backend unit/integration coverage, frontend u
 - 012D additionally requires duplicate outbox coverage, real-Postgres concurrency coverage, scheduler policy tests, scheduler use-case tests, and delivery-attempt persistence/integration tests.
 - Communication provider adapter tests must use noop, fixture, or injected mock transports only.
 - No test in Task 012E may call a live email or SMS endpoint.
+
+# Notification Inbox/Preferences Coverage
+
+- Communication Center frontend work must cover loading, empty, error, mutation, and preference-save states in portal tests.
+- Backend coverage must confirm own-record scoping, idempotent notification mutations, safe preference upserts, and absence of provider-config leakage.

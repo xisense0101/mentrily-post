@@ -3,6 +3,7 @@
 ## Plans
 
 ### Free
+
 - Personal account only.
 - No automatic workspace creation at signup.
 - Principal-scoped entitlement subject (`{ kind: 'principal', principalId }`).
@@ -15,6 +16,7 @@
   - No team features.
 
 ### Starter
+
 - Workspace-backed.
 - Workspace-scoped entitlement subject (`{ kind: 'workspace', workspaceId }`).
 - **Seats**:
@@ -34,6 +36,7 @@
   - No white-labeling.
 
 ### Pro
+
 - Workspace-backed.
 - Workspace-scoped entitlement subject (`{ kind: 'workspace', workspaceId }`).
 - **Seats**:
@@ -48,6 +51,7 @@
   - No white-labeling.
 
 ### Enterprise
+
 - Workspace-backed.
 - Workspace-scoped entitlement subject (`{ kind: 'workspace', workspaceId }`).
 - **Usage**: Unlimited or contract-governed usage.
@@ -65,6 +69,7 @@ Domain modules must use the `EntitlementEvaluator` port to check for feature acc
 Every entitlement evaluation input must include an explicit `subject`. There is no implicit workspace fallback in the contract.
 
 Current implementation truth:
+
 - Content Studio backend APIs enforce permissions for read/write operations.
 - Assessment Builder authoring domain, persistence/API, and frontend shell now exist.
 - Assessment attempt runtime backend foundation exists and learner attempt frontend now exists.
@@ -87,30 +92,39 @@ Current implementation truth:
 
 ```typescript
 // Course Module
-const result = await entitlementEvaluator.evaluate({
-  entitlementKey: 'courses.limit',
-  subject: { kind: 'workspace', workspaceId: context.workspace!.workspaceId }
-}, context);
+const result = await entitlementEvaluator.evaluate(
+  {
+    entitlementKey: 'courses.limit',
+    subject: { kind: 'workspace', workspaceId: context.workspace!.workspaceId },
+  },
+  context,
+);
 
 if (!result.enabled) {
   throw new EntitlementError('Course limit reached for your plan.');
 }
 
 // Branding Module
-const brandingResult = await entitlementEvaluator.evaluate({
-  entitlementKey: 'white_label.enabled',
-  subject: { kind: 'workspace', workspaceId: context.workspace!.workspaceId }
-}, context);
+const brandingResult = await entitlementEvaluator.evaluate(
+  {
+    entitlementKey: 'white_label.enabled',
+    subject: { kind: 'workspace', workspaceId: context.workspace!.workspaceId },
+  },
+  context,
+);
 
 if (!brandingResult.enabled) {
   // Gracefully degrade: use default branding
 }
 
 // Personal Free creator without workspace
-const personalResult = await entitlementEvaluator.evaluate({
-  entitlementKey: 'courses.limit',
-  subject: { kind: 'principal', principalId: principalId }
-}, context);
+const personalResult = await entitlementEvaluator.evaluate(
+  {
+    entitlementKey: 'courses.limit',
+    subject: { kind: 'principal', principalId: principalId },
+  },
+  context,
+);
 ```
 
 ## Implementation philosophy
@@ -121,6 +135,7 @@ const personalResult = await entitlementEvaluator.evaluate({
 - UI and API must degrade gracefully when entitlements are absent.
 
 ## Task 011D Update (2026-05-18)
+
 - Manual grading UI now exists for creator/admin review.
 - Creator/admin can view pending manual-review answers, open grading runs, and submit manual score + feedback.
 - Learner result page is not implemented yet.
@@ -129,7 +144,6 @@ const personalResult = await entitlementEvaluator.evaluate({
 - Learning Delivery is not connected to Assessment grading.
 - Content Studio is not connected to Assessment grading.
 - Grading E2E uses real frontend + real backend + test Postgres.
-
 
 ## Assessment Results
 
@@ -146,6 +160,7 @@ Assessment result release depends on workspace-scoped assessment permissions. Th
 - Assessment UX hardening and question-type expansion do not add new entitlement dimensions yet.
 - `READING_PASSAGE` and `FILE_UPLOAD` placeholder support are part of the baseline assessment surface.
 - Real Media Library uploads, storage-backed asset limits, and execution-provider capabilities remain future entitlement questions.
+
 ## Task 012B Update (2026-05-21)
 
 - Media Library frontend actions assume backend permission and entitlement checks remain authoritative.
@@ -160,3 +175,8 @@ Assessment result release depends on workspace-scoped assessment permissions. Th
 - 012D does not add inbox, preferences, campaign, or real-provider entitlement surfaces; scheduler processing remains backend-internal only.
 - Task 012E does not introduce plan-based live-provider entitlements.
 - Communication provider activation is configuration-gated, not plan-gated or user-facing.
+
+# Communication Center Entitlements
+
+- Notification Inbox and Notification Preferences are authenticated workspace features, not provider-configuration features.
+- Saved `EMAIL` and `SMS` preferences only store user intent; they do not imply that live delivery providers are enabled for any plan.

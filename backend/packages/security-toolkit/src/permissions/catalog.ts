@@ -65,6 +65,10 @@ export const PermissionCatalog = {
   COMMUNICATION_INTENT_DISPATCH: 'communication.intent.dispatch',
   COMMUNICATION_INTENT_FAIL: 'communication.intent.fail',
   COMMUNICATION_SCHEDULER_PROCESS: 'communication.scheduler.process',
+  COMMUNICATION_NOTIFICATION_READ_OWN: 'communication.notification.read_own',
+  COMMUNICATION_NOTIFICATION_UPDATE_OWN: 'communication.notification.update_own',
+  COMMUNICATION_PREFERENCE_READ_OWN: 'communication.preference.read_own',
+  COMMUNICATION_PREFERENCE_UPDATE_OWN: 'communication.preference.update_own',
   BILLING_READ: 'billing.read',
   BILLING_MANAGE: 'billing.manage',
   ANALYTICS_READ: 'analytics.read',
@@ -74,5 +78,5 @@ export const PermissionCatalog = {
   PLATFORM_SUPPORT_MANAGE: 'platform.support.manage',
 } as const;
 
-export type PermissionString = typeof PermissionCatalog[keyof typeof PermissionCatalog];
+export type PermissionString = (typeof PermissionCatalog)[keyof typeof PermissionCatalog];
 export const AllPermissions = Object.values(PermissionCatalog);

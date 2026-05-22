@@ -73,7 +73,20 @@ describe('Assessment Delivery API (integration)', () => {
       payload: { title: 'Initial Quiz', purpose: 'QUIZ' },
     });
     expectHttpStatus(createRes, 201);
-    return createRes.json<{ id: string }>();
+    const created = createRes.json<{ id: string }>();
+
+    for (let attempt = 0; attempt < 10; attempt += 1) {
+      const persisted = await prisma.assessment.findUnique({
+        where: { id: created.id },
+        select: { id: true },
+      });
+      if (persisted) {
+        return created;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 50 * (attempt + 1)));
+    }
+
+    throw new Error(`Assessment ${created.id} was not visible after create`);
   }
 
   async function truncateWithRetry(): Promise<void> {

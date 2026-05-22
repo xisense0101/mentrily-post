@@ -41,3 +41,8 @@
 - Task 012E keeps provider enablement environment-only; there is no learner, viewer, creator, admin, or owner live-provider override.
 - Reserved email/SMS adapters must fail closed when feature flags or `COMMUNICATION_ALLOW_LIVE_DELIVERY` disable live delivery.
 - Provider secrets must not appear in contracts, events, logs, failure metadata, or env example values.
+
+# Notification Security Posture
+
+- Own-notification and own-preference APIs require authenticated actor context and explicit own-record permissions.
+- Provider configuration is backend-only and must not be surfaced in notification inbox/preferences routes, contracts, logs, or frontend UI.

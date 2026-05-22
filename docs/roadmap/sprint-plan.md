@@ -54,3 +54,8 @@ Each ticket includes:
 - Task 012D establishes outbox `eventId` idempotency and the internal Communication Scheduler foundation after Communication Center backend/domain stabilization.
 - The next planned slice after a clean validation is Task 012E — Communication Provider Adapter Prep Behind Feature Flags.
 - Task 012E adds provider adapter preparation only: safe config, feature flags, registry/factory, and disabled reserved email/SMS stubs.
+
+# Communication Sprint Note
+
+- `012F` now includes the portal Notification Inbox and Notification Preferences foundation on top of the existing Communication Center backend.
+- `012G` should not begin until the full package/backend/portal/integration/root/E2E validation matrix is green for the completed `012F` surface.

@@ -100,6 +100,20 @@ export default function DashboardPage() {
             background: '#fff',
           }}
         >
+          <h3 style={{ marginTop: 0 }}>Notifications</h3>
+          <p style={{ marginTop: 0, color: '#52606d' }}>
+            Review in-app inbox items and keep personal delivery preferences workspace-scoped.
+          </p>
+          <Link href="/notifications">Open Notifications</Link>
+        </div>
+        <div
+          style={{
+            border: '1px solid #d7dfe6',
+            borderRadius: '18px',
+            padding: '1rem',
+            background: '#fff',
+          }}
+        >
           <h3 style={{ marginTop: 0 }}>Media Library</h3>
           <p style={{ marginTop: 0, color: '#52606d' }}>
             Upload and manage private workspace media assets.

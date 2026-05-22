@@ -473,6 +473,7 @@ This document serves as a permanent continuity/backtrace system for the Mentrily
 - **Next Recommended Task**: Task 010D1 — Assessment E2E Docs/Validation Closure
 
 ---
+
 ### Task 010D1 — Assessment E2E Docs/Validation Closure
 
 - **Task ID**: 010D1
@@ -524,18 +525,18 @@ This document serves as a permanent continuity/backtrace system for the Mentrily
   - Added a lightweight Learning Delivery “Attach Content Studio document later” placeholder.
   - Updated architecture, standards, API, product, and dependency docs.
 - **Validation Performed**:
-    - `cp .env.test.example .env.test`: PASS
-    - `pnpm db:test:up`: PASS
-    - `pnpm --filter @mentrily/data-platform prisma:validate`: FAIL (`DATABASE_URL` was not loaded in the shell)
-    - `set -a && source .env.test && set +a && pnpm --filter @mentrily/data-platform prisma:validate`: PASS
-    - `pnpm --filter @mentrily/data-platform prisma:generate`: PASS
-    - `pnpm --filter @mentrily/data-platform prisma:migrate:deploy`: FAIL (`DATABASE_URL` was not loaded in the shell)
-    - `set -a && source .env.test && set +a && pnpm --filter @mentrily/data-platform prisma:migrate:deploy`: PASS
-    - `node --env-file=.env.test automation/run-integration-tests.mjs`: PASS
-    - `pnpm --filter @mentrily/portal test`: PASS
-    - `pnpm --filter @mentrily/portal typecheck`: PASS
-    - `pnpm --filter @mentrily/portal build`: PASS
-    - `node --env-file=.env.test automation/run-content-e2e.mjs`: FAIL (`creator archives and restores a content document` remains non-editable after restore even after reload)
+  - `cp .env.test.example .env.test`: PASS
+  - `pnpm db:test:up`: PASS
+  - `pnpm --filter @mentrily/data-platform prisma:validate`: FAIL (`DATABASE_URL` was not loaded in the shell)
+  - `set -a && source .env.test && set +a && pnpm --filter @mentrily/data-platform prisma:validate`: PASS
+  - `pnpm --filter @mentrily/data-platform prisma:generate`: PASS
+  - `pnpm --filter @mentrily/data-platform prisma:migrate:deploy`: FAIL (`DATABASE_URL` was not loaded in the shell)
+  - `set -a && source .env.test && set +a && pnpm --filter @mentrily/data-platform prisma:migrate:deploy`: PASS
+  - `node --env-file=.env.test automation/run-integration-tests.mjs`: PASS
+  - `pnpm --filter @mentrily/portal test`: PASS
+  - `pnpm --filter @mentrily/portal typecheck`: PASS
+  - `pnpm --filter @mentrily/portal build`: PASS
+  - `node --env-file=.env.test automation/run-content-e2e.mjs`: FAIL (`creator archives and restores a content document` remains non-editable after restore even after reload)
 - **Next Recommended Task**: Task 009D1 — Content Studio Restore/Editability E2E Remediation
 - **Remaining Gaps**:
   - Restore lifecycle does not return document to editable DRAFT state.
@@ -2422,7 +2423,6 @@ This document serves as a permanent continuity/backtrace system for the Mentrily
   - no Content Studio/Assessment link yet
 - **Next Recommended Task**: Task 011D — Manual Grading and Result Review UI
 
-
 ---
 
 ### Task 011C2 — Assessment Grading Migration Drift Cleanup and Validation Closure
@@ -2456,7 +2456,6 @@ This document serves as a permanent continuity/backtrace system for the Mentrily
   - no Learning Delivery/Assessment link yet
   - no Content Studio/Assessment link yet
 - **Next Recommended Task**: Task 011D — Manual Grading and Result Review UI
-
 
 ---
 
@@ -2504,7 +2503,6 @@ This document serves as a permanent continuity/backtrace system for the Mentrily
   - no Learning Delivery/Assessment link yet
   - no Content Studio/Assessment link yet
 - **Next Recommended Task**: Task 011E — Result Release Workflow and Learner Results
-
 
 ---
 
@@ -3166,3 +3164,97 @@ This document serves as a permanent continuity/backtrace system for the Mentrily
   - no campaign/broadcast UI
   - no Assessment/Learning/Media event-to-notification integration
 - **Next Recommended Task**: Task 012F — Notification Inbox Frontend and Preferences
+
+---
+
+### Task 012F — Notification Inbox Frontend and Preferences
+
+- **Task ID**: 012F
+- **Previous Task**: Task 012E1 — Communication Provider Adapter Prep Remediation
+- **Work Completed**:
+  - inspected Communication Center and portal boundaries
+  - selected `NotificationIntent` as the inbox persistence model for in-app notifications and kept inbox state in sanitized notification metadata
+  - selected the existing `NotificationPreference` model as the preferences persistence model
+  - tightened inbox/preference backend contracts to frontend-safe enums and DTO aliases
+  - updated inbox status mapping to `UNREAD | READ | ARCHIVED` instead of exposing transport intent status
+  - enforced idempotent own-notification read/unread/archive behavior and explicit tenant/workspace ownership checks
+  - added frontend Notification Inbox and Notification Preferences routes in the portal
+  - added portal navigation entries and dashboard entry points for notifications
+  - added typed notification API client, inbox/preferences hooks, page components, empty/error/loading states, and unread badge UI
+  - added portal tests for notification inbox rendering/actions and notification preference rendering/save behavior
+  - updated roadmap/product/architecture/security/testing docs for the inbox/preferences foundation
+- **Validation Performed**:
+  - `pnpm lint`: **FAIL (baseline before remediation)** (`@mentrily/platform-api` failed on partial 012F communication DTO/mapper issues)
+  - `pnpm --filter @mentrily/contract-catalog typecheck`: **PASS**
+  - `pnpm --filter @mentrily/domain-contracts typecheck`: **PASS**
+  - `pnpm --filter @mentrily/platform-api lint`: **PASS with existing repo warnings only**
+  - `pnpm --filter @mentrily/portal typecheck`: **PASS**
+  - `pnpm --filter @mentrily/portal test`: **PASS**
+  - full monorepo / DB / E2E validation: **pending final closure in remediation pass**
+- **Remaining Gaps**:
+  - no real email provider enabled
+  - no real SMS provider enabled
+  - no real provider credentials configured
+  - no production delivery worker loop
+  - no campaign/broadcast UI
+  - no Assessment/Learning/Media event-to-notification integration
+  - no push/mobile notification provider
+  - full required package/backend/portal/integration/root/E2E validation still needs to remain green through final closure
+- **Next Recommended Task**: Task 012F1 — Notification Inbox Frontend and Preferences Remediation until the full validation matrix is green; only then advance to Task 012G — Media Integration with Assessment File Uploads
+
+---
+
+### Task 012F1 — Notification Inbox Frontend and Preferences Remediation
+
+- **Task ID**: 012F1
+- **Previous Task**: Task 012F — Notification Inbox Frontend and Preferences
+- **Work Completed**:
+  - fixed the portal notification hook type regression so portal and root typechecks return green
+  - completed the remaining notification inbox/preferences package, portal, integration, root, and E2E validation matrix
+  - confirmed the inbox domain continues to use `NotificationIntent` with frontend-safe inbox status mapping
+  - confirmed the preferences domain uses the new communication-scoped `NotificationPreference` persistence and narrow Prisma migration
+  - verified own-record permissions for notification inbox and preference reads/updates
+  - fixed a Content Studio E2E regression discovered during remediation by making the content document card click target deterministic for Playwright
+  - re-ran the failing Content Studio E2E in isolation after eliminating DB contention from parallel integration runs
+  - updated the build ledger to record the final green closure for notification inbox/preferences remediation
+- **Validation Performed**:
+  - `pnpm --filter @mentrily/platform-api test`: **PASS**
+  - `pnpm --filter @mentrily/platform-api typecheck`: **PASS**
+  - `pnpm --filter @mentrily/platform-api test:integration`: **PASS**
+  - `pnpm --filter @mentrily/platform-worker test`: **PASS**
+  - `pnpm --filter @mentrily/platform-worker typecheck`: **PASS**
+  - `pnpm --filter @mentrily/contract-catalog typecheck`: **PASS**
+  - `pnpm --filter @mentrily/domain-contracts typecheck`: **PASS**
+  - `pnpm --filter @mentrily/security-toolkit test`: **PASS**
+  - `node automation/verify-env-examples.mjs`: **PASS**
+  - `cp .env.test.example .env.test`: **PASS**
+  - `pnpm db:test:up`: **PASS**
+  - `pnpm --filter @mentrily/data-platform prisma:validate`: **PASS**
+  - `pnpm --filter @mentrily/data-platform prisma:generate`: **PASS**
+  - `pnpm --filter @mentrily/data-platform prisma:migrate:deploy`: **PASS**
+  - `node --env-file=.env.test automation/run-integration-tests.mjs`: **PASS**
+  - `pnpm --filter @mentrily/portal test`: **PASS**
+  - `pnpm --filter @mentrily/portal typecheck`: **PASS**
+  - `pnpm --filter @mentrily/portal build`: **PASS**
+  - `pnpm lint`: **PASS** (existing warning-only baseline unchanged)
+  - `pnpm typecheck`: **PASS**
+  - `pnpm test`: **PASS**
+  - `pnpm build`: **PASS**
+  - `pnpm test:integration`: **PASS**
+  - `pnpm test:e2e`: **PASS**
+  - `pnpm e2e:content`: **PASS**
+  - `pnpm e2e:learning`: **PASS**
+  - `pnpm e2e:assessment`: **PASS**
+  - `pnpm e2e:assessment-attempt`: **PASS**
+  - `pnpm e2e:assessment-grading`: **PASS**
+  - `pnpm e2e:assessment-result`: **PASS**
+  - `pnpm e2e:assessment-reliability`: **PASS**
+- **Remaining Gaps**:
+  - no real email provider enabled
+  - no real SMS provider enabled
+  - no real provider credentials configured
+  - no production delivery worker loop
+  - no campaign/broadcast UI
+  - no Assessment/Learning/Media event-to-notification integration
+  - no push/mobile notification provider
+- **Next Recommended Task**: Task 012G — Media Integration with Assessment File Uploads

@@ -3,11 +3,13 @@ import type { ReactNode } from 'react';
 
 const navItems = [
   { href: '/dashboard', label: 'Dashboard' },
+  { href: '/notifications', label: 'Notifications' },
   { href: '/learning', label: 'Learning' },
   { href: '/content', label: 'Content Studio' },
   { href: '/assessments', label: 'Assessments' },
   { href: '/grading/manual-review', label: 'Grading' },
   { href: '/media', label: 'Media' },
+  { href: '/settings/notifications', label: 'Notification Settings' },
 ];
 
 export default function WorkspaceLayout({

@@ -102,3 +102,8 @@ Learner result endpoints must never expose unreleased scores, correct answer key
 - Scheduler processing is reserved/internal in 012D; any future trigger must derive scope from trusted context, not from request body tenant/workspace fields.
 - Communication provider configuration is backend-only and must not be exposed through public configuration or send endpoints.
 - API contracts may expose safe provider mode/status values, but must not expose provider credentials or raw transport payloads.
+
+# Notification API Boundary
+
+- Notification inbox and notification preference request bodies must not accept `tenantId` or `workspaceId`; scope is derived from authenticated context.
+- Frontend-safe Communication Center DTOs must not expose provider configuration, provider mode, provider credentials, or transport payload metadata.

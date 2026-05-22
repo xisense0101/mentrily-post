@@ -1,8 +1,23 @@
 export type NotificationChannelContract = 'EMAIL' | 'SMS' | 'IN_APP';
-export type NotificationIntentStatusContract = 'DRAFT' | 'QUEUED' | 'DISPATCHED' | 'FAILED' | 'CANCELLED';
+export type NotificationIntentStatusContract =
+  | 'DRAFT'
+  | 'QUEUED'
+  | 'DISPATCHED'
+  | 'FAILED'
+  | 'CANCELLED';
 export type NotificationTemplateStatusContract = 'DRAFT' | 'ACTIVE' | 'ARCHIVED';
 export type NotificationPriorityContract = 'LOW' | 'NORMAL' | 'HIGH' | 'URGENT';
 export type NotificationProviderContract = 'NOOP' | 'FIXTURE' | 'RESERVED_EMAIL' | 'RESERVED_SMS';
+export type NotificationInboxStatusContract = 'UNREAD' | 'READ' | 'ARCHIVED';
+export type NotificationPreferenceChannelContract = 'IN_APP' | 'EMAIL' | 'SMS';
+export type NotificationPreferenceCategoryContract =
+  | 'SYSTEM'
+  | 'COURSE'
+  | 'ASSESSMENT'
+  | 'MEDIA'
+  | 'BILLING'
+  | 'SECURITY'
+  | 'ANNOUNCEMENT';
 
 export interface NotificationRecipientContract {
   principalId?: string | undefined;
@@ -130,4 +145,51 @@ export interface ProcessDueNotificationIntentsResponse {
   failed: number;
   skipped: number;
   results: NotificationSchedulerResultContract[];
+}
+
+export interface NotificationInboxItemContract {
+  id: string;
+  channel: NotificationChannelContract;
+  recipient: NotificationRecipientContract;
+  subject?: string | undefined;
+  body: string;
+  priority: NotificationPriorityContract;
+  status: NotificationInboxStatusContract;
+  readAt?: string | undefined;
+  archivedAt?: string | undefined;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface NotificationInboxListQueryContract {
+  status?: 'ALL' | 'UNREAD' | 'READ' | 'ARCHIVED' | undefined;
+  limit?: number | undefined;
+}
+
+export interface NotificationInboxListResponseContract {
+  items: NotificationInboxItemContract[];
+  unreadCount: number;
+}
+
+export interface NotificationUnreadCountResponseContract {
+  unreadCount: number;
+}
+
+export interface NotificationPreferenceContract {
+  id: string;
+  channel: NotificationPreferenceChannelContract;
+  category: NotificationPreferenceCategoryContract;
+  enabled: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface NotificationPreferencesResponseContract {
+  preferences: NotificationPreferenceContract[];
+}
+
+export interface UpdateNotificationPreferencesRequestContract {
+  channel: NotificationPreferenceChannelContract;
+  category: NotificationPreferenceCategoryContract;
+  enabled: boolean;
 }

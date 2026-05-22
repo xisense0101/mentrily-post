@@ -127,7 +127,7 @@ Models:
 - **Full-Replacement Drafts**: Saving a draft assessment replaces all draft sections and questions to simplify complex tree-reordering and diffing.
 - **Flattened Snapshots**: Published snapshots store the entire assessment structure in a single row to minimize joins during high-concurrency learner delivery.
 - **Ordered Result Sets**: Sections and questions are always queried with deterministic `orderBy: { position: 'asc' }`.
-125: ## ORM and Migrations
+  125: ## ORM and Migrations
 
 - **Prisma**: The TypeScript ORM boundary.
 - **Migration Style**: Explicit expand/contract rollout plans. Avoid destructive migrations without backward-compatible staging.
@@ -241,6 +241,7 @@ All repositories, the `AuditRecorder`, and the `OutboxPublisher` accept an optio
 - 2026-05-18: Task 011C1 validation confirmed grading runtime and outbox/inbox/audit Prisma enum/status alignment remains stable; root lint/typecheck/test/build passed.
 
 ## Task 011D Update (2026-05-18)
+
 - Manual grading UI now exists for creator/admin review.
 - Creator/admin can view pending manual-review answers, open grading runs, and submit manual score + feedback.
 - Learner result page is not implemented yet.
@@ -249,7 +250,6 @@ All repositories, the `AuditRecorder`, and the `OutboxPublisher` accept an optio
 - Learning Delivery is not connected to Assessment grading.
 - Content Studio is not connected to Assessment grading.
 - Grading E2E uses real frontend + real backend + test Postgres.
-
 
 ## Assessment Result Release Data
 
@@ -271,6 +271,7 @@ Result release reuses the existing `AssessmentAttemptResult` record with `gradin
 - Existing assessment question JSON continues to carry reading-passage content and file-upload placeholder metadata.
 - Existing attempt-answer JSON remains sufficient for placeholder file-upload answers shaped as `fileIds: string[]`.
 - Media Library schema, asset persistence, object storage adapters, and signed URL models are still future work.
+
 ## Task 012B Update (2026-05-21)
 
 - Media asset metadata continues to live in Postgres while file bytes remain outside Postgres in object storage.
@@ -285,3 +286,9 @@ Result release reuses the existing `AssessmentAttemptResult` record with `gradin
 - `NotificationDeliveryAttempt` uniqueness on `(intentId, attemptNumber)` is used by the internal scheduler as a race-safe claim boundary.
 - Task 012E keeps Communication provider configuration out of persisted public contracts.
 - Notification intents and delivery attempts may record provider-disabled failures, but no provider secrets, API keys, or raw transport credentials are stored.
+
+# Communication Inbox Data Model
+
+- `NotificationIntent` remains the source of truth for in-app inbox records; no separate inbox table is required for `012F`.
+- `NotificationPreference` remains the source of truth for workspace-scoped user notification preferences.
+- Inbox read/archive state is stored in sanitized metadata and returned through frontend-safe DTO mapping only.

@@ -8,6 +8,7 @@ import {
   NotificationDeliveryAttempt as NotificationDeliveryAttemptEntity,
   NotificationIntent as NotificationIntentEntity,
   NotificationTemplate as NotificationTemplateEntity,
+  NotificationPreference as NotificationPreferenceEntity,
 } from '../../../domain/entities/index.js';
 
 type PersistenceNotificationTemplate = {
@@ -67,6 +68,18 @@ type PersistenceNotificationDeliveryAttempt = {
   metadata: unknown;
 };
 
+type PersistenceNotificationPreference = {
+  id: string;
+  tenantId: string;
+  workspaceId: string;
+  userId: string;
+  channel: string;
+  category: string;
+  enabled: boolean;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
 function asRecord(value: unknown): Record<string, unknown> {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) {
     return {};
@@ -78,7 +91,9 @@ function toInputJsonValue(value: Record<string, unknown>): Prisma.InputJsonValue
   return value as Prisma.InputJsonValue;
 }
 
-export function toDomainNotificationTemplate(record: PersistenceNotificationTemplate): NotificationTemplate {
+export function toDomainNotificationTemplate(
+  record: PersistenceNotificationTemplate,
+): NotificationTemplate {
   return new NotificationTemplateEntity({
     id: record.id,
     tenantId: record.tenantId,
@@ -99,7 +114,9 @@ export function toDomainNotificationTemplate(record: PersistenceNotificationTemp
   });
 }
 
-export function toDomainNotificationIntent(record: PersistenceNotificationIntent): NotificationIntent {
+export function toDomainNotificationIntent(
+  record: PersistenceNotificationIntent,
+): NotificationIntent {
   return new NotificationIntentEntity({
     id: record.id,
     tenantId: record.tenantId,
@@ -233,7 +250,9 @@ export function toDomainNotificationDeliveryAttempt(
   });
 }
 
-export function toPersistenceNotificationDeliveryAttemptCreate(attempt: NotificationDeliveryAttempt) {
+export function toPersistenceNotificationDeliveryAttemptCreate(
+  attempt: NotificationDeliveryAttempt,
+) {
   return {
     id: attempt.id,
     intentId: attempt.intentId,
@@ -249,7 +268,9 @@ export function toPersistenceNotificationDeliveryAttemptCreate(attempt: Notifica
   };
 }
 
-export function toPersistenceNotificationDeliveryAttemptUpdate(attempt: NotificationDeliveryAttempt) {
+export function toPersistenceNotificationDeliveryAttemptUpdate(
+  attempt: NotificationDeliveryAttempt,
+) {
   return {
     intentId: attempt.intentId,
     provider: attempt.provider,
@@ -261,5 +282,49 @@ export function toPersistenceNotificationDeliveryAttemptUpdate(attempt: Notifica
     createdAt: attempt.createdAt,
     completedAt: attempt.completedAt ?? null,
     metadata: toInputJsonValue(attempt.metadata),
+  };
+}
+
+export function toDomainNotificationPreference(record: PersistenceNotificationPreference) {
+  return new NotificationPreferenceEntity({
+    id: record.id,
+    tenantId: record.tenantId,
+    workspaceId: record.workspaceId,
+    userId: record.userId,
+    channel: record.channel as NotificationPreferenceEntity['channel'],
+    category: record.category as NotificationPreferenceEntity['category'],
+    enabled: record.enabled,
+    createdAt: record.createdAt,
+    updatedAt: record.updatedAt,
+  });
+}
+
+export function toPersistenceNotificationPreferenceCreate(
+  preference: NotificationPreferenceEntity,
+) {
+  return {
+    id: preference.id,
+    tenantId: preference.tenantId,
+    workspaceId: preference.workspaceId,
+    userId: preference.userId,
+    channel: preference.channel,
+    category: preference.category,
+    enabled: preference.enabled,
+    createdAt: preference.createdAt,
+    updatedAt: preference.updatedAt,
+  };
+}
+
+export function toPersistenceNotificationPreferenceUpdate(
+  preference: NotificationPreferenceEntity,
+) {
+  return {
+    tenantId: preference.tenantId,
+    workspaceId: preference.workspaceId,
+    userId: preference.userId,
+    channel: preference.channel,
+    category: preference.category,
+    enabled: preference.enabled,
+    updatedAt: preference.updatedAt,
   };
 }
