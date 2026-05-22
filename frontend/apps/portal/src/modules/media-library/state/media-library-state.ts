@@ -85,7 +85,7 @@ export function isPreviewableMediaAsset(asset: MediaAssetContract): boolean {
 }
 
 export function getMediaAssetDisplayName(asset: MediaAssetContract): string {
-  return asset.filename || asset.objectKey.split('/').pop() || asset.id;
+  return asset.filename || asset.id;
 }
 
 export function createUploadQueueItem(file: File): MediaUploadQueueItem {

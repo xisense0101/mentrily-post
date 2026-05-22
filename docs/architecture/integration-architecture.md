@@ -54,3 +54,12 @@ Provider integrations (Clerk, WorkOS, Stripe, email providers, telemetry provide
 - The scheduler foundation is intentionally internal-only and limited to noop/fixture delivery providers until provider adapters are introduced behind feature flags.
 - Task 012E adds reserved Communication adapter boundaries only.
 - No Resend, SendGrid, SMTP, Twilio, WhatsApp, Firebase, Expo, or OneSignal SDK/API integration exists yet, and live delivery remains disabled by default.
+
+## Task 013A Update (2026-05-22)
+
+- The Media Library is fully integrated into the Learning Delivery module:
+  - Implemented strict server-side media reference validation (`validateLearningMediaReference`) enforcing tenant/workspace isolation, asset existence, availability status, and kind-category alignment (e.g., VIDEO kind matches VIDEO category).
+  - Wired `MediaAssetRepository` into `AddLearningLessonUseCase` to validate references during lesson creation.
+  - Refactored `mapCourseToResponse` in the mapping layer to asynchronously resolve media asset details and attach them to `LearningLessonContract` using the `MediaAssetRepository`.
+  - Integrated the frontend lesson create form with the `AssetPickerDialog` to select media assets directly.
+  - Added `EditableMediaBlock` to render `IMAGE`, `VIDEO`, and `FILE` kind blocks dynamically in both editable and read-only preview modes using the signed URL resolver hook `useMediaReadUrl`.

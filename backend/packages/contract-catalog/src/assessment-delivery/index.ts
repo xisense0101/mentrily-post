@@ -39,6 +39,35 @@ export type AssessmentResultReleasePolicyContract =
   | 'AFTER_MANUAL_REVIEW'
   | 'MANUAL_RELEASE';
 
+export interface AssessmentMediaReferenceContract {
+  mediaAssetId: string;
+}
+
+export interface AssessmentMediaAttachmentContract {
+  mediaAssetId: string;
+  filename: string;
+  contentType: string;
+  fileCategory: 'DOCUMENT' | 'IMAGE' | 'VIDEO' | 'AUDIO' | 'ARCHIVE' | 'OTHER';
+  sizeBytes?: number | undefined;
+  status: 'PENDING_UPLOAD' | 'AVAILABLE' | 'ARCHIVED' | 'FAILED';
+  unavailable?: boolean | undefined;
+}
+
+export interface AssessmentFileUploadQuestionConfigContract {
+  allowedFileCategories?:
+    | Array<'DOCUMENT' | 'IMAGE' | 'VIDEO' | 'AUDIO' | 'ARCHIVE' | 'OTHER'>
+    | undefined;
+  allowedContentTypes?: string[] | undefined;
+  maxFiles?: number | undefined;
+  maxFileSizeBytes?: number | undefined;
+}
+
+export interface AssessmentFileUploadAnswerInputContract {
+  mediaAssetIds: string[];
+}
+
+export type AssessmentSubmittedFileContract = AssessmentMediaAttachmentContract;
+
 export interface QuestionAnswerKeyContract {
   correctOptionIds?: string[] | undefined;
   acceptedTextAnswers?: string[] | undefined;
@@ -59,6 +88,8 @@ export interface AssessmentQuestionContract {
   gradingMode: AssessmentGradingModeContract;
   position: number;
   metadata?: Record<string, unknown> | undefined;
+  attachments?: AssessmentMediaAttachmentContract[] | undefined;
+  fileUploadConfig?: AssessmentFileUploadQuestionConfigContract | undefined;
 }
 
 export interface AssessmentSectionContract {
@@ -321,6 +352,7 @@ export interface AssessmentAttemptAnswerContract {
   savedAt: string;
   submittedAt?: string | undefined;
   metadata: Record<string, unknown>;
+  submittedFiles?: AssessmentSubmittedFileContract[] | undefined;
 }
 
 export interface AssessmentAttemptResultContract {
@@ -407,6 +439,7 @@ export interface AssessmentManualReviewItemContract {
   currentScore?: number | undefined;
   currentFeedback?: Record<string, unknown> | undefined;
   learnerAnswer: Record<string, unknown>;
+  submittedFiles?: AssessmentSubmittedFileContract[] | undefined;
   learnerPrincipalId: string;
   assessmentTitle?: string | undefined;
   submittedAt?: string | undefined;

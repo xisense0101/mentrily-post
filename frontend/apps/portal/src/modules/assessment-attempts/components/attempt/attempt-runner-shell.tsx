@@ -101,7 +101,9 @@ export function AttemptRunnerShell({
         <div className="space-y-5">
           {questions.map((question) => (
             <AttemptQuestionCard
+              assessmentId={attempt.assessmentId}
               answer={findAnswerForQuestion({ attempt, questionId: question.id })}
+              attemptId={attempt.id}
               isSaving={savingQuestionId === question.id}
               saveError={
                 saveErrorQuestionId === question.id ? (saveErrorMessage ?? undefined) : undefined

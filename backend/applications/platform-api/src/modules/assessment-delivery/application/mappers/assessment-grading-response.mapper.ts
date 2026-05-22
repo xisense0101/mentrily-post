@@ -61,5 +61,6 @@ export function mapAssessmentManualReviewItemToResponse(
     learnerAnswer: { ...item.learnerAnswer },
     ...(item.questionPrompt ? { questionPrompt: { ...item.questionPrompt } } : {}),
     ...(item.currentFeedback ? { currentFeedback: { ...item.currentFeedback } } : {}),
+    ...(item.submittedFiles ? { submittedFiles: item.submittedFiles.map((file) => ({ ...file })) } : {}),
   };
 }

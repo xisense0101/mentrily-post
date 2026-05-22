@@ -5,6 +5,7 @@ export type {
   AssessmentAttemptGradingStatusContract,
   AssessmentAttemptResultContract,
   AssessmentAttemptSessionContract,
+  AssessmentSubmittedFileContract,
   AssessmentAttemptStatusContract,
   AssessmentPublishedSnapshotContract,
   AssessmentQuestionContract,

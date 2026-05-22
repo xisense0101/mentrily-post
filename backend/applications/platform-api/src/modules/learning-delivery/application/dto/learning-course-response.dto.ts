@@ -1,3 +1,5 @@
+import type { MediaAssetContract } from '@mentrily/contract-catalog';
+
 export interface LearningLessonResponse {
   id: string;
   title: string;
@@ -6,6 +8,7 @@ export interface LearningLessonResponse {
   estimatedMinutes?: number | undefined;
   contentRef?: string | undefined;
   isRequired: boolean;
+  mediaAsset?: MediaAssetContract | undefined;
 }
 
 export interface LearningSectionResponse {

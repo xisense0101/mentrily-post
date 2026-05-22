@@ -15,6 +15,7 @@ import {
   AssessmentAttemptSessionResponse,
   AssessmentAttemptResultResponse,
 } from '../dto/index.js';
+import { readFileUploadAnswerMediaAssetIds, readSubmittedFiles } from '../support/index.js';
 
 export function mapAttemptSessionToResponse(
   session: AssessmentAttemptSession,
@@ -33,15 +34,20 @@ export function mapAttemptSessionToResponse(
 export function mapAttemptAnswerToResponse(
   answer: AssessmentAttemptAnswer,
 ): AssessmentAttemptAnswerResponse {
+  const submittedFiles = readSubmittedFiles(answer.answer);
   return {
     id: answer.id,
     questionId: answer.questionId,
     questionKind: answer.questionKind,
-    answer: { ...answer.answer },
+    answer:
+      answer.questionKind === 'FILE_UPLOAD'
+        ? { mediaAssetIds: readFileUploadAnswerMediaAssetIds(answer.answer) }
+        : { ...answer.answer },
     status: answer.status,
     savedAt: answer.savedAt.toISOString(),
     ...(answer.submittedAt !== undefined ? { submittedAt: answer.submittedAt.toISOString() } : {}),
     metadata: { ...answer.metadata },
+    ...(submittedFiles.length > 0 ? { submittedFiles } : {}),
   };
 }
 

@@ -7,6 +7,7 @@ import {
   TransactionRunner,
 } from '@mentrily/service-core';
 import { AssessmentRepository } from '../domain/repositories/index.js';
+import { MediaAssetRepository } from '../../media-library/domain/repositories/index.js';
 import { AssessmentEventPublisherService } from '../application/services/index.js';
 import { CreateAssessmentUseCase } from '../application/use-cases/index.js';
 import { Assessment } from '../domain/index.js';
@@ -46,6 +47,14 @@ function createEventPublisher(outbox: OutboxPublisher = { publish: vi.fn(async (
   };
 }
 
+function createMediaAssetRepository(): MediaAssetRepository {
+  return {
+    findById: vi.fn(async () => null),
+    list: vi.fn(async () => []),
+    save: vi.fn(async (asset) => asset),
+  } as unknown as MediaAssetRepository;
+}
+
 describe('CreateAssessmentUseCase', () => {
   it('fails without workspace context', async () => {
     const repo = createRepo();
@@ -53,7 +62,14 @@ describe('CreateAssessmentUseCase', () => {
     const transactions = createTransactionRunner({ transactionId: 'tx-1', client: {} });
     const audit = createAuditRecorder();
     const { service } = createEventPublisher();
-    const useCase = new CreateAssessmentUseCase(repo, permissions, transactions, audit, service);
+    const useCase = new CreateAssessmentUseCase(
+      repo,
+      createMediaAssetRepository(),
+      permissions,
+      transactions,
+      audit,
+      service,
+    );
 
     await expect(
       useCase.execute(
@@ -69,7 +85,14 @@ describe('CreateAssessmentUseCase', () => {
     const transactions = createTransactionRunner({ transactionId: 'tx-1', client: {} });
     const audit = createAuditRecorder();
     const { service } = createEventPublisher();
-    const useCase = new CreateAssessmentUseCase(repo, permissions, transactions, audit, service);
+    const useCase = new CreateAssessmentUseCase(
+      repo,
+      createMediaAssetRepository(),
+      permissions,
+      transactions,
+      audit,
+      service,
+    );
 
     await expect(
       useCase.execute(createAssessmentRequestContext(), { title: 'Quiz', purpose: 'QUIZ' }),
@@ -85,7 +108,14 @@ describe('CreateAssessmentUseCase', () => {
     const audit = createAuditRecorder();
     const outbox: OutboxPublisher = { publish: vi.fn(async () => undefined) };
     const { service } = createEventPublisher(outbox);
-    const useCase = new CreateAssessmentUseCase(repo, permissions, transactions, audit, service);
+    const useCase = new CreateAssessmentUseCase(
+      repo,
+      createMediaAssetRepository(),
+      permissions,
+      transactions,
+      audit,
+      service,
+    );
 
     const response = await useCase.execute(createAssessmentRequestContext(), {
       title: 'Quiz',

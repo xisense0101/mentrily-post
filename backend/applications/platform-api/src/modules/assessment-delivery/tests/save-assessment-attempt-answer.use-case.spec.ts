@@ -6,8 +6,23 @@ import {
   TransactionContext,
   TransactionRunner,
 } from '@mentrily/service-core';
-import { AssessmentAttemptRepository } from '../domain/repositories/index.js';
-import { AssessmentAttemptSubmissionPolicyService, AssessmentAttempt } from '../domain/index.js';
+import {
+  AssessmentAttemptRepository,
+  AssessmentSnapshotRepository,
+} from '../domain/repositories/index.js';
+import {
+  AssessmentAttemptSubmissionPolicyService,
+  AssessmentAttempt,
+  AssessmentPublishedSnapshot,
+  AssessmentQuestion,
+  AssessmentSection,
+  QuestionOption,
+  QuestionAnswerKey,
+  GradingModeEnum,
+  QuestionKindEnum,
+  QuestionPoints,
+} from '../domain/index.js';
+import { MediaAssetRepository } from '../../media-library/domain/repositories/index.js';
 import { AssessmentEventPublisherService } from '../application/services/index.js';
 import { SaveAssessmentAttemptAnswerUseCase } from '../application/use-cases/index.js';
 import {
@@ -28,6 +43,62 @@ function createAttempt(ownerId = TEST_ACTOR_ID) {
     snapshotVersionNumber: 1,
     learnerPrincipalId: ownerId,
     sessionId: '50000000-0000-4000-8000-000000000005',
+  });
+}
+
+function createSnapshot(questionId: string) {
+  const isQ106 = questionId === '50000000-0000-4000-8000-000000000106';
+  const optionId = isQ106
+    ? '50000000-0000-4000-8000-000000000107'
+    : '50000000-0000-4000-8000-000000000007';
+
+  const opt1 = QuestionOption.create({
+    id: optionId,
+    label: 'Option A',
+    value: 'A',
+    isCorrect: true,
+  });
+  const opt2 = QuestionOption.create({
+    id: isQ106
+      ? '50000000-0000-4000-8000-000000000108'
+      : '50000000-0000-4000-8000-000000000008',
+    label: 'Option B',
+    value: 'B',
+    isCorrect: false,
+  });
+
+  const question = AssessmentQuestion.create({
+    id: questionId,
+    assessmentId: '50000000-0000-4000-8000-000000000002',
+    sectionId: '50000000-0000-4000-8000-000000000010',
+    kind: QuestionKindEnum.MCQ,
+    title: 'Test MCQ',
+    prompt: { text: 'Choose one.' },
+    options: [opt1, opt2],
+    answerKey: QuestionAnswerKey.create({ correctOptionIds: [optionId] }),
+    points: QuestionPoints.create(1),
+    gradingMode: GradingModeEnum.AUTO,
+    position: 0,
+    metadata: {},
+  });
+  const section = AssessmentSection.create({
+    id: '50000000-0000-4000-8000-000000000010',
+    assessmentId: '50000000-0000-4000-8000-000000000002',
+    title: 'Section 1',
+    position: 0,
+    questions: [question],
+    metadata: {},
+  });
+  return AssessmentPublishedSnapshot.restore({
+    id: '50000000-0000-4000-8000-000000000003',
+    assessmentId: '50000000-0000-4000-8000-000000000002',
+    versionId: '50000000-0000-4000-8000-000000000004',
+    versionNumber: 1,
+    sections: [section],
+    looseQuestions: [],
+    publishedByPrincipalId: TEST_ACTOR_ID,
+    publishedAt: new Date('2026-05-17T12:00:00.000Z'),
+    createdAt: new Date('2026-05-17T12:00:00.000Z'),
   });
 }
 
@@ -53,8 +124,14 @@ describe('SaveAssessmentAttemptAnswerUseCase', () => {
       listByAssessmentAndLearner: vi.fn(async () => []),
       findInProgressByAssessmentAndLearner: vi.fn(async () => attempt),
     } as unknown as AssessmentAttemptRepository;
+    const snapshotRepo = {
+      findById: vi.fn(async () => null),
+    } as unknown as AssessmentSnapshotRepository;
+    const mediaAssetRepo = {} as unknown as MediaAssetRepository;
     const useCase = new SaveAssessmentAttemptAnswerUseCase(
       repo,
+      snapshotRepo,
+      mediaAssetRepo,
       new AssessmentAttemptSubmissionPolicyService(),
       createPermissionEvaluator(true),
       createTransactionRunner({ transactionId: 'tx-1', client: {} }),
@@ -81,10 +158,16 @@ describe('SaveAssessmentAttemptAnswerUseCase', () => {
       listByAssessmentAndLearner: vi.fn(async () => []),
       findInProgressByAssessmentAndLearner: vi.fn(async () => attempt),
     } as unknown as AssessmentAttemptRepository;
+    const snapshotRepo = {
+      findById: vi.fn(async () => createSnapshot('50000000-0000-4000-8000-000000000006')),
+    } as unknown as AssessmentSnapshotRepository;
+    const mediaAssetRepo = {} as unknown as MediaAssetRepository;
     const audit = createAuditRecorder();
     const outbox: OutboxPublisher = { publish: vi.fn(async () => undefined) };
     const useCase = new SaveAssessmentAttemptAnswerUseCase(
       repo,
+      snapshotRepo,
+      mediaAssetRepo,
       new AssessmentAttemptSubmissionPolicyService(),
       createPermissionEvaluator(true),
       createTransactionRunner(tx),
@@ -138,8 +221,14 @@ describe('SaveAssessmentAttemptAnswerUseCase', () => {
         listByAssessmentAndLearner: vi.fn(async () => []),
         findInProgressByAssessmentAndLearner: vi.fn(async () => attempt),
       } as unknown as AssessmentAttemptRepository;
+      const snapshotRepo = {
+        findById: vi.fn(async () => createSnapshot('50000000-0000-4000-8000-000000000106')),
+      } as unknown as AssessmentSnapshotRepository;
+      const mediaAssetRepo = {} as unknown as MediaAssetRepository;
       const useCase = new SaveAssessmentAttemptAnswerUseCase(
         repo,
+        snapshotRepo,
+        mediaAssetRepo,
         new AssessmentAttemptSubmissionPolicyService(),
         createPermissionEvaluator(true),
         createTransactionRunner({ transactionId: 'tx-1', client: {} }),

@@ -175,6 +175,73 @@ describe('Content Studio API (integration)', () => {
     });
   });
 
+  it('creator fails to replace blocks if referenced media asset does not exist', async () => {
+    const created = await createDraftDocument();
+    const replaceRes = await app.inject({
+      method: 'PUT',
+      url: `/workspace/content/documents/${created.id}/blocks`,
+      headers,
+      payload: {
+        blocks: [
+          {
+            id: '66666666-6666-4666-8666-666666666666',
+            kind: 'IMAGE',
+            position: 0,
+            path: '0',
+            content: { mediaAssetId: 'dcd480b0-bd48-6052-8444-111111111111' },
+          },
+        ],
+      },
+    });
+    expectHttpStatus(replaceRes, 400);
+    expect(replaceRes.json().message).toContain('referenced media asset not found');
+  });
+
+  it('creator succeeds to replace blocks if referenced media asset exists and is AVAILABLE', async () => {
+    const assetId = '88888888-8888-4888-8888-888888888888';
+    await prisma.mediaAsset.create({
+      data: {
+        id: assetId,
+        tenantId: headers['x-tenant-id'],
+        workspaceId: headers['x-workspace-id'],
+        ownerPrincipalId: headers['x-actor-id'],
+        filename: 'test.png',
+        contentType: 'image/png',
+        fileCategory: 'IMAGE',
+        storageProvider: 'FIXTURE',
+        objectKey: `tenants/${headers['x-tenant-id']}/workspaces/${headers['x-workspace-id']}/media/test-key-image`,
+        visibility: 'PRIVATE',
+        status: 'AVAILABLE',
+        metadata: {},
+      },
+    });
+
+    const created = await createDraftDocument();
+    const replaceRes = await app.inject({
+      method: 'PUT',
+      url: `/workspace/content/documents/${created.id}/blocks`,
+      headers,
+      payload: {
+        blocks: [
+          {
+            id: '66666666-6666-4666-8666-666666666666',
+            kind: 'IMAGE',
+            position: 0,
+            path: '0',
+            content: { mediaAssetId: assetId },
+          },
+        ],
+      },
+    });
+    expectHttpStatus(replaceRes, 200);
+    expect(replaceRes.json()).toMatchObject({
+      id: created.id,
+      currentDraftVersion: {
+        blocks: [{ kind: 'IMAGE', path: '0', content: { mediaAssetId: assetId } }],
+      },
+    });
+  });
+
   it('creator can publish document', async () => {
     const created = await createDraftDocument();
     await app.inject({

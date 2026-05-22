@@ -11,6 +11,7 @@ import {
   TransactionRunner,
 } from '@mentrily/service-core';
 import { PermissionCatalog } from '@mentrily/security-toolkit';
+import { MediaAssetRepository } from '../../../media-library/domain/repositories/index.js';
 import {
   ContentBlock,
   ContentDocument,
@@ -24,7 +25,7 @@ import { contentDocumentCreated } from '../../domain/events/index.js';
 import { ContentEventPublisherService } from '../services/index.js';
 import { mapContentDocumentToResponse } from '../mappers/index.js';
 import { CreateContentDocumentInput, ContentDocumentResponse } from '../dto/index.js';
-import { requireContentActor } from '../support/index.js';
+import { requireContentActor, validateContentMediaReferences } from '../support/index.js';
 
 function mapBlocks(documentId: string, blocks: CreateContentDocumentInput['blocks']): ContentBlock[] {
   return (blocks ?? []).map((block) =>
@@ -50,6 +51,8 @@ export class CreateContentDocumentUseCase {
     @Inject(AUDIT_RECORDER) private readonly auditRecorder: AuditRecorder,
     @Inject(ContentEventPublisherService)
     private readonly eventPublisher: ContentEventPublisherService,
+    @Inject(MediaAssetRepository)
+    private readonly mediaAssetRepo: MediaAssetRepository,
   ) {}
 
   async execute(context: RequestContext, input: CreateContentDocumentInput): Promise<ContentDocumentResponse> {
@@ -60,6 +63,10 @@ export class CreateContentDocumentUseCase {
     );
     if (!perm.allowed) {
       throw new AppError('FORBIDDEN', 'permission denied', 403);
+    }
+
+    if (input.blocks && input.blocks.length > 0) {
+      await validateContentMediaReferences(this.mediaAssetRepo, context, input.blocks);
     }
 
     return this.transactionRunner.run(async (tx) => {

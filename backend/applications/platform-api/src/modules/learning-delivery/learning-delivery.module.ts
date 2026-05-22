@@ -38,8 +38,10 @@ import { CompleteEnrollmentUseCase } from './application/use-cases/complete-enro
 import { CreatorLearningController } from './presentation/http/creator-learning.controller.js';
 import { LearnerLearningController } from './presentation/http/learner-learning.controller.js';
 
+import { MediaLibraryModule } from '../media-library/media-library.module.js';
+
 @Module({
-  imports: [DataPlatformModule, FoundationModule],
+  imports: [DataPlatformModule, FoundationModule, MediaLibraryModule],
   providers: [
     { provide: LearningCourseRepository, useClass: PrismaLearningCourseRepository },
     { provide: EnrollmentRepository, useClass: PrismaEnrollmentRepository },

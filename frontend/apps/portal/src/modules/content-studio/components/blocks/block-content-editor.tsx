@@ -4,6 +4,8 @@ import { EditableCodeBlock } from './editable-code-block';
 import { EditableHeadingBlock } from './editable-heading-block';
 import { EditableParagraphBlock } from './editable-paragraph-block';
 
+import { EditableMediaBlock } from './editable-media-block';
+
 interface BlockContentEditorProps {
   block: ContentBlockContract;
   editable: boolean;
@@ -52,6 +54,10 @@ export function BlockContentEditor({
 
   if (block.kind === 'CODE') {
     return <EditableCodeBlock block={block} editable={editable} onChange={onChange} />;
+  }
+
+  if (block.kind === 'IMAGE' || block.kind === 'VIDEO' || block.kind === 'FILE') {
+    return <EditableMediaBlock block={block} editable={editable} onChange={onChange} />;
   }
 
   if (block.kind === 'DIVIDER') {

@@ -24,6 +24,7 @@ import {
   RestoreAssessmentUseCase,
   SaveAssessmentAttemptAnswerInput,
   SaveAssessmentAttemptAnswerUseCase,
+  CreateAssessmentAttemptAnswerReadUrlUseCase,
   StartAssessmentAttemptInput,
   StartAssessmentAttemptUseCase,
   SubmitAssessmentAttemptUseCase,
@@ -67,6 +68,8 @@ export class AssessmentDeliveryController {
     private readonly listAttempts: ListLearnerAssessmentAttemptsUseCase,
     @Inject(SaveAssessmentAttemptAnswerUseCase)
     private readonly saveAnswer: SaveAssessmentAttemptAnswerUseCase,
+    @Inject(CreateAssessmentAttemptAnswerReadUrlUseCase)
+    private readonly createAnswerReadUrl: CreateAssessmentAttemptAnswerReadUrlUseCase,
     @Inject(SubmitAssessmentAttemptUseCase)
     private readonly submitAttempt: SubmitAssessmentAttemptUseCase,
     @Inject(CancelAssessmentAttemptUseCase)
@@ -160,6 +163,8 @@ export class AssessmentAttemptController {
     private readonly listAttempts: ListLearnerAssessmentAttemptsUseCase,
     @Inject(SaveAssessmentAttemptAnswerUseCase)
     private readonly saveAnswer: SaveAssessmentAttemptAnswerUseCase,
+    @Inject(CreateAssessmentAttemptAnswerReadUrlUseCase)
+    private readonly createAnswerReadUrl: CreateAssessmentAttemptAnswerReadUrlUseCase,
     @Inject(SubmitAssessmentAttemptUseCase)
     private readonly submitAttempt: SubmitAssessmentAttemptUseCase,
     @Inject(CancelAssessmentAttemptUseCase)
@@ -207,6 +212,21 @@ export class AssessmentAttemptController {
       ...body,
       questionId,
     });
+  }
+
+  @Post('/:attemptId/answers/:answerId/files/:assetId/read-url')
+  async createAnswerFileReadUrl(
+    @Req() request: FastifyRequest,
+    @Param('attemptId') attemptId: string,
+    @Param('answerId') answerId: string,
+    @Param('assetId') assetId: string,
+  ) {
+    return this.createAnswerReadUrl.execute(
+      this.requestContext(request),
+      attemptId,
+      answerId,
+      assetId,
+    );
   }
 
   @Post('/:attemptId/submit')

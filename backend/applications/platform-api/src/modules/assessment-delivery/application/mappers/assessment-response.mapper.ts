@@ -14,8 +14,10 @@ import {
   GradingRubricResponse,
   GradingRuleResponse,
 } from '../dto/index.js';
+import { readQuestionMediaState, sanitizeQuestionMetadata } from '../support/index.js';
 
 function mapQuestion(q: AssessmentQuestion): AssessmentQuestionResponse {
+  const mediaState = readQuestionMediaState(q.metadata);
   return {
     id: q.id,
     sectionId: q.sectionId,
@@ -27,7 +29,9 @@ function mapQuestion(q: AssessmentQuestion): AssessmentQuestionResponse {
     points: q.points.value(),
     gradingMode: q.gradingMode,
     position: q.position,
-    metadata: { ...q.metadata },
+    metadata: sanitizeQuestionMetadata(q.metadata),
+    ...(mediaState.attachments ? { attachments: mediaState.attachments } : {}),
+    ...(mediaState.fileUploadConfig ? { fileUploadConfig: mediaState.fileUploadConfig } : {}),
   };
 }
 

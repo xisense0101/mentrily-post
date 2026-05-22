@@ -2,7 +2,9 @@
 
 This document serves as a permanent continuity/backtrace system for the Mentrily SaaS codebase. Every task must record its progress here to ensure a reliable audit trail and clear path forward.
 
+
 ### Task 012D1 — Outbox/Scheduler Remediation
+
 
 - **Task ID**: 012D1
 - **Previous Task**: Task 012D — Outbox Event Id Constraint Remediation & Communication Scheduler
@@ -3291,6 +3293,86 @@ This document serves as a permanent continuity/backtrace system for the Mentrily
   - `pnpm test`: **PASS**
   - `pnpm build`: **PASS**
 - **Remaining Gaps**:
-  - Task 012G has not started yet
   - Media Library and Assessment file-upload integration remains pending by design
 - **Next Recommended Task**: Task 012G — Media Integration with Assessment File Uploads
+
+---
+
+### Task 012G — Media Integration with Assessment File Uploads
+
+- **Task ID**: 012G
+- **Previous Task**: Task 012F2 — Baseline E2E Remediation Before Media Assessment Integration
+- **Work Completed**:
+  - Implemented the integration of the Media Library with the Mentrily Assessment delivery module.
+  - Migrated `AssessmentAttempt` answers from legacy `fileIds` to secure, workspace-scoped `mediaAssetIds` (stored as an array).
+  - Implemented `CreateAssessmentAttemptAnswerReadUrlUseCase` to provide ephemeral, secure access to submitted files, enforcing a strict "no `objectKey` in response" security policy.
+  - Updated `SaveAssessmentAttemptAnswerUseCase` to support the new `mediaAssetIds` contract, ensuring file ownership and workspace scoping are strictly validated.
+  - Added unit test coverage for the use case and mock updates in `save-assessment-attempt-answer.use-case.spec.ts`.
+  - Updated frontend `FileUploadAnswer` and `AnswerReviewPanel` components to fetch and resolve ephemeral signed URLs via the updated media endpoints.
+  - Resolved build compiler issues by including the `"use client";` directive at the top of client-side React hooks-based component `answer-review-panel.tsx`.
+- **Validation Performed**:
+  - `pnpm lint`: **PASS**
+  - `pnpm typecheck`: **PASS**
+  - `pnpm test`: **PASS** (all package unit tests pass)
+  - `pnpm build`: **PASS** (13 packages compiled with no errors)
+  - `pnpm test:integration`: **PASS**
+  - `pnpm test:e2e`: **PASS** (all content, learning, assessment, attempt, grading, and result E2E suites pass)
+- **Remaining Gaps**:
+  - no Content Studio integration with Media Library yet
+  - no Learning Delivery integration with Media Library yet
+  - no virus scanning yet
+  - no media processing/transcoding yet
+  - no CDN/edge delivery yet
+  - no production cloud storage adapter is enabled yet beyond reserved/future boundaries
+- **Next Recommended Task**: Task 013A — Content Studio and Learning Delivery Media Integration
+
+---
+
+### Task 013A — Content Studio and Learning Delivery Media Integration
+
+- **Task ID**: 013A
+- **Previous Task**: Task 012G — Media Integration with Assessment File Uploads
+- **Work Completed**:
+  - Implemented strict server-side media reference validation (`validateLearningMediaReference`) enforcing tenant/workspace isolation, asset existence, availability status, and kind-category alignment (e.g., VIDEO kind matches VIDEO category).
+  - Wired `MediaAssetRepository` into `AddLearningLessonUseCase` to validate references during lesson creation.
+  - Refactored `mapCourseToResponse` in the mapping layer to asynchronously resolve media asset details and attach them to `LearningLessonContract` using the `MediaAssetRepository`.
+  - Integrated the frontend lesson create form with the `AssetPickerDialog` to select media assets directly.
+  - Added `EditableMediaBlock` to render `IMAGE`, `VIDEO`, and `FILE` kind blocks dynamically in both editable and read-only preview modes using the signed URL resolver hook `useMediaReadUrl`.
+  - Updated the integration architecture documentation to include Task 013A details.
+- **Validation Performed**:
+  - `pnpm lint`: **PASS**
+  - `pnpm typecheck`: **PASS**
+  - `pnpm test`: **PASS** (all package unit tests pass, including a newly added validator test suite)
+  - `pnpm build`: **PASS** (13 packages compiled with no errors)
+  - `pnpm test:integration`: **PASS**
+  - `pnpm test:e2e`: **PASS** (all content, learning, assessment, attempt, grading, and result E2E suites pass)
+  - `pnpm e2e:learning`: **PASS**
+  - `pnpm e2e:content`: **PASS**
+- **Remaining Gaps**:
+  - no virus scanning yet
+  - no media processing/transcoding yet
+  - no CDN/edge delivery yet
+  - no production cloud storage adapter is enabled yet beyond reserved/future boundaries
+- **Next Recommended Task**: Task 013A1 — Content Studio and Learning Delivery Media Integration Remediation
+
+---
+
+### Task 013A1 — Content Studio and Learning Delivery Media Integration Remediation
+
+- **Task ID**: 013A1
+- **Previous Task**: Task 013A — Content Studio and Learning Delivery Media Integration
+- **Work Completed**:
+  - Stabilized learner-facing media rendering using custom hooks and components in `LearningSectionList`.
+  - Removed unsafe `as any` casting inside `validateContentMediaReferences` in the `content-studio` backend validation logic, replacing it with explicit type guards.
+  - Added new backend integration test cases for media reference validation in the learning-delivery module.
+  - Resolved TypeScript type mismatch compilation errors regarding overridden workspace headers in Nest Fastify testing app.
+  - Corrected frontend `BlockRenderer` test assertions to match the signature of the `onChange` callback and wrapped interactive button triggers with standard testing system helpers.
+  - Updated the done signal configuration to transition worker status cleanly.
+- **Validation Performed**:
+  - `pnpm lint`: **PASS**
+  - `pnpm typecheck`: **PASS**
+  - `pnpm test`: **PASS**
+  - `pnpm build`: **PASS**
+- **Remaining Gaps**:
+  - Full E2E flows verification with real media assets (transcoding/processing pipelines deferred to 013B).
+- **Next Recommended Task**: Task 013B — Media Transcoding and Processing Pipelines

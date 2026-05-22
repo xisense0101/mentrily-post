@@ -32,11 +32,17 @@ function makeQuestion(kind: AssessmentQuestionContract['kind']): AssessmentQuest
   };
 }
 
+const baseProps = {
+  assessmentId: 'assessment_1',
+  attemptId: 'attempt_1',
+};
+
 describe('AttemptQuestionCard', () => {
   it('renders and saves MCQ answers', async () => {
     const onSave = vi.fn(async () => undefined);
     const rendered = await render(
       <AttemptQuestionCard
+        {...baseProps}
         isSaving={false}
         onSave={onSave}
         question={makeQuestion('MCQ')}
@@ -60,6 +66,7 @@ describe('AttemptQuestionCard', () => {
   it('renders multi-select input', async () => {
     const rendered = await render(
       <AttemptQuestionCard
+        {...baseProps}
         isSaving={false}
         onSave={vi.fn(async () => undefined)}
         question={makeQuestion('MULTI_SELECT')}
@@ -73,6 +80,7 @@ describe('AttemptQuestionCard', () => {
   it('renders true-false input', async () => {
     const rendered = await render(
       <AttemptQuestionCard
+        {...baseProps}
         isSaving={false}
         onSave={vi.fn(async () => undefined)}
         question={makeQuestion('TRUE_FALSE')}
@@ -86,6 +94,7 @@ describe('AttemptQuestionCard', () => {
   it('renders short answer input', async () => {
     const rendered = await render(
       <AttemptQuestionCard
+        {...baseProps}
         isSaving={false}
         onSave={vi.fn(async () => undefined)}
         question={makeQuestion('SHORT_ANSWER')}
@@ -99,6 +108,7 @@ describe('AttemptQuestionCard', () => {
   it('renders long answer input', async () => {
     const rendered = await render(
       <AttemptQuestionCard
+        {...baseProps}
         isSaving={false}
         onSave={vi.fn(async () => undefined)}
         question={makeQuestion('LONG_ANSWER')}
@@ -112,6 +122,7 @@ describe('AttemptQuestionCard', () => {
   it('renders code placeholder input', async () => {
     const rendered = await render(
       <AttemptQuestionCard
+        {...baseProps}
         isSaving={false}
         onSave={vi.fn(async () => undefined)}
         question={makeQuestion('CODE')}
@@ -125,6 +136,7 @@ describe('AttemptQuestionCard', () => {
   it('disables editing in read-only mode', async () => {
     const rendered = await render(
       <AttemptQuestionCard
+        {...baseProps}
         isSaving={false}
         onSave={vi.fn(async () => undefined)}
         question={makeQuestion('SHORT_ANSWER')}
@@ -140,6 +152,7 @@ describe('AttemptQuestionCard', () => {
     const onSave = vi.fn(async () => undefined);
     const rendered = await render(
       <AttemptQuestionCard
+        {...baseProps}
         isSaving={false}
         onSave={onSave}
         question={makeQuestion('LONG_ANSWER')}
@@ -163,6 +176,7 @@ describe('AttemptQuestionCard', () => {
   it('renders reading passage without a save button', async () => {
     const rendered = await render(
       <AttemptQuestionCard
+        {...baseProps}
         isSaving={false}
         onSave={vi.fn(async () => undefined)}
         question={makeQuestion('READING_PASSAGE')}
@@ -178,9 +192,10 @@ describe('AttemptQuestionCard', () => {
     ).toBeNull();
   });
 
-  it('renders file upload placeholder in a disabled boundary', async () => {
+  it('renders file upload answer with uploader controls', async () => {
     const rendered = await render(
       <AttemptQuestionCard
+        {...baseProps}
         isSaving={false}
         onSave={vi.fn(async () => undefined)}
         question={makeQuestion('FILE_UPLOAD')}
@@ -191,16 +206,14 @@ describe('AttemptQuestionCard', () => {
     const button = rendered.container.querySelector(
       '[data-testid="attempt-save-answer-button"]',
     ) as HTMLButtonElement;
-    expect(
-      rendered.container.querySelector('[data-testid="file-upload-placeholder-answer"]'),
-    ).toBeTruthy();
-    expect(button.disabled).toBe(true);
-    expect(rendered.container.querySelector('input[type="file"]')).toBeNull();
+    expect(rendered.container.querySelector('[data-testid="file-upload-answer"]')).toBeTruthy();
+    expect(button.disabled).toBe(false);
   });
 
   it('renders save loading, success, and error states', async () => {
     const rendered = await render(
       <AttemptQuestionCard
+        {...baseProps}
         isSaving={true}
         onSave={vi.fn(async () => undefined)}
         question={makeQuestion('SHORT_ANSWER')}

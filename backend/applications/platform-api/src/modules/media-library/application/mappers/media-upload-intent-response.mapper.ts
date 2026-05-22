@@ -8,7 +8,6 @@ export function mapMediaUploadIntentToResponse(
     id: intent.id,
     assetId: intent.assetId,
     ownerPrincipalId: intent.ownerPrincipalId,
-    objectKey: intent.objectKey,
     contentType: intent.contentType,
     filename: intent.filename,
     fileCategory: intent.fileCategory,

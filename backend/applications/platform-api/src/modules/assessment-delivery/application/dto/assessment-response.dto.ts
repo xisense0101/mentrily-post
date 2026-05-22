@@ -1,5 +1,7 @@
 import type {
+  AssessmentFileUploadQuestionConfigContract,
   AssessmentGradingModeContract,
+  AssessmentMediaAttachmentContract,
   AssessmentPurposeContract,
   AssessmentQuestionKindContract,
   AssessmentResultReleasePolicyContract,
@@ -20,6 +22,8 @@ export interface AssessmentQuestionResponse {
   gradingMode: AssessmentGradingModeContract;
   position: number;
   metadata: Record<string, unknown>;
+  attachments?: AssessmentMediaAttachmentContract[] | undefined;
+  fileUploadConfig?: AssessmentFileUploadQuestionConfigContract | undefined;
 }
 
 export interface AssessmentSectionResponse {

@@ -1,4 +1,5 @@
 export * from './code-placeholder-answer';
+export * from './file-upload-answer';
 export * from './file-upload-placeholder-answer';
 export * from './long-answer-input';
 export * from './mcq-answer-input';

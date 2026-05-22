@@ -107,6 +107,49 @@ describe('ContentDocumentEditorPage', () => {
     });
   });
 
+  it('can append media blocks (IMAGE, VIDEO, FILE) locally', async () => {
+    const appendBlock = vi.fn();
+    mockUseContentDocument.mockReturnValue({
+      document: {
+        id: 'doc-1',
+        title: 'Editor Doc',
+        purpose: 'GENERAL_PAGE',
+        status: 'DRAFT',
+        ownerPrincipalId: 'principal-1',
+        createdAt: '2026-05-13T00:00:00.000Z',
+        updatedAt: '2026-05-13T00:00:00.000Z',
+      },
+      localBlocks: [],
+      loading: false,
+      error: null,
+      isArchiving: false,
+      isPublishing: false,
+      isRenaming: false,
+      isRestoring: false,
+      isSaving: false,
+      refresh: vi.fn(),
+      renameDocument: vi.fn(),
+      saveBlocks: vi.fn(),
+      appendBlock,
+      updateBlockContent: vi.fn(),
+      removeBlock: vi.fn(),
+      publishDocument: vi.fn(),
+      archiveDocument: vi.fn(),
+      restoreDocument: vi.fn(),
+    });
+
+    const rendered = await render(<ContentDocumentEditorPage documentId="doc-1" />);
+    await clickElement(getByText(rendered.container, 'Image'));
+    await clickElement(getByText(rendered.container, 'Video'));
+    await clickElement(getByText(rendered.container, 'File'));
+
+    await waitFor(() => {
+      expect(appendBlock).toHaveBeenCalledWith('IMAGE');
+      expect(appendBlock).toHaveBeenCalledWith('VIDEO');
+      expect(appendBlock).toHaveBeenCalledWith('FILE');
+    });
+  });
+
   it('renders error state when the document load fails', async () => {
     mockUseContentDocument.mockReturnValue({
       document: null,

@@ -14,7 +14,6 @@ export interface MediaUploadIntentResponse {
   id: string;
   assetId: string;
   ownerPrincipalId: string;
-  objectKey: string;
   contentType: string;
   filename: string;
   fileCategory: MediaFileCategoryContract;

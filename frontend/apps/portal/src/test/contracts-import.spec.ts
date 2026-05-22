@@ -14,7 +14,6 @@ describe('portal contract import boundary', () => {
       sizeBytes: 1024,
       checksumSha256: 'abc123',
       storageProvider: 'FIXTURE',
-      objectKey: 'media/example.png',
       visibility: 'PRIVATE',
       status: 'AVAILABLE',
       metadata: {},

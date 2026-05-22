@@ -11,6 +11,10 @@ import { PrismaService } from '@mentrily/data-platform';
 import { truncatePublicSchema } from '@mentrily/testing-toolkit';
 import { AppModule } from '../../app.module.js';
 import { registerCorrelationIdHook } from '../../../foundation/correlation-id.hook.js';
+import {
+  FixtureObjectStorageAdapter,
+  OBJECT_STORAGE_PORT,
+} from '../../media-library/infrastructure/index.js';
 
 describe.sequential('Assessment attempt API (integration)', () => {
   let app: NestFastifyApplication;
@@ -43,6 +47,8 @@ describe.sequential('Assessment attempt API (integration)', () => {
       .useValue(permissionEvaluator)
       .overrideProvider(TRANSACTION_RUNNER)
       .useValue(transactionRunner)
+      .overrideProvider(OBJECT_STORAGE_PORT)
+      .useValue(new FixtureObjectStorageAdapter())
       .compile();
 
     app = moduleRef.createNestApplication<NestFastifyApplication>(new FastifyAdapter(), {
@@ -146,6 +152,55 @@ describe.sequential('Assessment attempt API (integration)', () => {
     return { assessmentId: created.id, questionId, optionId };
   }
 
+  async function createPublishedFileUploadAssessment() {
+    const createRes = await app.inject({
+      method: 'POST',
+      url: '/workspace/assessments',
+      headers,
+      payload: { title: 'Upload Quiz', purpose: 'QUIZ', timeLimitMinutes: 20 },
+    });
+    expectHttpStatus(createRes, 201);
+    const created = createRes.json<{ id: string }>();
+    const questionId = '79999999-9999-4999-8999-999999999991';
+
+    const replaceRes = await app.inject({
+      method: 'PUT',
+      url: `/workspace/assessments/${created.id}/content`,
+      headers,
+      payload: {
+        sections: [],
+        looseQuestions: [
+          {
+            id: questionId,
+            kind: 'FILE_UPLOAD',
+            title: 'Upload evidence',
+            prompt: { text: 'Upload a PDF evidence file.' },
+            options: [],
+            points: 2,
+            gradingMode: 'MANUAL',
+            position: 0,
+            fileUploadConfig: {
+              allowedFileCategories: ['DOCUMENT'],
+              allowedContentTypes: ['application/pdf'],
+              maxFiles: 1,
+              maxFileSizeBytes: 1024 * 1024,
+            },
+          },
+        ],
+      },
+    });
+    expectHttpStatus(replaceRes, 200);
+
+    const publishRes = await app.inject({
+      method: 'POST',
+      url: `/workspace/assessments/${created.id}/publish`,
+      headers,
+    });
+    expectHttpStatus(publishRes, 201);
+
+    return { assessmentId: created.id, questionId };
+  }
+
   async function startAttempt(assessmentId: string) {
     const startRes = await app.inject({
       method: 'POST',
@@ -155,6 +210,42 @@ describe.sequential('Assessment attempt API (integration)', () => {
     });
     expectHttpStatus(startRes, 201);
     return startRes.json<{ id: string; snapshotId: string; status: string }>();
+  }
+
+  async function createSubmissionAsset(input: {
+    assessmentId: string;
+    attemptId: string;
+    questionId: string;
+  }) {
+    const createIntentRes = await app.inject({
+      method: 'POST',
+      url: '/workspace/media/upload-intents',
+      headers,
+      payload: {
+        filename: 'submission.pdf',
+        contentType: 'application/pdf',
+        fileCategory: 'DOCUMENT',
+        maxSizeBytes: 2048,
+        metadata: {
+          assessmentUsage: 'ASSESSMENT_SUBMISSION',
+          assessmentId: input.assessmentId,
+          assessmentAttemptId: input.attemptId,
+          assessmentQuestionId: input.questionId,
+        },
+      },
+    });
+    expectHttpStatus(createIntentRes, 201);
+    const intent = createIntentRes.json<{ id: string; assetId: string }>();
+
+    const completeRes = await app.inject({
+      method: 'POST',
+      url: `/workspace/media/upload-intents/${intent.id}/complete`,
+      headers,
+      payload: { sizeBytes: 1024 },
+    });
+    expectHttpStatus(completeRes, 201);
+
+    return intent.assetId;
   }
 
   it('supports the learner attempt lifecycle and persists audit/outbox', async () => {
@@ -259,6 +350,49 @@ describe.sequential('Assessment attempt API (integration)', () => {
     });
     expect(auditCount).toBe(4);
     expect(outboxCount).toBeGreaterThanOrEqual(4);
+  });
+
+  it('accepts file upload answers as media asset references and exposes safe submitted file metadata', async () => {
+    const { assessmentId, questionId } = await createPublishedFileUploadAssessment();
+    const started = await startAttempt(assessmentId);
+    const assetId = await createSubmissionAsset({
+      assessmentId,
+      attemptId: started.id,
+      questionId,
+    });
+
+    const saveRes = await app.inject({
+      method: 'PUT',
+      url: `/workspace/assessment-attempts/${started.id}/answers/${questionId}`,
+      headers,
+      payload: {
+        questionId,
+        questionKind: 'FILE_UPLOAD',
+        answer: { mediaAssetIds: [assetId] },
+      },
+    });
+    expectHttpStatus(saveRes, 200);
+    const saved = saveRes.json<{
+      answers: Array<{
+        id: string;
+        answer: Record<string, unknown>;
+        submittedFiles?: Array<{ mediaAssetId: string; filename: string }>;
+      }>;
+    }>();
+    expect(saved.answers[0]?.answer).toMatchObject({ mediaAssetIds: [assetId] });
+    expect(saved.answers[0]?.submittedFiles).toEqual([
+      expect.objectContaining({ mediaAssetId: assetId, filename: 'submission.pdf' }),
+    ]);
+    expect(JSON.stringify(saved)).not.toContain('base64');
+    expect(JSON.stringify(saved)).not.toContain('objectKey');
+
+    const readUrlRes = await app.inject({
+      method: 'POST',
+      url: `/workspace/assessment-attempts/${started.id}/answers/${saved.answers[0]!.id}/files/${assetId}/read-url`,
+      headers,
+    });
+    expectHttpStatus(readUrlRes, 201);
+    expect(readUrlRes.json()).toMatchObject({ method: 'GET' });
   });
 
   it('treats repeated start and submit requests as safe retries', async () => {

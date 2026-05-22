@@ -1,5 +1,7 @@
 import type {
+  AssessmentFileUploadQuestionConfigContract,
   AssessmentGradingModeContract,
+  AssessmentMediaReferenceContract,
   AssessmentQuestionKindContract,
 } from '@mentrily/contract-catalog';
 
@@ -15,6 +17,8 @@ export interface ReplaceAssessmentQuestionInput {
   gradingMode: AssessmentGradingModeContract;
   position: number;
   metadata?: Record<string, unknown> | undefined;
+  attachments?: AssessmentMediaReferenceContract[] | undefined;
+  fileUploadConfig?: AssessmentFileUploadQuestionConfigContract | undefined;
 }
 
 export interface ReplaceAssessmentSectionInput {

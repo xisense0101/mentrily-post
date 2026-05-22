@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { DataPlatformModule } from '@mentrily/data-platform';
 import { FoundationModule } from '../../foundation/foundation.module.js';
+import { MediaLibraryModule } from '../media-library/media-library.module.js';
 import {
   AssessmentPublishPolicyService,
   AssessmentVersioningPolicyService,
@@ -48,6 +49,7 @@ import {
   GetAssessmentAttemptSnapshotUseCase,
   ListLearnerAssessmentAttemptsUseCase,
   SaveAssessmentAttemptAnswerUseCase,
+  CreateAssessmentAttemptAnswerReadUrlUseCase,
   SubmitAssessmentAttemptUseCase,
   CancelAssessmentAttemptUseCase,
   GradeAssessmentAttemptUseCase,
@@ -66,7 +68,7 @@ import {
 } from './presentation/index.js';
 
 @Module({
-  imports: [FoundationModule, DataPlatformModule],
+  imports: [FoundationModule, DataPlatformModule, MediaLibraryModule],
   controllers: [
     AssessmentDeliveryController,
     AssessmentAttemptController,
@@ -128,6 +130,7 @@ import {
     GetAssessmentAttemptSnapshotUseCase,
     ListLearnerAssessmentAttemptsUseCase,
     SaveAssessmentAttemptAnswerUseCase,
+    CreateAssessmentAttemptAnswerReadUrlUseCase,
     SubmitAssessmentAttemptUseCase,
     CancelAssessmentAttemptUseCase,
     GradeAssessmentAttemptUseCase,

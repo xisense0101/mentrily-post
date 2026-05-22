@@ -1,3 +1,5 @@
+import type { MediaAssetContract } from './media-library.js';
+
 export type LearningCourseStatus = 'DRAFT' | 'PUBLISHED' | 'ARCHIVED';
 
 export type LearningVisibility =
@@ -35,6 +37,7 @@ export interface LearningLessonContract {
   estimatedMinutes?: number | undefined;
   contentRef?: string | undefined;
   isRequired: boolean;
+  mediaAsset?: MediaAssetContract | undefined;
 }
 
 export interface LearningSectionContract {

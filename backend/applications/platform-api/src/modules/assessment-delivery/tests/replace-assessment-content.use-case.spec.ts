@@ -7,6 +7,7 @@ import {
   TransactionRunner,
 } from '@mentrily/service-core';
 import { AssessmentRepository } from '../domain/repositories/index.js';
+import { MediaAssetRepository } from '../../media-library/domain/repositories/index.js';
 import { AssessmentEventPublisherService } from '../application/services/index.js';
 import { ReplaceAssessmentContentUseCase } from '../application/use-cases/index.js';
 import {
@@ -62,6 +63,14 @@ function createEventPublisher(outbox: OutboxPublisher = { publish: vi.fn(async (
     outbox,
     service: new AssessmentEventPublisherService(outbox),
   };
+}
+
+function createMediaAssetRepository(): MediaAssetRepository {
+  return {
+    findById: vi.fn(async () => null),
+    list: vi.fn(async () => []),
+    save: vi.fn(async (asset) => asset),
+  } as unknown as MediaAssetRepository;
 }
 
 describe('ReplaceAssessmentContentUseCase', () => {
@@ -128,6 +137,7 @@ describe('ReplaceAssessmentContentUseCase', () => {
     const { service } = createEventPublisher();
     const useCase = new ReplaceAssessmentContentUseCase(
       repo,
+      createMediaAssetRepository(),
       permissions,
       transactions,
       audit,
@@ -152,6 +162,7 @@ describe('ReplaceAssessmentContentUseCase', () => {
     const { service } = createEventPublisher(outbox);
     const useCase = new ReplaceAssessmentContentUseCase(
       repo,
+      createMediaAssetRepository(),
       permissions,
       transactions,
       audit,

@@ -178,7 +178,7 @@ describe('assessment-attempt-state', () => {
       language: 'ts',
     });
     expect(toAnswerPayload({ questionKind: 'FILE_UPLOAD', value: ['file-1'] })).toEqual({
-      fileIds: ['file-1'],
+      mediaAssetIds: ['file-1'],
     });
     expect(toAnswerPayload({ questionKind: 'READING_PASSAGE', value: null })).toEqual({});
   });

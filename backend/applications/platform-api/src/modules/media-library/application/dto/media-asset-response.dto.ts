@@ -14,7 +14,6 @@ export interface MediaAssetResponse {
   sizeBytes?: number | undefined;
   checksumSha256?: string | undefined;
   storageProvider: MediaStorageProviderContract;
-  objectKey: string;
   visibility: MediaAssetVisibilityContract;
   status: MediaAssetStatusContract;
   metadata: Record<string, unknown>;

@@ -11,6 +11,7 @@ export * from './start-assessment-attempt.use-case.js';
 export * from './get-assessment-attempt.use-case.js';
 export * from './list-learner-assessment-attempts.use-case.js';
 export * from './save-assessment-attempt-answer.use-case.js';
+export * from './create-assessment-attempt-answer-read-url.use-case.js';
 export * from './submit-assessment-attempt.use-case.js';
 export * from './cancel-assessment-attempt.use-case.js';
 export * from './get-assessment-attempt-snapshot.use-case.js';

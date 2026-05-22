@@ -45,3 +45,5 @@ export function ensureEnrollmentLearner(enrollment: Enrollment, context: Request
     throw new AppError('NOT_FOUND', 'enrollment not found', 404);
   }
 }
+
+export * from './learning-media-reference.validator.js';

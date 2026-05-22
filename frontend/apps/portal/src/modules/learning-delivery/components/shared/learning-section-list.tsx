@@ -1,11 +1,94 @@
 import type { ReactNode } from 'react';
-import type { LearningSectionContract } from '../../types';
+import { useEffect } from 'react';
+import type { LearningSectionContract, LearningLessonContract } from '../../types';
 import { LessonKindBadge } from './lesson-kind-badge';
+import { useMediaReadUrl } from '@/modules/media-library';
 
 interface LearningSectionListProps {
   sections: LearningSectionContract[];
   lessonMeta?: (lessonId: string) => ReactNode;
   emptyMessage?: string;
+}
+
+interface LessonMediaViewProps {
+  mediaAsset: NonNullable<LearningLessonContract['mediaAsset']>;
+  lessonKind: string;
+}
+
+export function LessonMediaView({ mediaAsset, lessonKind }: LessonMediaViewProps) {
+  const { readUrl, loadReadUrl, clearReadUrl, error, loading } = useMediaReadUrl();
+
+  useEffect(() => {
+    if (mediaAsset.status === 'AVAILABLE') {
+      void loadReadUrl(mediaAsset.id);
+    } else {
+      clearReadUrl();
+    }
+  }, [mediaAsset.id, mediaAsset.status, loadReadUrl, clearReadUrl]);
+
+  if (mediaAsset.status !== 'AVAILABLE') {
+    return (
+      <div
+        className="mt-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-700 font-medium"
+        data-testid="lesson-media-unavailable"
+      >
+        Media content is currently unavailable (Status: {mediaAsset.status}).
+      </div>
+    );
+  }
+
+  if (loading) {
+    return <p className="mt-2 text-xs text-slate-400 italic">Resolving secure media url...</p>;
+  }
+
+  if (error) {
+    return <p className="mt-2 text-xs text-rose-600">Failed to load media preview: {error}</p>;
+  }
+
+  if (!readUrl) {
+    return null;
+  }
+
+  if (lessonKind === 'VIDEO') {
+    return (
+      <div className="mt-2 overflow-hidden rounded-xl border border-slate-200 bg-black max-w-[500px]">
+        <video
+          src={readUrl.url}
+          controls
+          className="w-full h-auto max-h-[300px]"
+          data-testid="lesson-media-video"
+        />
+      </div>
+    );
+  }
+
+  if (lessonKind === 'IMAGE') {
+    return (
+      <div className="mt-2">
+        <img
+          src={readUrl.url}
+          alt={mediaAsset.filename}
+          className="max-h-[300px] w-auto rounded-xl object-contain border border-slate-200"
+          data-testid="lesson-media-image"
+        />
+      </div>
+    );
+  }
+
+  return (
+    <div className="mt-2 flex items-center gap-2 rounded-xl border border-slate-200 bg-white p-3 shadow-sm max-w-md">
+      <span className="text-xs text-slate-500 font-medium">Attachment:</span>
+      <a
+        href={readUrl.url}
+        target="_blank"
+        rel="noreferrer"
+        className="text-xs text-indigo-600 hover:underline font-semibold"
+        data-testid="lesson-media-file-link"
+      >
+        {mediaAsset.filename || 'Download File'}
+      </a>
+    </div>
+  );
 }
 
 export function LearningSectionList({
@@ -49,6 +132,7 @@ export function LearningSectionList({
                 <div
                   key={lesson.id}
                   className="rounded-xl border border-slate-100 bg-slate-50 p-4"
+                  data-testid={`lesson-card-${lesson.id}`}
                 >
                   <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                     <div className="space-y-1">
@@ -67,8 +151,10 @@ export function LearningSectionList({
                           ? ` · ${lesson.estimatedMinutes} min`
                           : ''}
                       </p>
-                      {lesson.contentRef ? (
-                        <p className="text-xs text-slate-400">{lesson.contentRef}</p>
+                      {lesson.mediaAsset ? (
+                        <LessonMediaView mediaAsset={lesson.mediaAsset} lessonKind={lesson.kind} />
+                      ) : lesson.contentRef ? (
+                        <p className="text-xs text-slate-400">Ref: {lesson.contentRef}</p>
                       ) : null}
                     </div>
                     {lessonMeta ? <div>{lessonMeta(lesson.id)}</div> : null}

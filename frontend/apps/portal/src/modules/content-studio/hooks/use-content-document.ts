@@ -126,6 +126,12 @@ export function useContentDocument(
         kind: 'DIVIDER',
         content: {},
       };
+    } else if (kind === 'IMAGE' || kind === 'VIDEO' || kind === 'FILE') {
+      block = {
+        ...createEmptyParagraphBlock({ documentId: document.id, position }),
+        kind,
+        content: { mediaAssetId: '' },
+      };
     } else {
       block = createEmptyParagraphBlock({ documentId: document.id, position });
       if (kind === 'QUOTE') {

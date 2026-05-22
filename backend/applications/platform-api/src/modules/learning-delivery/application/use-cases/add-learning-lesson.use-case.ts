@@ -11,13 +11,14 @@ import {
   TransactionRunner,
 } from '@mentrily/service-core';
 import { PermissionCatalog } from '@mentrily/security-toolkit';
+import { MediaAssetRepository } from '../../../media-library/domain/repositories/index.js';
 import { LearningCourseRepository } from '../../domain/repositories/learning-course.repository.js';
 import { AddLearningLessonInput } from '../dto/add-learning-lesson.dto.js';
 import { LearningEventPublisherService } from '../services/learning-event-publisher.service.js';
 import { LearningCourse } from '../../domain/entities/learning-course.entity.js';
 import { LearningLesson } from '../../domain/entities/learning-lesson.entity.js';
 import { LearningContentKind } from '../../domain/value-objects/learning-content-kind.vo.js';
-import { ensureCourseOwnership, requireLearningActor } from '../support/learning-context.js';
+import { ensureCourseOwnership, requireLearningActor, validateLearningMediaReference } from '../support/learning-context.js';
 
 @Injectable()
 export class AddLearningLessonUseCase {
@@ -28,6 +29,8 @@ export class AddLearningLessonUseCase {
     @Inject(AUDIT_RECORDER) private readonly auditRecorder: AuditRecorder,
     @Inject(LearningEventPublisherService)
     private readonly eventPublisher: LearningEventPublisherService,
+    @Inject(MediaAssetRepository)
+    private readonly mediaAssetRepo: MediaAssetRepository,
   ) {}
 
   async execute(
@@ -42,6 +45,8 @@ export class AddLearningLessonUseCase {
       context,
     );
     if (!perm.allowed) throw new AppError('FORBIDDEN', 'permission denied', 403);
+
+    await validateLearningMediaReference(this.mediaAssetRepo, context, input);
 
     return this.transactionRunner.run(async (tx) => {
       const course = await this.repo.findById(courseId, tx);

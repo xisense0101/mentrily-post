@@ -105,6 +105,7 @@ describe('Media Library API (integration)', () => {
     const listRes = await app.inject({ method: 'GET', url: '/workspace/media/assets', headers });
     expectHttpStatus(listRes, 200);
     expect(listRes.json()).toHaveLength(1);
+    expect(listRes.body).not.toContain('objectKey');
 
     const filteredListRes = await app.inject({
       method: 'GET',
@@ -120,6 +121,7 @@ describe('Media Library API (integration)', () => {
       headers,
     });
     expectHttpStatus(getRes, 200);
+    expect(getRes.body).not.toContain('objectKey');
 
     const readRes = await app.inject({
       method: 'POST',

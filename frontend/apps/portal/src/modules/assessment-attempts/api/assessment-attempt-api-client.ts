@@ -1,4 +1,5 @@
 import { buildE2ERequestHeaders } from '@/foundation/e2e/e2e-request-context';
+import type { MediaReadUrlContract } from '@/contracts/media-library';
 import type {
   AssessmentAttemptContract,
   AssessmentPublishedSnapshotContract,
@@ -126,6 +127,20 @@ export function createAssessmentAttemptApiClient({
       );
     },
 
+    createAssessmentAttemptAnswerFileReadUrl(
+      attemptId: string,
+      answerId: string,
+      assetId: string,
+    ): Promise<MediaReadUrlContract> {
+      return request<MediaReadUrlContract>(
+        `/workspace/assessment-attempts/${attemptId}/answers/${answerId}/files/${assetId}/read-url`,
+        {
+          method: 'POST',
+          body: JSON.stringify({}),
+        },
+      );
+    },
+
     submitAssessmentAttempt(
       attemptId: string,
       input?: SubmitAssessmentAttemptRequest,
@@ -168,6 +183,10 @@ export const getAssessmentAttemptSnapshot =
   assessmentAttemptApiClient.getAssessmentAttemptSnapshot.bind(assessmentAttemptApiClient);
 export const saveAssessmentAttemptAnswer =
   assessmentAttemptApiClient.saveAssessmentAttemptAnswer.bind(assessmentAttemptApiClient);
+export const createAssessmentAttemptAnswerFileReadUrl =
+  assessmentAttemptApiClient.createAssessmentAttemptAnswerFileReadUrl.bind(
+    assessmentAttemptApiClient,
+  );
 export const submitAssessmentAttempt = assessmentAttemptApiClient.submitAssessmentAttempt.bind(
   assessmentAttemptApiClient,
 );

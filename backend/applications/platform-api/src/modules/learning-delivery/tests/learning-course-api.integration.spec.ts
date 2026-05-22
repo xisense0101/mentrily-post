@@ -21,6 +21,14 @@ describe('Learning Delivery API (integration)', () => {
     'x-actor-id': '33333333-3333-4333-8333-333333333333',
   } as const;
 
+  type ApiHeaders = {
+    readonly 'x-request-id': string;
+    readonly 'x-correlation-id': string;
+    readonly 'x-tenant-id': string;
+    readonly 'x-workspace-id': string;
+    readonly 'x-actor-id': string;
+  };
+
   function expectHttpStatus(
     response: { statusCode: number; body: string },
     expected: number,
@@ -33,7 +41,7 @@ describe('Learning Delivery API (integration)', () => {
   }
 
   function contextFromHeaders(
-    headers: typeof baseHeaders,
+    headers: ApiHeaders,
   ): ReturnType<typeof createRequestContextFromHeaders> {
     return createRequestContextFromHeaders({
       requestIdHeader: headers['x-request-id'],
@@ -48,7 +56,7 @@ describe('Learning Delivery API (integration)', () => {
     response: { statusCode: number; body: string },
     expected: number,
     payload: CreateLearningCourseInput,
-    headers: typeof baseHeaders,
+    headers: ApiHeaders,
   ): Promise<void> {
     if (response.statusCode === expected) {
       return;
@@ -75,7 +83,7 @@ describe('Learning Delivery API (integration)', () => {
   async function expectListCoursesStatus(
     response: { statusCode: number; body: string },
     expected: number,
-    headers: typeof baseHeaders,
+    headers: ApiHeaders,
   ): Promise<void> {
     if (response.statusCode === expected) {
       return;
@@ -102,7 +110,7 @@ describe('Learning Delivery API (integration)', () => {
   async function expectGetCourseStatus(
     response: { statusCode: number; body: string },
     expected: number,
-    headers: typeof baseHeaders,
+    headers: ApiHeaders,
     courseId: string,
   ): Promise<void> {
     if (response.statusCode === expected) {
@@ -302,5 +310,80 @@ describe('Learning Delivery API (integration)', () => {
       payload: {},
     });
     expectHttpStatus(crossMutate, 404);
+  });
+
+  it('creator fails to add a lesson with an invalid video media asset reference', async () => {
+    const createRes = await app.inject({
+      method: 'POST',
+      url: '/workspace/learning/courses',
+      headers: baseHeaders,
+      payload: { title: 'Media API Course', slug: 'media-api-course' },
+    });
+    expectHttpStatus(createRes, 201);
+    const courseId = createRes.json().id;
+
+    const sectionRes = await app.inject({
+      method: 'POST',
+      url: `/workspace/learning/courses/${courseId}/sections`,
+      headers: baseHeaders,
+      payload: { title: 'Section 1' },
+    });
+    expectHttpStatus(sectionRes, 201);
+    const sectionId = sectionRes.json().sections[0].id;
+
+    const lessonRes = await app.inject({
+      method: 'POST',
+      url: `/workspace/learning/courses/${courseId}/sections/${sectionId}/lessons`,
+      headers: baseHeaders,
+      payload: { title: 'Lesson 1', kind: 'VIDEO', contentRef: '11111111-1111-4111-8111-111111111111', isRequired: true },
+    });
+    expectHttpStatus(lessonRes, 400);
+    expect(lessonRes.json().message).toContain('referenced media asset not found');
+  });
+
+  it('creator succeeds to add a lesson with a valid video media asset reference', async () => {
+    const assetId = '77777777-7777-4777-8777-777777777777';
+    await prisma.mediaAsset.create({
+      data: {
+        id: assetId,
+        tenantId: baseHeaders['x-tenant-id'],
+        workspaceId: baseHeaders['x-workspace-id'],
+        ownerPrincipalId: baseHeaders['x-actor-id'],
+        filename: 'video.mp4',
+        contentType: 'video/mp4',
+        fileCategory: 'VIDEO',
+        storageProvider: 'FIXTURE',
+        objectKey: 'test-key-video',
+        visibility: 'PRIVATE',
+        status: 'AVAILABLE',
+        metadata: {},
+      },
+    });
+
+    const createRes = await app.inject({
+      method: 'POST',
+      url: '/workspace/learning/courses',
+      headers: baseHeaders,
+      payload: { title: 'Media API Course Success', slug: 'media-api-course-success' },
+    });
+    expectHttpStatus(createRes, 201);
+    const courseId = createRes.json().id;
+
+    const sectionRes = await app.inject({
+      method: 'POST',
+      url: `/workspace/learning/courses/${courseId}/sections`,
+      headers: baseHeaders,
+      payload: { title: 'Section 1' },
+    });
+    expectHttpStatus(sectionRes, 201);
+    const sectionId = sectionRes.json().sections[0].id;
+
+    const lessonRes = await app.inject({
+      method: 'POST',
+      url: `/workspace/learning/courses/${courseId}/sections/${sectionId}/lessons`,
+      headers: baseHeaders,
+      payload: { title: 'Lesson 1', kind: 'VIDEO', contentRef: assetId, isRequired: true },
+    });
+    expectHttpStatus(lessonRes, 201);
   });
 });

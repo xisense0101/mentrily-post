@@ -10,6 +10,7 @@ import {
   TransactionRunner,
 } from '@mentrily/service-core';
 import { PermissionCatalog } from '@mentrily/security-toolkit';
+import { MediaAssetRepository } from '../../../media-library/domain/repositories/index.js';
 import {
   BlockContentKind,
   BlockTreePath,
@@ -21,7 +22,7 @@ import { contentDocumentDraftBlocksReplaced } from '../../domain/events/index.js
 import { ContentEventPublisherService } from '../services/index.js';
 import { ContentDocumentResponse, ReplaceContentBlocksInput } from '../dto/index.js';
 import { mapContentDocumentToResponse } from '../mappers/index.js';
-import { ensureDocumentOwnership, requireContentActor } from '../support/index.js';
+import { ensureDocumentOwnership, requireContentActor, validateContentMediaReferences } from '../support/index.js';
 
 @Injectable()
 export class ReplaceContentBlocksUseCase {
@@ -34,6 +35,8 @@ export class ReplaceContentBlocksUseCase {
     private readonly eventPublisher: ContentEventPublisherService,
     @Inject(BlockTreePolicyService)
     private readonly blockTreePolicy: BlockTreePolicyService,
+    @Inject(MediaAssetRepository)
+    private readonly mediaAssetRepo: MediaAssetRepository,
   ) {}
 
   async execute(
@@ -48,6 +51,10 @@ export class ReplaceContentBlocksUseCase {
     );
     if (!perm.allowed) {
       throw new AppError('FORBIDDEN', 'permission denied', 403);
+    }
+
+    if (input.blocks && input.blocks.length > 0) {
+      await validateContentMediaReferences(this.mediaAssetRepo, context, input.blocks);
     }
 
     return this.transactionRunner.run(async (tx) => {

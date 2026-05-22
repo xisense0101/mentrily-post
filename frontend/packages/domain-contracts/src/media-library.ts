@@ -32,7 +32,6 @@ export interface MediaAssetContract {
   sizeBytes?: number | undefined;
   checksumSha256?: string | undefined;
   storageProvider: MediaStorageProviderContract;
-  objectKey: string;
   visibility: MediaAssetVisibilityContract;
   status: MediaAssetStatusContract;
   metadata: Record<string, unknown>;
@@ -45,7 +44,6 @@ export interface MediaUploadIntentContract {
   id: string;
   assetId: string;
   ownerPrincipalId: string;
-  objectKey: string;
   contentType: string;
   filename: string;
   fileCategory: MediaFileCategoryContract;

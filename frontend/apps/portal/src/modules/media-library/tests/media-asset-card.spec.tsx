@@ -23,7 +23,6 @@ function makeAsset(overrides: Partial<MediaAssetContract> = {}): MediaAssetContr
     sizeBytes: 2048,
     checksumSha256: 'hash',
     storageProvider: 'FIXTURE',
-    objectKey: 'media/example.png',
     visibility: 'PRIVATE',
     status: 'AVAILABLE',
     metadata: {},

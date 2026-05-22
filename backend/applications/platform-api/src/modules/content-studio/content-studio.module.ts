@@ -41,8 +41,10 @@ import {
 } from './infrastructure/index.js';
 import { ContentStudioController } from './presentation/index.js';
 
+import { MediaLibraryModule } from '../media-library/media-library.module.js';
+
 @Module({
-  imports: [DataPlatformModule, FoundationModule],
+  imports: [DataPlatformModule, FoundationModule, MediaLibraryModule],
   providers: [
     BlockTreePolicyService,
     ContentPublishPolicyService,

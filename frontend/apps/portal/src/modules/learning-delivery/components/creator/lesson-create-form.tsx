@@ -7,6 +7,8 @@ import type {
   LearningContentKind,
 } from '../../types';
 
+import { AssetPickerDialog, useMediaAssets } from '@/modules/media-library';
+
 interface LessonCreateFormProps {
   onSubmit: (input: AddLearningLessonRequest) => Promise<void> | void;
   isPending?: boolean;
@@ -29,6 +31,8 @@ export function LessonCreateForm({
   const [contentRef, setContentRef] = useState('');
   const [isRequired, setIsRequired] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const { assets } = useMediaAssets({ status: 'AVAILABLE' });
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -115,13 +119,27 @@ export function LessonCreateForm({
             <label className="text-sm font-medium text-slate-700" htmlFor={refId}>
               Content reference
             </label>
-            <Input
-              disabled={disabled}
-              id={refId}
-              value={contentRef}
-              onChange={(event) => setContentRef(event.target.value)}
-              placeholder="doc://welcome-pack or https://..."
-            />
+            <div className="flex gap-2">
+              <div className="flex-1">
+                <Input
+                  disabled={disabled}
+                  id={refId}
+                  value={contentRef}
+                  onChange={(event) => setContentRef(event.target.value)}
+                  placeholder="doc://welcome-pack or https://..."
+                />
+              </div>
+              {['VIDEO', 'FILE'].includes(kind) ? (
+                <Button
+                  disabled={disabled}
+                  onClick={() => setPickerOpen(true)}
+                  type="button"
+                  data-testid="lesson-pick-media-button"
+                >
+                  Pick media
+                </Button>
+              ) : null}
+            </div>
           </div>
 
           <label
@@ -148,6 +166,20 @@ export function LessonCreateForm({
           </div>
         </form>
       </Card>
+
+      <AssetPickerDialog
+        {...(kind === 'VIDEO' ? { allowedCategories: ['VIDEO'] } : {})}
+        assets={assets}
+        onOpenChange={setPickerOpen}
+        onSelect={(selected) => {
+          const first = selected?.[0];
+          if (first) {
+            setContentRef(first.id);
+          }
+        }}
+        open={pickerOpen}
+        selectionMode="single"
+      />
     </div>
   );
 }

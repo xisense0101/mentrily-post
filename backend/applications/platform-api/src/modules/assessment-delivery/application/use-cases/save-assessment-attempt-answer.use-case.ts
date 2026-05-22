@@ -16,19 +16,29 @@ import {
   TransactionRunner,
 } from '@mentrily/service-core';
 import { PermissionCatalog } from '@mentrily/security-toolkit';
-import { AssessmentAttemptRepository } from '../../domain/repositories/index.js';
+import { MediaAssetRepository } from '../../../media-library/domain/repositories/index.js';
+import {
+  AssessmentAttemptRepository,
+  AssessmentSnapshotRepository,
+} from '../../domain/repositories/index.js';
 import { AssessmentAttemptSubmissionPolicyService } from '../../domain/services/index.js';
 import { createAssessmentAttemptAnswerSavedEvent } from '../../domain/events/index.js';
 import { AssessmentEventPublisherService } from '../services/index.js';
 import { mapAttemptToResponse } from '../mappers/index.js';
 import { AssessmentAttemptResponse, SaveAssessmentAttemptAnswerInput } from '../dto/index.js';
-import { requireAssessmentActor } from '../support/index.js';
+import {
+  requireAssessmentActor,
+  validateFileUploadAnswer,
+} from '../support/index.js';
 import { assertValidQuestionKind } from '../../domain/value-objects/index.js';
 
 @Injectable()
 export class SaveAssessmentAttemptAnswerUseCase {
   constructor(
     @Inject(AssessmentAttemptRepository) private readonly attemptRepo: AssessmentAttemptRepository,
+    @Inject(AssessmentSnapshotRepository)
+    private readonly snapshotRepository: AssessmentSnapshotRepository,
+    @Inject(MediaAssetRepository) private readonly mediaAssetRepository: MediaAssetRepository,
     @Inject(AssessmentAttemptSubmissionPolicyService)
     private readonly submissionPolicy: AssessmentAttemptSubmissionPolicyService,
     @Inject(PERMISSION_EVALUATOR) private readonly permissionEvaluator: PermissionEvaluator,
@@ -68,6 +78,31 @@ export class SaveAssessmentAttemptAnswerUseCase {
         throw new AppError('FORBIDDEN', 'you do not own this attempt', 403);
       }
 
+      const snapshot = await this.snapshotRepository.findById(attempt.snapshotId, tx);
+      if (!snapshot) {
+        throw new AppError('NOT_FOUND', 'assessment snapshot not found', 404);
+      }
+
+      const question = snapshot
+        .getAllQuestions()
+        .find((candidate) => candidate.id === input.questionId);
+      if (!question) {
+        throw new AppError('VALIDATION_ERROR', 'question not found in assessment snapshot', 400);
+      }
+
+      let normalizedAnswer = input.answer;
+      if (input.questionKind === 'FILE_UPLOAD') {
+        normalizedAnswer = await validateFileUploadAnswer({
+          assetRepository: this.mediaAssetRepository,
+          context,
+          actorId: workspace.actorId,
+          question,
+          answer: input.answer,
+          attemptId: attempt.id,
+          assessmentId: attempt.assessmentId,
+        });
+      }
+
       const now = new Date();
       const policyResult = this.submissionPolicy.canSaveAnswer(attempt, now);
       if (!policyResult.allowed) {
@@ -87,7 +122,7 @@ export class SaveAssessmentAttemptAnswerUseCase {
         answerId,
         questionId: input.questionId,
         questionKind: assertValidQuestionKind(input.questionKind),
-        answer: input.answer,
+        answer: normalizedAnswer,
         ...(input.metadata !== undefined ? { metadata: input.metadata } : {}),
       });
 

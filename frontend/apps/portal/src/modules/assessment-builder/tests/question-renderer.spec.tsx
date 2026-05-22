@@ -110,15 +110,14 @@ describe('QuestionRenderer', () => {
   it('renders file upload placeholder editor', async () => {
     const question = makeQuestion('FILE_UPLOAD', {
       gradingMode: 'MANUAL',
-      metadata: {
-        allowedFileCategories: ['document', 'image'],
+      fileUploadConfig: {
+        allowedFileCategories: ['DOCUMENT', 'IMAGE'],
         maxFiles: 2,
-        maxFileSizeMb: 25,
-        placeholderOnly: true,
+        maxFileSizeBytes: 25 * 1024 * 1024,
       },
     });
     const rendered = await render(<QuestionRenderer question={question} />);
-    expect(rendered.container.textContent).toContain('File upload placeholder only');
-    expect(rendered.container.textContent).toContain('Media Library');
+    expect(rendered.container.textContent).toContain('Media Library backed file upload');
+    expect(rendered.container.textContent).toContain('Pick media');
   });
 });

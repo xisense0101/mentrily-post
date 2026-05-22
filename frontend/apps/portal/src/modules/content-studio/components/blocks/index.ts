@@ -8,3 +8,4 @@ export * from './editable-callout-block';
 export * from './editable-code-block';
 export * from './editable-heading-block';
 export * from './editable-paragraph-block';
+export * from './editable-media-block';

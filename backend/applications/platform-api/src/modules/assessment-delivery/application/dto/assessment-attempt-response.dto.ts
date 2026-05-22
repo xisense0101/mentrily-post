@@ -3,6 +3,7 @@
  */
 
 import type {
+  AssessmentSubmittedFileContract,
   AssessmentAttemptStatusContract,
   AssessmentAttemptAnswerStatusContract,
   AssessmentAttemptGradingStatusContract,
@@ -26,6 +27,7 @@ export interface AssessmentAttemptAnswerResponse {
   savedAt: string;
   submittedAt?: string;
   metadata: Record<string, unknown>;
+  submittedFiles?: AssessmentSubmittedFileContract[] | undefined;
 }
 
 export interface AssessmentAttemptResultResponse {

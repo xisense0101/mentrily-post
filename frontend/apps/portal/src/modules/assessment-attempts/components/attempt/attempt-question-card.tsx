@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import {
   CodePlaceholderAnswer,
-  FileUploadPlaceholderAnswer,
+  FileUploadAnswer,
   LongAnswerInput,
   McqAnswerInput,
   MultiSelectAnswerInput,
@@ -20,6 +20,8 @@ import {
 } from '../../state';
 
 interface AttemptQuestionCardProps {
+  assessmentId: string;
+  attemptId: string;
   question: AssessmentQuestionContract;
   answer?: AssessmentAttemptAnswerContract | undefined;
   readOnly: boolean;
@@ -57,17 +59,6 @@ function getPromptText(question: AssessmentQuestionContract): string {
   return readStringField(question.prompt, 'text') ?? question.title;
 }
 
-function readStringArrayField(value: unknown, field: string): string[] {
-  if (typeof value !== 'object' || value === null) {
-    return [];
-  }
-
-  const record = value as Record<string, unknown>;
-  const candidate = record[field];
-  return Array.isArray(candidate)
-    ? candidate.filter((item): item is string => typeof item === 'string')
-    : [];
-}
 
 function getInitialValue(
   question: AssessmentQuestionContract,
@@ -90,8 +81,8 @@ function getInitialValue(
     case 'CODE':
       return readStringField(payload, 'sourceCode') ?? '';
     case 'FILE_UPLOAD':
-      return Array.isArray(payload?.fileIds)
-        ? payload.fileIds.filter((item): item is string => typeof item === 'string')
+      return Array.isArray(payload?.mediaAssetIds)
+        ? payload.mediaAssetIds.filter((item): item is string => typeof item === 'string')
         : [];
     default:
       return '';
@@ -99,6 +90,8 @@ function getInitialValue(
 }
 
 export function AttemptQuestionCard({
+  assessmentId,
+  attemptId,
   question,
   answer,
   readOnly,
@@ -121,10 +114,6 @@ export function AttemptQuestionCard({
   const promptRecord =
     typeof question.prompt === 'object' && question.prompt !== null
       ? (question.prompt as Record<string, unknown>)
-      : {};
-  const metadataRecord =
-    typeof question.metadata === 'object' && question.metadata !== null
-      ? (question.metadata as Record<string, unknown>)
       : {};
 
   return (
@@ -205,16 +194,18 @@ export function AttemptQuestionCard({
           />
         ) : null}
         {question.kind === 'FILE_UPLOAD' ? (
-          <FileUploadPlaceholderAnswer
-            allowedFileCategories={readStringArrayField(metadataRecord, 'allowedFileCategories')}
-            instructions={promptText}
-            maxFileSizeMb={
-              typeof metadataRecord.maxFileSizeMb === 'number'
-                ? metadataRecord.maxFileSizeMb
-                : undefined
-            }
-            maxFiles={
-              typeof metadataRecord.maxFiles === 'number' ? metadataRecord.maxFiles : undefined
+          <FileUploadAnswer
+            answerId={answer?.id}
+            assessmentId={assessmentId}
+            attemptId={attemptId}
+            disabled={readOnly}
+            onChange={setValue}
+            question={question}
+            submittedFiles={answer?.submittedFiles}
+            value={
+              Array.isArray(value)
+                ? value.filter((item): item is string => typeof item === 'string')
+                : []
             }
           />
         ) : null}

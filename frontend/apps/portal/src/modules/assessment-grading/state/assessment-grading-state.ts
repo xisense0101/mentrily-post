@@ -30,6 +30,10 @@ export function formatLearnerAnswer(input: { questionKind: AssessmentQuestionKin
   if (questionKind === 'TRUE_FALSE') return String(answer.value ?? 'No answer');
   if (questionKind === 'SHORT_ANSWER' || questionKind === 'LONG_ANSWER') return String(answer.text ?? '');
   if (questionKind === 'CODE') return String(answer.sourceCode ?? answer.code ?? 'Code answer provided');
+  if (questionKind === 'FILE_UPLOAD') {
+    const mediaAssetIds = Array.isArray(answer.mediaAssetIds) ? answer.mediaAssetIds : [];
+    return mediaAssetIds.length > 0 ? JSON.stringify(mediaAssetIds) : 'No submitted files';
+  }
   return JSON.stringify(answer);
 }
 

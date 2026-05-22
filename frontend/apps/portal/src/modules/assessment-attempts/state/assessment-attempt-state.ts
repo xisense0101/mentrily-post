@@ -13,7 +13,7 @@ interface CodeAnswerValue {
 
 const NON_ANSWERABLE_QUESTION_KINDS = new Set<AssessmentQuestionKindContract>(['READING_PASSAGE']);
 
-const PLACEHOLDER_QUESTION_KINDS = new Set<AssessmentQuestionKindContract>(['FILE_UPLOAD']);
+const PLACEHOLDER_QUESTION_KINDS = new Set<AssessmentQuestionKindContract>([]);
 
 export type AttemptTimerSeverity = 'normal' | 'warning' | 'urgent' | 'expired';
 
@@ -55,7 +55,7 @@ export function toAnswerPayload(input: {
     case 'NOTEBOOK':
       return { notebookJson: input.value };
     case 'FILE_UPLOAD':
-      return { fileIds: asStringArray(input.value) };
+      return { mediaAssetIds: asStringArray(input.value) };
     case 'RUBRIC_ONLY':
     case 'READING_PASSAGE':
       return {};
@@ -200,8 +200,8 @@ function isNonEmptyAnswer(answer: Record<string, unknown>): boolean {
     return typeof answer.sourceCode === 'string' && answer.sourceCode.trim().length > 0;
   }
 
-  if ('fileIds' in answer) {
-    return Array.isArray(answer.fileIds) && answer.fileIds.length > 0;
+  if ('mediaAssetIds' in answer) {
+    return Array.isArray(answer.mediaAssetIds) && answer.mediaAssetIds.length > 0;
   }
 
   if ('notebookJson' in answer) {

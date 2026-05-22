@@ -17,6 +17,13 @@ interface UseMediaUploadOptions {
   maxSizeBytes?: number;
   allowedCategories?: MediaFileCategoryContract[];
   onAssetsChanged?: (assets: MediaAssetContract[]) => void;
+  createUploadIntentInput?: ((input: {
+    file: File;
+    fileCategory: MediaFileCategoryContract;
+  }) => Partial<{
+    visibility: 'PRIVATE' | 'WORKSPACE';
+    metadata: Record<string, unknown>;
+  }>) | undefined;
 }
 
 export function useMediaUpload(options: UseMediaUploadOptions = {}) {
@@ -92,6 +99,12 @@ export function useMediaUpload(options: UseMediaUploadOptions = {}) {
           contentType: item.file.type || 'application/octet-stream',
           fileCategory: validation.fileCategory ?? item.fileCategory,
           maxSizeBytes: item.file.size,
+          ...(options.createUploadIntentInput
+            ? options.createUploadIntentInput({
+                file: item.file,
+                fileCategory: validation.fileCategory ?? item.fileCategory,
+              })
+            : {}),
         });
 
         patchItem(itemId, (current) => ({
@@ -142,7 +155,7 @@ export function useMediaUpload(options: UseMediaUploadOptions = {}) {
         controllersRef.current.delete(itemId);
       }
     },
-    [items, options.onAssetsChanged, patchItem, validationOptions],
+    [items, options.createUploadIntentInput, options.onAssetsChanged, patchItem, validationOptions],
   );
 
   const startUpload = useCallback(async () => {

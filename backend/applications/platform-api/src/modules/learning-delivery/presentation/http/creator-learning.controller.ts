@@ -18,6 +18,7 @@ import { AddLearningLessonInput } from '../../application/dto/add-learning-lesso
 import { ReorderLearningSectionsInput } from '../../application/dto/reorder-learning-sections.dto.js';
 import { ReorderLearningLessonsInput } from '../../application/dto/reorder-learning-lessons.dto.js';
 import { PublishLearningCourseInput } from '../../application/dto/publish-learning-course.dto.js';
+import { MediaAssetRepository } from '../../../media-library/domain/repositories/index.js';
 import { mapCourseToResponse } from '../../application/mappers/learning-course-response.mapper.js';
 
 @Controller('/workspace/learning/courses')
@@ -43,6 +44,8 @@ export class CreatorLearningController {
     private readonly publishCourse: PublishLearningCourseUseCase,
     @Inject(ArchiveLearningCourseUseCase)
     private readonly archiveCourse: ArchiveLearningCourseUseCase,
+    @Inject(MediaAssetRepository)
+    private readonly mediaAssetRepo: MediaAssetRepository,
   ) {}
 
   private requestContext(request: FastifyRequest): RequestContext {
@@ -57,19 +60,23 @@ export class CreatorLearningController {
   @Post()
   async create(@Req() request: FastifyRequest, @Body() body: CreateLearningCourseInput) {
     const course = await this.createCourse.execute(this.requestContext(request), body);
-    return mapCourseToResponse(course);
+    return await mapCourseToResponse(course, this.mediaAssetRepo);
   }
 
   @Get()
   async list(@Req() request: FastifyRequest) {
     const courses = await this.listCourses.execute(this.requestContext(request));
-    return courses.map((course) => mapCourseToResponse(course));
+    const results = [];
+    for (const course of courses) {
+      results.push(await mapCourseToResponse(course, this.mediaAssetRepo));
+    }
+    return results;
   }
 
   @Get('/:courseId')
   async getOne(@Req() request: FastifyRequest, @Param('courseId') courseId: string) {
     const course = await this.getCourse.execute(this.requestContext(request), courseId);
-    return mapCourseToResponse(course);
+    return await mapCourseToResponse(course, this.mediaAssetRepo);
   }
 
   @Patch('/:courseId')
@@ -79,7 +86,7 @@ export class CreatorLearningController {
     @Body() body: UpdateLearningCourseInput,
   ) {
     const course = await this.updateCourse.execute(this.requestContext(request), courseId, body);
-    return mapCourseToResponse(course);
+    return await mapCourseToResponse(course, this.mediaAssetRepo);
   }
 
   @Post('/:courseId/sections')
@@ -89,7 +96,7 @@ export class CreatorLearningController {
     @Body() body: AddLearningSectionInput,
   ) {
     const course = await this.addSection.execute(this.requestContext(request), courseId, body);
-    return mapCourseToResponse(course);
+    return await mapCourseToResponse(course, this.mediaAssetRepo);
   }
 
   @Post('/:courseId/sections/:sectionId/lessons')
@@ -105,7 +112,7 @@ export class CreatorLearningController {
       sectionId,
       body,
     );
-    return mapCourseToResponse(course);
+    return await mapCourseToResponse(course, this.mediaAssetRepo);
   }
 
   @Patch('/:courseId/sections/reorder')
@@ -115,7 +122,7 @@ export class CreatorLearningController {
     @Body() body: ReorderLearningSectionsInput,
   ) {
     const course = await this.reorderSections.execute(this.requestContext(request), courseId, body);
-    return mapCourseToResponse(course);
+    return await mapCourseToResponse(course, this.mediaAssetRepo);
   }
 
   @Patch('/:courseId/sections/:sectionId/lessons/reorder')
@@ -131,7 +138,7 @@ export class CreatorLearningController {
       sectionId,
       body,
     );
-    return mapCourseToResponse(course);
+    return await mapCourseToResponse(course, this.mediaAssetRepo);
   }
 
   @Post('/:courseId/publish')
@@ -141,12 +148,12 @@ export class CreatorLearningController {
     @Body() body: PublishLearningCourseInput,
   ) {
     const course = await this.publishCourse.execute(this.requestContext(request), courseId, body);
-    return mapCourseToResponse(course);
+    return await mapCourseToResponse(course, this.mediaAssetRepo);
   }
 
   @Post('/:courseId/archive')
   async archive(@Req() request: FastifyRequest, @Param('courseId') courseId: string) {
     const course = await this.archiveCourse.execute(this.requestContext(request), courseId);
-    return mapCourseToResponse(course);
+    return await mapCourseToResponse(course, this.mediaAssetRepo);
   }
 }

@@ -11,6 +11,7 @@ import {
   TransactionRunner,
 } from '@mentrily/service-core';
 import { PermissionCatalog } from '@mentrily/security-toolkit';
+import { MediaAssetRepository } from '../../../media-library/domain/repositories/index.js';
 import {
   Assessment,
   AssessmentVersion,
@@ -33,12 +34,18 @@ import { createAssessmentCreatedEvent } from '../../domain/events/index.js';
 import { AssessmentEventPublisherService } from '../services/index.js';
 import { mapAssessmentToResponse } from '../mappers/index.js';
 import { CreateAssessmentInput, AssessmentResponse } from '../dto/index.js';
-import { requireAssessmentActor } from '../support/index.js';
+import {
+  normalizeFileUploadConfig,
+  requireAssessmentActor,
+  validateQuestionAttachments,
+  writeQuestionMediaState,
+} from '../support/index.js';
 
 @Injectable()
 export class CreateAssessmentUseCase {
   constructor(
     @Inject(AssessmentRepository) private readonly repo: AssessmentRepository,
+    @Inject(MediaAssetRepository) private readonly mediaAssetRepository: MediaAssetRepository,
     @Inject(PERMISSION_EVALUATOR) private readonly permissionEvaluator: PermissionEvaluator,
     @Inject(TRANSACTION_RUNNER) private readonly transactionRunner: TransactionRunner,
     @Inject(AUDIT_RECORDER) private readonly auditRecorder: AuditRecorder,
@@ -63,16 +70,24 @@ export class CreateAssessmentUseCase {
       const assessmentId = randomUUID();
       const versionId = randomUUID();
 
-      const sections = (input.sections ?? []).map((s) =>
-        AssessmentSection.create({
+      const sections = await Promise.all(
+        (input.sections ?? []).map(async (s) =>
+          AssessmentSection.create({
           id: s.id,
           assessmentId,
           title: s.title,
           ...(s.description !== undefined ? { description: s.description } : {}),
           position: s.position,
           metadata: s.metadata ?? {},
-          questions: s.questions.map((q) =>
-            AssessmentQuestion.create({
+          questions: await Promise.all(
+            s.questions.map(async (q) => {
+              const attachments = await validateQuestionAttachments({
+                assetRepository: this.mediaAssetRepository,
+                context,
+                attachments: q.attachments,
+              });
+
+              return AssessmentQuestion.create({
               id: q.id,
               assessmentId,
               sectionId: s.id,
@@ -96,14 +111,27 @@ export class CreateAssessmentUseCase {
               points: QuestionPoints.create(q.points),
               gradingMode: q.gradingMode as unknown as GradingMode,
               position: q.position,
-              metadata: q.metadata ?? {},
+              metadata: writeQuestionMediaState({
+                metadata: q.metadata ?? {},
+                attachments,
+                fileUploadConfig: normalizeFileUploadConfig(q.fileUploadConfig),
+              }),
+            });
             }),
           ),
         }),
+        ),
       );
 
-      const looseQuestions = (input.looseQuestions ?? []).map((q) =>
-        AssessmentQuestion.create({
+      const looseQuestions = await Promise.all(
+        (input.looseQuestions ?? []).map(async (q) => {
+          const attachments = await validateQuestionAttachments({
+            assetRepository: this.mediaAssetRepository,
+            context,
+            attachments: q.attachments,
+          });
+
+          return AssessmentQuestion.create({
           id: q.id,
           assessmentId,
           kind: q.kind as unknown as QuestionKind,
@@ -126,7 +154,12 @@ export class CreateAssessmentUseCase {
           points: QuestionPoints.create(q.points),
           gradingMode: q.gradingMode as unknown as GradingMode,
           position: q.position,
-          metadata: q.metadata ?? {},
+          metadata: writeQuestionMediaState({
+            metadata: q.metadata ?? {},
+            attachments,
+            fileUploadConfig: normalizeFileUploadConfig(q.fileUploadConfig),
+          }),
+        });
         }),
       );
 

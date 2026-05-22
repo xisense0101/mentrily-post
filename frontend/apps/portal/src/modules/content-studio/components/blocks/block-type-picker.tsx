@@ -11,6 +11,9 @@ const KINDS: Array<{ kind: BlockContentKindContract; label: string }> = [
   { kind: 'CODE', label: 'Code' },
   { kind: 'CALLOUT', label: 'Callout' },
   { kind: 'DIVIDER', label: 'Divider' },
+  { kind: 'IMAGE', label: 'Image' },
+  { kind: 'VIDEO', label: 'Video' },
+  { kind: 'FILE', label: 'File' },
 ];
 
 export function BlockTypePicker({ onPick }: BlockTypePickerProps) {

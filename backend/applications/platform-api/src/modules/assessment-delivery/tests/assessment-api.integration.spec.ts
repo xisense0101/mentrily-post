@@ -12,6 +12,10 @@ import { PrismaService } from '@mentrily/data-platform';
 import { truncatePublicSchema } from '@mentrily/testing-toolkit';
 import { AppModule } from '../../app.module.js';
 import { registerCorrelationIdHook } from '../../../foundation/correlation-id.hook.js';
+import {
+  FixtureObjectStorageAdapter,
+  OBJECT_STORAGE_PORT,
+} from '../../media-library/infrastructure/index.js';
 
 describe('Assessment Delivery API (integration)', () => {
   let app: NestFastifyApplication;
@@ -42,6 +46,8 @@ describe('Assessment Delivery API (integration)', () => {
       .useValue(permissionEvaluator)
       .overrideProvider(TRANSACTION_RUNNER)
       .useValue(transactionRunner)
+      .overrideProvider(OBJECT_STORAGE_PORT)
+      .useValue(new FixtureObjectStorageAdapter())
       .compile();
 
     app = moduleRef.createNestApplication<NestFastifyApplication>(new FastifyAdapter(), {
@@ -87,6 +93,35 @@ describe('Assessment Delivery API (integration)', () => {
     }
 
     throw new Error(`Assessment ${created.id} was not visible after create`);
+  }
+
+  async function createQuestionAttachmentAsset() {
+    const createIntentRes = await app.inject({
+      method: 'POST',
+      url: '/workspace/media/upload-intents',
+      headers,
+      payload: {
+        filename: 'rubric.pdf',
+        contentType: 'application/pdf',
+        fileCategory: 'DOCUMENT',
+        maxSizeBytes: 2048,
+        metadata: {
+          assessmentUsage: 'ASSESSMENT_QUESTION_ATTACHMENT',
+        },
+      },
+    });
+    expectHttpStatus(createIntentRes, 201);
+    const intent = createIntentRes.json<{ id: string; assetId: string }>();
+
+    const completeRes = await app.inject({
+      method: 'POST',
+      url: `/workspace/media/upload-intents/${intent.id}/complete`,
+      headers,
+      payload: { sizeBytes: 1024 },
+    });
+    expectHttpStatus(completeRes, 201);
+
+    return intent.assetId;
   }
 
   async function truncateWithRetry(): Promise<void> {
@@ -203,6 +238,50 @@ describe('Assessment Delivery API (integration)', () => {
     });
     expectHttpStatus(replaceRes, 200);
     expect(replaceRes.json().currentDraftVersion.sections).toHaveLength(1);
+  });
+
+  it('creator can attach media library assets to file upload questions without exposing storage keys', async () => {
+    const created = await createDraftAssessment();
+    const assetId = await createQuestionAttachmentAsset();
+
+    const replaceRes = await app.inject({
+      method: 'PUT',
+      url: `/workspace/assessments/${created.id}/content`,
+      headers,
+      payload: {
+        sections: [],
+        looseQuestions: [
+          {
+            id: '11111111-1111-4111-8111-111111111199',
+            kind: 'FILE_UPLOAD',
+            title: 'Upload project file',
+            prompt: { text: 'Upload the requested project file.' },
+            options: [],
+            points: 2,
+            gradingMode: 'MANUAL',
+            position: 0,
+            attachments: [{ mediaAssetId: assetId }],
+            fileUploadConfig: {
+              allowedFileCategories: ['DOCUMENT'],
+              allowedContentTypes: ['application/pdf'],
+              maxFiles: 1,
+              maxFileSizeBytes: 1024 * 1024,
+            },
+          },
+        ],
+      },
+    });
+    expectHttpStatus(replaceRes, 200);
+    expect(replaceRes.json().currentDraftVersion.looseQuestions[0]).toMatchObject({
+      kind: 'FILE_UPLOAD',
+      attachments: [expect.objectContaining({ mediaAssetId: assetId, filename: 'rubric.pdf' })],
+      fileUploadConfig: {
+        allowedFileCategories: ['DOCUMENT'],
+        allowedContentTypes: ['application/pdf'],
+        maxFiles: 1,
+      },
+    });
+    expect(replaceRes.body).not.toContain('objectKey');
   });
 
   it('creator can publish assessment', async () => {

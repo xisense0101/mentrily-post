@@ -11,7 +11,6 @@ export function mapMediaAssetToResponse(asset: MediaAsset): MediaAssetResponse {
     ...(asset.sizeBytes !== undefined ? { sizeBytes: asset.sizeBytes } : {}),
     ...(asset.checksumSha256 ? { checksumSha256: asset.checksumSha256 } : {}),
     storageProvider: asset.storageProvider,
-    objectKey: asset.objectKey,
     visibility: asset.visibility,
     status: asset.status,
     metadata: { ...asset.metadata },

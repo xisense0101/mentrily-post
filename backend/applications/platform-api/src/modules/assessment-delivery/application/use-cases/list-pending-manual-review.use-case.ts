@@ -12,7 +12,11 @@ import {
   AssessmentManualReviewQueueResponse,
 } from '../dto/index.js';
 import { mapAssessmentManualReviewItemToResponse } from '../mappers/index.js';
-import { requireAssessmentActor } from '../support/index.js';
+import {
+  readFileUploadAnswerMediaAssetIds,
+  readSubmittedFiles,
+  requireAssessmentActor,
+} from '../support/index.js';
 
 function asRecord(value: unknown): Record<string, unknown> {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) {
@@ -122,7 +126,13 @@ export class ListPendingManualReviewUseCase {
         ...(record.feedback && typeof record.feedback === 'object'
           ? { currentFeedback: asRecord(record.feedback) }
           : {}),
-        learnerAnswer: asRecord(record.answer.answer),
+        learnerAnswer:
+          record.questionKind === 'FILE_UPLOAD'
+            ? { mediaAssetIds: readFileUploadAnswerMediaAssetIds(asRecord(record.answer.answer)) }
+            : asRecord(record.answer.answer),
+        ...(record.questionKind === 'FILE_UPLOAD'
+          ? { submittedFiles: readSubmittedFiles(asRecord(record.answer.answer)) }
+          : {}),
         learnerPrincipalId: record.attempt.learnerPrincipalId,
         ...(record.attempt.assessment.title
           ? { assessmentTitle: record.attempt.assessment.title }

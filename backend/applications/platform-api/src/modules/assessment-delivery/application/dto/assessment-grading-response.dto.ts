@@ -3,6 +3,7 @@ import type {
   AssessmentGradingMethodContract,
   AssessmentGradingRunStatusContract,
   AssessmentQuestionKindContract,
+  AssessmentSubmittedFileContract,
 } from '@mentrily/contract-catalog';
 
 export interface AssessmentAnswerGradeResponse {
@@ -56,6 +57,7 @@ export interface AssessmentManualReviewItemResponse {
   currentScore?: number;
   currentFeedback?: Record<string, unknown>;
   learnerAnswer: Record<string, unknown>;
+  submittedFiles?: AssessmentSubmittedFileContract[] | undefined;
   learnerPrincipalId: string;
   assessmentTitle?: string;
   submittedAt?: string;
