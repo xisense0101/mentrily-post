@@ -1,6 +1,11 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma.service.js';
-import type { OutboxRecord, OutboxEvent, RequestContext, TransactionContext } from '@mentrily/service-core';
+import type {
+  OutboxRecord,
+  OutboxEvent,
+  RequestContext,
+  TransactionContext,
+} from '@mentrily/service-core';
 import { OutboxMessageStatus as ContractOutboxMessageStatus } from '@mentrily/service-core';
 import { OutboxMessageStatus as OutboxMessageStatusDB, Prisma } from '@prisma/client';
 import type { OutboxMessage as PrismaOutboxMessage } from '@prisma/client';
@@ -27,6 +32,20 @@ export function isUniqueEventIdViolation(error: unknown): boolean {
   }
 
   return false;
+}
+
+function isUnknownUniqueViolation(error: unknown): boolean {
+  if (
+    !error ||
+    typeof error !== 'object' ||
+    !('code' in error) ||
+    (error as { code?: unknown }).code !== 'P2002'
+  ) {
+    return false;
+  }
+
+  const target = (error as { meta?: { target?: unknown } }).meta?.target;
+  return target === undefined || target === null;
 }
 
 /**
@@ -80,7 +99,7 @@ export class OutboxRepository {
 
       return this.mapToContract(record);
     } catch (error) {
-      if (isUniqueEventIdViolation(error)) {
+      if (isUniqueEventIdViolation(error) || isUnknownUniqueViolation(error)) {
         const existing = await client.outboxMessage.findUnique({
           where: { eventId: event.eventId },
         });
@@ -262,7 +281,10 @@ export class OutboxRepository {
    * @param messageId - The outbox message ID
    * @returns The outbox record or null if not found
    */
-  async findById(messageId: string, transaction?: TransactionContext): Promise<OutboxRecord | null> {
+  async findById(
+    messageId: string,
+    transaction?: TransactionContext,
+  ): Promise<OutboxRecord | null> {
     const client = getPrismaClient(this.prisma, transaction);
     const record = await client.outboxMessage.findUnique({
       where: { id: messageId },

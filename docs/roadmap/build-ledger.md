@@ -119,6 +119,61 @@ This document serves as a permanent continuity/backtrace system for the Mentrily
 
 ---
 
+### Task 013D3 — Validation Remediation Continuation
+
+- **Task ID**: 013D3
+- **Previous Task**: Task 013D2 — Media Template/Hook Validation Remediation Continuation
+- **Root Issue**:
+  - 013D2 fixed the known validation bugs, but did not close the full root/integration/E2E validation sequence or record ledger continuity.
+- **Files Changed**:
+  - `backend/applications/platform-api/src/modules/assessment-delivery/tests/assessment-api.integration.spec.ts`
+  - `backend/packages/data-platform/src/outbox/outbox.repository.ts`
+  - `backend/packages/data-platform/src/outbox/__tests__/outbox.repository.spec.ts`
+  - `docs/roadmap/build-ledger.md`
+- **Fixes Made**:
+  - reran the remaining root validation sequentially after clearing stale Next build processes and `.next/lock`
+  - confirmed the assessment integration helper fix remains stable under the full integration sweep
+  - confirmed the outbox duplicate `eventId` fallback path remains stable under DB-backed integration runs
+  - reran the full named E2E regression list sequentially to avoid `EADDRINUSE: 3001` harness collisions
+  - reran required safety scans to confirm there was no 013D/013C1 media safety regression
+- **Validation Performed**:
+  - `git status --short`: **PASS**
+  - `pkill -f "next build" || true`: **PASS**
+  - `pkill -f "next dev" || true`: **PASS**
+  - `pkill -f "node.*next" || true`: **PASS**
+  - `rm -f frontend/apps/portal/.next/lock`: **PASS**
+  - `pnpm build`: **PASS**
+  - `pnpm test:integration`: **PASS**
+  - `pnpm test:e2e`: **PASS**
+  - `pnpm e2e:content`: **PASS**
+  - `pnpm e2e:learning`: **PASS**
+  - `pnpm e2e:assessment`: **PASS**
+  - `pnpm e2e:assessment-attempt`: **PASS**
+  - `pnpm e2e:assessment-grading`: **PASS**
+  - `pnpm e2e:assessment-result`: **PASS**
+  - `pnpm e2e:assessment-reliability`: **PASS**
+  - `pnpm lint`: **PASS**
+  - `pnpm typecheck`: **PASS**
+  - `pnpm test`: **PASS**
+  - `pnpm build` (final root confirmation rerun): **PASS**
+  - `pnpm test:integration` (final root confirmation rerun): **PASS**
+  - `pnpm test:e2e` (final root confirmation rerun): **PASS**
+- **Safety Scan Outputs**:
+  - `grep -R "eval(" backend/applications/platform-api/src/modules/media-library backend/applications/platform-worker/src frontend/apps/portal/src/modules/media-library || true`: **no matches**
+  - `grep -R "new Function" backend/applications/platform-api/src/modules/media-library backend/applications/platform-worker/src frontend/apps/portal/src/modules/media-library || true`: **no matches**
+  - `grep -R "storageKey" frontend/apps/portal/src/modules/media-library frontend/apps/portal/src/modules/assessment-builder frontend/apps/portal/src/modules/assessment-attempts frontend/apps/portal/src/modules/content-studio frontend/apps/portal/src/modules/learning-delivery || true`: **no matches**
+  - `grep -R "objectKey" frontend/apps/portal/src/modules/media-library frontend/apps/portal/src/modules/assessment-builder frontend/apps/portal/src/modules/assessment-attempts frontend/apps/portal/src/modules/content-studio frontend/apps/portal/src/modules/learning-delivery || true`: **no matches**
+  - `grep -R "base64" backend/applications/platform-api/src/modules/media-library frontend/apps/portal/src/modules/media-library || true`: existing negative test assertion only in `frontend/apps/portal/src/modules/media-library/tests/media-library-api-client.spec.ts`
+- **Remaining Gaps**:
+  - real heavy video/audio transcoding remains future work
+  - real document preview generation remains future work
+  - real production CDN integration remains future work
+  - real production antivirus integration remains future work
+  - communication event wiring remains future work
+- **Next Recommended Task**: Task 013E — Communication Event Wiring
+
+---
+
 ### Task 012D1 — Outbox/Scheduler Remediation
 
 - **Task ID**: 012D1

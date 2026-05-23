@@ -268,6 +268,57 @@ describe('OutboxRepository', () => {
     expect(prismaMock.outboxMessage.findUnique).toHaveBeenCalledTimes(1);
   });
 
+  it('returns existing record when Prisma omits duplicate target metadata', async () => {
+    const event: OutboxEvent = {
+      eventId: 'evt-dupe-no-target',
+      eventName: 'identity.membership.granted.v1',
+      eventVersion: 1,
+      correlationId: 'corr-dupe-no-target',
+      occurredAt: new Date().toISOString(),
+      payload: { principalId: 'principal-original' },
+    };
+
+    const context: RequestContext = {
+      requestId: 'req-dupe-no-target',
+      correlationId: 'corr-dupe-no-target',
+      timestamp: new Date().toISOString(),
+    };
+
+    const existingRecord = {
+      id: 'msg-existing-no-target',
+      eventId: event.eventId,
+      eventName: event.eventName,
+      eventVersion: event.eventVersion,
+      tenantId: null,
+      workspaceId: null,
+      correlationId: event.correlationId,
+      idempotencyKey: null,
+      payload: event.payload,
+      occurredAt: new Date(event.occurredAt),
+      status: OutboxMessageStatus.PENDING,
+      attemptCount: 0,
+      availableAt: new Date(),
+      publishedAt: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+
+    prismaMock.outboxMessage.create.mockRejectedValue(
+      new Prisma.PrismaClientKnownRequestError('duplicate', {
+        code: 'P2002',
+        clientVersion: '4.0.0',
+      }),
+    );
+    prismaMock.outboxMessage.findUnique.mockResolvedValue(existingRecord);
+
+    const result = await repository.append(event, context);
+
+    expect(result.id).toBe(existingRecord.id);
+    expect(prismaMock.outboxMessage.findUnique).toHaveBeenCalledWith({
+      where: { eventId: event.eventId },
+    });
+  });
+
   it('rethrows unrelated unique violations', async () => {
     const event: OutboxEvent = {
       eventId: 'evt-other-unique',
@@ -461,7 +512,9 @@ describe('OutboxRepository', () => {
     const claimedTwo = { ...candidateTwo, status: OutboxMessageStatus.PROCESSING };
 
     prismaMock.outboxMessage.findMany.mockResolvedValue([candidateOne, candidateTwo]);
-    prismaMock.outboxMessage.updateMany.mockResolvedValueOnce({ count: 1 }).mockResolvedValueOnce({ count: 1 });
+    prismaMock.outboxMessage.updateMany
+      .mockResolvedValueOnce({ count: 1 })
+      .mockResolvedValueOnce({ count: 1 });
     prismaMock.outboxMessage.findUnique
       .mockResolvedValueOnce(claimedOne)
       .mockResolvedValueOnce(claimedTwo);
@@ -541,8 +594,9 @@ describe('OutboxRepository', () => {
     // Mock returns 3 items, but claimPendingBatch(2) should only process 2
     prismaMock.outboxMessage.findMany.mockResolvedValue(candidates);
     prismaMock.outboxMessage.updateMany.mockResolvedValue({ count: 1 });
-    prismaMock.outboxMessage.findUnique.mockImplementation(async ({ where }: { where: { id: string } }) =>
-      candidates.find((candidate) => candidate.id === where.id),
+    prismaMock.outboxMessage.findUnique.mockImplementation(
+      async ({ where }: { where: { id: string } }) =>
+        candidates.find((candidate) => candidate.id === where.id),
     );
 
     const claimed = await repository.claimPendingBatch(2);
@@ -641,10 +695,16 @@ describe('OutboxRepository', () => {
       occurredAt: new Date().toISOString(),
       payload: {},
     };
-    const context: RequestContext = { requestId: 'req', correlationId: 'corr', timestamp: new Date().toISOString() };
+    const context: RequestContext = {
+      requestId: 'req',
+      correlationId: 'corr',
+      timestamp: new Date().toISOString(),
+    };
     const txClient = {
       outboxMessage: {
-        create: vi.fn().mockResolvedValue({ id: 'tx-msg', occurredAt: new Date(), createdAt: new Date() }),
+        create: vi
+          .fn()
+          .mockResolvedValue({ id: 'tx-msg', occurredAt: new Date(), createdAt: new Date() }),
       },
     };
     const transaction = { transactionId: 'tx-id', client: txClient };

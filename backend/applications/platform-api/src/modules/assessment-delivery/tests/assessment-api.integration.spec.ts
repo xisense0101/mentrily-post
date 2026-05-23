@@ -82,17 +82,18 @@ describe('Assessment Delivery API (integration)', () => {
     const created = createRes.json<{ id: string }>();
 
     for (let attempt = 0; attempt < 10; attempt += 1) {
-      const persisted = await prisma.assessment.findUnique({
-        where: { id: created.id },
-        select: { id: true },
+      const readRes = await app.inject({
+        method: 'GET',
+        url: `/workspace/assessments/${created.id}`,
+        headers,
       });
-      if (persisted) {
+      if (readRes.statusCode === 200) {
         return created;
       }
       await new Promise((resolve) => setTimeout(resolve, 50 * (attempt + 1)));
     }
 
-    throw new Error(`Assessment ${created.id} was not visible after create`);
+    throw new Error(`Assessment ${created.id} was not readable after create`);
   }
 
   async function createQuestionAttachmentAsset() {
