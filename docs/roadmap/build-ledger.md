@@ -2,6 +2,54 @@
 
 This document serves as a permanent continuity/backtrace system for the Mentrily SaaS codebase. Every task must record its progress here to ensure a reliable audit trail and clear path forward.
 
+### Task 013E1 — Communication Event Wiring Remediation
+
+- **Task ID**: 013E1
+- **Previous Task**: Task 013E — Communication Event Wiring
+- **Work Completed**:
+  - Removed hardcoded fake phoneNumber `+15555555555` from recipients.
+  - Implemented dynamic phone number resolution by querying user's `ExternalIdentity` metadata for `phoneNumber` or `phone_number`.
+  - Configured `IN_APP` notification channel to be enabled by default.
+  - Implemented strict opt-in verification and feature-flag checks for `EMAIL` (`process.env.ENABLE_EMAIL_NOTIFICATIONS`) and `SMS` (`process.env.ENABLE_SMS_NOTIFICATIONS`) channels, suppressing intents if the flags or explicitly configured preferences are missing/disabled.
+  - Restructured all outbox event payload extractions from arbitrary casts (`as Record<string, any>`) to typed, narrow validated payloads using a safe runtime schema validator.
+  - Restricted `assessment.published` event notification to assessment owner and workspace admins (creator/admin confirmation), preventing broad spam to all workspace members.
+  - Sanitized security scan `resultMessage` inside `MediaSecurityScanCompletedInboxHandler` to present safe, generic descriptions (`Suspicious content detected` or `Unable to verify file safety due to a system error`) and avoid leaking raw scanner or internal system details.
+  - Expanded integration tests in `communication-wiring.integration.spec.ts` to assert default IN_APP only delivery, opt-in flag/preference checks, dynamic contact verification, media quarantine message sanitization, and various domain event mappings.
+- **Validation Performed**:
+  - `pnpm lint`: **PASS** (0 errors)
+  - `pnpm typecheck`: **PASS** (all 13 packages compile cleanly)
+  - `pnpm build`: **PASS** (successful workspace build)
+  - `pnpm test`: **PASS** (all unit and worker tests pass)
+  - `pnpm test:integration`: **PASS** (all integration tests pass, including the new communication wiring specs)
+  - `pnpm test:e2e`: **PASS** (all Playwright E2E suites pass)
+- **Remaining Gaps**:
+  - real email provider integration (e.g., SendGrid/AWS SES)
+  - real SMS provider integration (e.g., Twilio)
+- **Next Recommended Task**: Task 013F — Real Provider Integration and Production Delivery Workers
+
+---
+
+### Task 013E — Communication Event Wiring
+
+- **Task ID**: 013E
+- **Previous Task**: Task 013D3 — Validation Remediation Continuation
+- **Work Completed**:
+  - Resolved compiler and database schema type validation errors in the communication event wiring integration spec by updating custom test values to use the valid `AssessmentPurpose` enum value (`QUIZ`).
+  - Adjusted default template and custom template test assertions to verify correct rendering using the `QUIZ` assessment purpose.
+  - Hardened unit testing mocks for `MediaProcessingWorker` and `MediaLifecycleWorker` by adding the missing `outboxMessage` transaction mapping.
+  - Successfully validated and passed the complete communication event wiring integration test suite (`communication-wiring.integration.spec.ts`).
+  - Executed the entire repository test suite, verifying all package unit, integration, and build validations are fully green.
+- **Validation Performed**:
+  - `pnpm --filter @mentrily/platform-worker test:integration src/inbox-processing/communication-wiring.integration.spec.ts`: **PASS** (all integration tests pass successfully)
+  - `pnpm --filter @mentrily/platform-worker test`: **PASS** (all unit and worker tests pass)
+  - `pnpm test`: **PASS** (all 13 tasks successful, all workspace unit/integration tests pass)
+- **Remaining Gaps**:
+  - real email provider integration (e.g., SendGrid/AWS SES)
+  - real SMS provider integration (e.g., Twilio)
+- **Next Recommended Task**: Task 013E1 — Communication Event Wiring Remediation
+
+---
+
 ### Task 013D — Media Transcoding Custom Templates & Hook Integration
 
 - **Task ID**: 013D

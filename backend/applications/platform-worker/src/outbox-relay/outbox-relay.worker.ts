@@ -1,8 +1,10 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 import { OutboxRepository } from '@mentrily/data-platform';
 import { OutboxRelayRunResult } from '@mentrily/event-catalog';
 import { EventDispatcherPort } from './event-dispatcher.port.js';
 import { RetryPolicy } from '../queues/retry-policy.js';
+
+console.log('OutboxRepository imported:', OutboxRepository);
 
 @Injectable()
 export class OutboxRelayWorker {
@@ -10,9 +12,14 @@ export class OutboxRelayWorker {
   private readonly retryPolicy = new RetryPolicy();
 
   constructor(
-    private readonly outboxRepository: OutboxRepository,
-    private readonly eventDispatcher: EventDispatcherPort,
-  ) {}
+    @Inject(OutboxRepository) private readonly outboxRepository: OutboxRepository,
+    @Inject(EventDispatcherPort) private readonly eventDispatcher: EventDispatcherPort,
+  ) {
+    console.log('OutboxRelayWorker constructor:', {
+      outboxRepository,
+      eventDispatcher,
+    });
+  }
 
   async runOnce(batchSize = 100, now: Date = new Date()): Promise<OutboxRelayRunResult> {
     const claimed = await this.outboxRepository.claimPendingBatch(batchSize, now);

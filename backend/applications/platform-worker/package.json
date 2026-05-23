@@ -8,7 +8,8 @@
     "build": "nest build",
     "start": "node dist/main.js",
     "lint": "eslint src",
-    "test": "vitest run --passWithNoTests",
+    "test": "vitest run --config vitest.config.ts",
+    "test:integration": "vitest run --config vitest.integration.config.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
@@ -23,6 +24,9 @@
   },
   "devDependencies": {
     "@nestjs/cli": "^11.0.7",
+    "@nestjs/testing": "^11.1.19",
+    "dotenv": "^17.4.2",
+    "vite-tsconfig-paths": "^5.1.4",
     "vitest": "^3.2.4"
   }
 }

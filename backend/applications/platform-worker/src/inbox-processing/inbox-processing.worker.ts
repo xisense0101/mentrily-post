@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 import { InboxRepository } from '@mentrily/data-platform';
 import { InboxProcessingRunResult } from '@mentrily/event-catalog';
 import { InboxHandlerRegistry } from './inbox-handler-registry.js';
@@ -8,8 +8,8 @@ export class InboxProcessingWorker {
   private readonly logger = new Logger(InboxProcessingWorker.name);
 
   constructor(
-    private readonly inboxRepository: InboxRepository,
-    private readonly handlerRegistry: InboxHandlerRegistry,
+    @Inject(InboxRepository) private readonly inboxRepository: InboxRepository,
+    @Inject(InboxHandlerRegistry) private readonly handlerRegistry: InboxHandlerRegistry,
   ) {}
 
   async runOnce(batchSize = 100): Promise<InboxProcessingRunResult> {

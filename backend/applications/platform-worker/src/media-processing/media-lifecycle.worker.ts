@@ -29,8 +29,8 @@ export class MediaLifecycleWorker {
 
       if (dueJobs.length === 0) return [];
 
-      const jobIds = dueJobs.map(j => j.id);
-      
+      const jobIds = dueJobs.map((j) => j.id);
+
       await tx.mediaLifecycleJob.updateMany({
         where: { id: { in: jobIds } },
         data: {
@@ -61,7 +61,9 @@ export class MediaLifecycleWorker {
           // Check if referenced
           const referenced = await this.isAssetReferenced(asset.id);
           if (referenced) {
-            this.logger.warn(`[Lifecycle Cleanup] Skipping deletion for asset ${asset.id} because it is actively referenced`);
+            this.logger.warn(
+              `[Lifecycle Cleanup] Skipping deletion for asset ${asset.id} because it is actively referenced`,
+            );
             await this.prisma.mediaLifecycleJob.update({
               where: { id: job.id },
               data: {
@@ -79,7 +81,9 @@ export class MediaLifecycleWorker {
           // Simulation of issuing object storage deletes
           this.logger.log(`[Storage Cleanup] Deleting origin object for asset: ${asset.id}`);
           for (const rendition of asset.renditions) {
-            this.logger.log(`[Storage Cleanup] Deleting rendition ${rendition.id} for asset: ${asset.id}`);
+            this.logger.log(
+              `[Storage Cleanup] Deleting rendition ${rendition.id} for asset: ${asset.id}`,
+            );
           }
 
           await this.prisma.$transaction(async (tx) => {
@@ -104,6 +108,24 @@ export class MediaLifecycleWorker {
                 status: 'SUCCEEDED',
                 lockedAt: null,
                 lockedBy: null,
+              },
+            });
+
+            await tx.outboxMessage.create({
+              data: {
+                id: crypto.randomUUID(),
+                eventId: crypto.randomUUID(),
+                eventName: 'media.lifecycle.deleted',
+                eventVersion: 1,
+                tenantId: asset.tenantId,
+                workspaceId: asset.workspaceId,
+                correlationId: `lifecycle-corr-${job.id}`,
+                payload: {
+                  assetId: asset.id,
+                  ownerPrincipalId: asset.ownerPrincipalId,
+                },
+                occurredAt: new Date(),
+                status: 'PENDING',
               },
             });
           });
@@ -133,7 +155,9 @@ export class MediaLifecycleWorker {
               attempts: nextAttempts,
               lockedAt: null,
               lockedBy: null,
-              ...(isDead ? {} : { runAfter: new Date(Date.now() + Math.pow(2, nextAttempts) * 1000) }),
+              ...(isDead
+                ? {}
+                : { runAfter: new Date(Date.now() + Math.pow(2, nextAttempts) * 1000) }),
               errorCode: 'CLEANUP_FAILED',
               errorMessage: error instanceof Error ? error.message : 'Unknown error',
             },

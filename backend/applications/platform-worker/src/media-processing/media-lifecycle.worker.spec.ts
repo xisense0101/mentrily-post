@@ -23,6 +23,9 @@ describe('MediaLifecycleWorker', () => {
       mediaRendition: {
         deleteMany: vi.fn(),
       },
+      outboxMessage: {
+        create: vi.fn(),
+      },
     };
 
     prismaMock = {
@@ -50,16 +53,20 @@ describe('MediaLifecycleWorker', () => {
   it('runs discovery routines and processes claimed delete jobs', async () => {
     // 1. Discovery mocks: expired uploads
     prismaMock.mediaAsset.findMany
-      .mockResolvedValueOnce([
-        { id: 'expired-1', workspaceId: 'ws-1' },
-      ]) // uncompleted upload (PENDING_UPLOAD > 24h)
+      .mockResolvedValueOnce([{ id: 'expired-1', workspaceId: 'ws-1' }]) // uncompleted upload (PENDING_UPLOAD > 24h)
       .mockResolvedValueOnce([
         { id: 'deleted-item-1', workspaceId: 'ws-1', status: 'DELETE_QUEUED' },
       ]); // items to delete
 
     // 2. Claim & Processing mocks
     txMock.mediaLifecycleJob.findMany.mockResolvedValueOnce([
-      { id: 'job-1', mediaAssetId: 'deleted-item-1', jobType: 'DELETE_ASSET', attempts: 0, maxAttempts: 3 },
+      {
+        id: 'job-1',
+        mediaAssetId: 'deleted-item-1',
+        jobType: 'DELETE_ASSET',
+        attempts: 0,
+        maxAttempts: 3,
+      },
     ]);
     prismaMock.mediaAsset.findUnique.mockResolvedValueOnce({
       id: 'deleted-item-1',
@@ -95,13 +102,17 @@ describe('MediaLifecycleWorker', () => {
 
   it('does not delete asset if it is actively referenced', async () => {
     // 1. Discovery mocks
-    prismaMock.mediaAsset.findMany
-      .mockResolvedValueOnce([])
-      .mockResolvedValueOnce([]);
+    prismaMock.mediaAsset.findMany.mockResolvedValueOnce([]).mockResolvedValueOnce([]);
 
     // 2. Claim & Processing mocks
     txMock.mediaLifecycleJob.findMany.mockResolvedValueOnce([
-      { id: 'job-2', mediaAssetId: 'referenced-item-1', jobType: 'DELETE_ASSET', attempts: 0, maxAttempts: 3 },
+      {
+        id: 'job-2',
+        mediaAssetId: 'referenced-item-1',
+        jobType: 'DELETE_ASSET',
+        attempts: 0,
+        maxAttempts: 3,
+      },
     ]);
     prismaMock.mediaAsset.findUnique.mockResolvedValueOnce({
       id: 'referenced-item-1',

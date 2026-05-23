@@ -17,7 +17,7 @@ export class MediaSecurityScanWorker {
 
   async runOnce(batchSize = 10): Promise<{ claimed: number; processed: number; failed: number }> {
     const now = new Date();
-    
+
     // 1. Claim jobs
     const claimedJobs = await this.prisma.$transaction(async (tx) => {
       const dueJobs = await tx.mediaSecurityScanJob.findMany({
@@ -32,8 +32,8 @@ export class MediaSecurityScanWorker {
 
       if (dueJobs.length === 0) return [];
 
-      const jobIds = dueJobs.map(j => j.id);
-      
+      const jobIds = dueJobs.map((j) => j.id);
+
       await tx.mediaSecurityScanJob.updateMany({
         where: { id: { in: jobIds } },
         data: {
@@ -130,7 +130,10 @@ export class MediaSecurityScanWorker {
         failed++;
         const nextAttempts = job.attempts + 1;
         const isDead = nextAttempts >= job.maxAttempts;
-        
+        const asset = await this.prisma.mediaAsset.findUnique({
+          where: { id: job.mediaAssetId },
+        });
+
         await this.prisma.$transaction(async (tx) => {
           await tx.mediaSecurityScanJob.update({
             where: { id: job.id },
@@ -139,7 +142,9 @@ export class MediaSecurityScanWorker {
               attempts: nextAttempts,
               lockedAt: null,
               lockedBy: null,
-              ...(isDead ? {} : { runAfter: new Date(Date.now() + Math.pow(2, nextAttempts) * 1000) }),
+              ...(isDead
+                ? {}
+                : { runAfter: new Date(Date.now() + Math.pow(2, nextAttempts) * 1000) }),
               resultCode: 'SCAN_FAILED',
               resultMessage: error instanceof Error ? error.message : 'Unknown error',
             },
@@ -153,6 +158,28 @@ export class MediaSecurityScanWorker {
               scanErrorMessage: error instanceof Error ? error.message : 'Unknown error',
             },
           });
+
+          if (isDead && asset) {
+            await tx.outboxMessage.create({
+              data: {
+                id: crypto.randomUUID(),
+                eventId: crypto.randomUUID(),
+                eventName: 'media.security_scan.completed',
+                eventVersion: 1,
+                tenantId: asset.tenantId,
+                workspaceId: asset.workspaceId,
+                correlationId: `scan-corr-${job.id}`,
+                payload: {
+                  assetId: asset.id,
+                  scanStatus: 'SCAN_FAILED',
+                  resultCode: 'SCAN_FAILED',
+                  resultMessage: error instanceof Error ? error.message : 'Unknown error',
+                },
+                occurredAt: new Date(),
+                status: 'PENDING',
+              },
+            });
+          }
         });
       }
     }

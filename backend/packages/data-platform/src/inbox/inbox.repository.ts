@@ -1,6 +1,11 @@
-import { Injectable } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma.service.js';
-import type { InboxRecord, InboxClaimResult, InboxMessageStatus, TransactionContext } from '@mentrily/service-core';
+import type {
+  InboxRecord,
+  InboxClaimResult,
+  InboxMessageStatus,
+  TransactionContext,
+} from '@mentrily/service-core';
 import { InboxMessageStatus as InboxMessageStatusDB, Prisma } from '@prisma/client';
 import type { InboxMessage as PrismaInboxMessage } from '@prisma/client';
 import { createHash } from 'crypto';
@@ -17,7 +22,7 @@ import { getPrismaClient } from '../transactions/transaction-client.js';
  */
 @Injectable()
 export class InboxRepository {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(@Inject(PrismaService) private readonly prisma: PrismaService) {}
 
   /**
    * Claim or create an inbound event record.
@@ -178,7 +183,10 @@ export class InboxRepository {
    * @param limit - Maximum number of rows to claim
    * @returns Claimed inbox records in PROCESSING state
    */
-  async claimReceivedBatch(limit: number, transaction?: TransactionContext): Promise<InboxRecord[]> {
+  async claimReceivedBatch(
+    limit: number,
+    transaction?: TransactionContext,
+  ): Promise<InboxRecord[]> {
     if (limit <= 0) {
       return [];
     }

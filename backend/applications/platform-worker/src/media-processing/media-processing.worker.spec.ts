@@ -19,6 +19,9 @@ describe('MediaProcessingWorker', () => {
       mediaAsset: {
         update: vi.fn(),
       },
+      outboxMessage: {
+        create: vi.fn(),
+      },
     };
 
     prismaMock = {
@@ -87,21 +90,20 @@ describe('MediaProcessingWorker', () => {
     prismaMock.$transaction.mockImplementationOnce(async (callback) =>
       callback({
         mediaProcessingJob: {
-          findMany: vi
-            .fn()
-            .mockResolvedValue([
-              {
-                id: 'job-1',
-                mediaAssetId: 'asset-1',
-                jobType: 'METADATA_EXTRACTION',
-                attempts: 0,
-                maxAttempts: 3,
-              },
-            ]),
+          findMany: vi.fn().mockResolvedValue([
+            {
+              id: 'job-1',
+              mediaAssetId: 'asset-1',
+              jobType: 'METADATA_EXTRACTION',
+              attempts: 0,
+              maxAttempts: 3,
+            },
+          ]),
           updateMany: vi.fn(),
           update: vi.fn(),
         },
         mediaAsset: { update: vi.fn() },
+        outboxMessage: { create: vi.fn() },
       } as never),
     );
     prismaMock.mediaAsset.findUnique.mockResolvedValue(asset);

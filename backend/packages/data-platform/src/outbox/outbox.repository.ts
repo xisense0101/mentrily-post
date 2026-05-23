@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma.service.js';
 import type {
   OutboxRecord,
@@ -59,7 +59,7 @@ function isUnknownUniqueViolation(error: unknown): boolean {
  */
 @Injectable()
 export class OutboxRepository {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(@Inject(PrismaService) private readonly prisma: PrismaService) {}
 
   /**
    * Append a new outbox message.

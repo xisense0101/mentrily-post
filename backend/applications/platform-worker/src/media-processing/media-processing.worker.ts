@@ -240,6 +240,24 @@ export class MediaProcessingWorker {
           metadata: toInputJsonValue(this.withProcessingMetadata(nextMetadata, summary)),
         },
       });
+
+      await tx.outboxMessage.create({
+        data: {
+          id: crypto.randomUUID(),
+          eventId: crypto.randomUUID(),
+          eventName: 'media.processing.succeeded',
+          eventVersion: 1,
+          tenantId: asset.tenantId,
+          workspaceId: asset.workspaceId,
+          correlationId: `proc-corr-${job.id}`,
+          payload: {
+            assetId: asset.id,
+            ownerPrincipalId: asset.ownerPrincipalId,
+          },
+          occurredAt: new Date(),
+          status: 'PENDING',
+        },
+      });
     });
   }
 
@@ -299,6 +317,27 @@ export class MediaProcessingWorker {
             metadata: toInputJsonValue(this.withProcessingMetadata(assetMetadata, summary)),
           },
         });
+
+        if (isDead) {
+          await tx.outboxMessage.create({
+            data: {
+              id: crypto.randomUUID(),
+              eventId: crypto.randomUUID(),
+              eventName: 'media.processing.failed',
+              eventVersion: 1,
+              tenantId: asset.tenantId,
+              workspaceId: asset.workspaceId,
+              correlationId: `proc-corr-${job.id}`,
+              payload: {
+                assetId: asset.id,
+                ownerPrincipalId: asset.ownerPrincipalId,
+                errorMessage: sanitizedMessage,
+              },
+              occurredAt: new Date(),
+              status: 'PENDING',
+            },
+          });
+        }
       }
     });
   }
