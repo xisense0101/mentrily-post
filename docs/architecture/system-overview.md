@@ -22,12 +22,15 @@
 ## Media Library status
 
 - Media Library backend/domain foundation exists in `platform-api`.
-- Real upload UI, media processing, virus scanning, and CDN delivery remain future work.
+- Upload UI, scan enforcement, lifecycle cleanup, and template-driven processing now exist behind internal worker flows.
+- Real image thumbnail generation is fixture-backed for the current repo and safe UI summaries are exposed to the portal.
+- Video/audio transcoding, document preview rendering, production CDN signing, and production antivirus provider integration remain deferred/reserved work.
+
 4. Application/domain layers execute use case with permission + entitlement checks.
 5. Writes persist to Postgres and emit outbox events.
 6. Worker and/or Go runtime process async/integration pipelines.
 7. Execution runtime now has a safe adapter boundary in `platform-api`, but the production default provider does not execute code and no learner-facing execution endpoint exists.
-7. Telemetry and audit trails are recorded through observability boundaries.
+8. Telemetry and audit trails are recorded through observability boundaries.
 
 ## Task 011H Update (2026-05-19)
 
@@ -41,6 +44,7 @@
 - `READING_PASSAGE` support now exists end to end across builder snapshots and learner rendering.
 - `FILE_UPLOAD` exists only as a placeholder boundary; real asset workflows remain part of the next Media Library phase.
 - Real code execution, notebook execution, AI grading, proctoring, and Learning Delivery/Content Studio linkage remain future work.
+
 ## Task 012B Update (2026-05-21)
 
 - Mentrily now has the Media Library frontend foundation in the portal app.

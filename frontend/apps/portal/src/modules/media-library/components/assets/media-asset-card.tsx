@@ -1,7 +1,11 @@
 'use client';
 
 import { useState } from 'react';
-import { formatMediaFileSize, getMediaAssetDisplayName, isPreviewableMediaAsset } from '../../state';
+import {
+  formatMediaFileSize,
+  getMediaAssetDisplayName,
+  isPreviewableMediaAsset,
+} from '../../state';
 import { MediaAssetStatusBadge, MediaSecurityScanBadge } from './media-asset-status-badge';
 import { MediaAssetPreview } from './media-asset-preview';
 import { useMediaReadUrl } from '../../hooks';
@@ -21,7 +25,14 @@ export function MediaAssetCard({ asset, onArchive }: MediaAssetCardProps) {
   return (
     <article
       data-testid="media-asset-card"
-      style={{ borderRadius: '1rem', border: '1px solid #dbe4ee', background: '#fff', padding: '1rem', display: 'grid', gap: '0.85rem' }}
+      style={{
+        borderRadius: '1rem',
+        border: '1px solid #dbe4ee',
+        background: '#fff',
+        padding: '1rem',
+        display: 'grid',
+        gap: '0.85rem',
+      }}
     >
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: '1rem' }}>
         <div>
@@ -30,7 +41,14 @@ export function MediaAssetCard({ asset, onArchive }: MediaAssetCardProps) {
             {asset.fileCategory} · {asset.contentType} · {formatMediaFileSize(asset.sizeBytes)}
           </p>
         </div>
-        <div style={{ display: 'flex', gap: '0.35rem', flexDirection: 'column', alignItems: 'flex-end' }}>
+        <div
+          style={{
+            display: 'flex',
+            gap: '0.35rem',
+            flexDirection: 'column',
+            alignItems: 'flex-end',
+          }}
+        >
           <MediaAssetStatusBadge status={asset.status} />
           {asset.scanStatus ? <MediaSecurityScanBadge scanStatus={asset.scanStatus} /> : null}
         </div>
@@ -38,6 +56,15 @@ export function MediaAssetCard({ asset, onArchive }: MediaAssetCardProps) {
       <div style={{ fontSize: '0.9rem', color: '#64748b' }}>
         <div>Created: {new Date(asset.createdAt).toLocaleString()}</div>
         <div>Updated: {new Date(asset.updatedAt).toLocaleString()}</div>
+        {asset.processingTemplate ? <div>Template: {asset.processingTemplate.name}</div> : null}
+        {asset.processingSummary ? (
+          <div>
+            Renditions:{' '}
+            {asset.processingSummary.plannedRenditions
+              .map((rendition) => `${rendition.label} (${rendition.status.toLowerCase()})`)
+              .join(', ')}
+          </div>
+        ) : null}
       </div>
       {previewRequested && canPreview ? (
         loading ? (
@@ -49,10 +76,14 @@ export function MediaAssetCard({ asset, onArchive }: MediaAssetCardProps) {
         )
       ) : null}
       {!canPreview && ['UPLOADED', 'PROCESSING_QUEUED', 'PROCESSING'].includes(asset.status) ? (
-        <p style={{ color: '#854d0e', margin: 0, fontSize: '0.9rem' }}>Media is currently being processed...</p>
+        <p style={{ color: '#854d0e', margin: 0, fontSize: '0.9rem' }}>
+          Media is currently being processed...
+        </p>
       ) : null}
       {asset.status === 'PROCESSING_FAILED' ? (
-        <p style={{ color: '#9f1239', margin: 0, fontSize: '0.9rem' }}>Media processing failed. File may be unreadable.</p>
+        <p style={{ color: '#9f1239', margin: 0, fontSize: '0.9rem' }}>
+          Media processing failed. File may be unreadable.
+        </p>
       ) : null}
       <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
         {canPreview ? (
@@ -68,7 +99,11 @@ export function MediaAssetCard({ asset, onArchive }: MediaAssetCardProps) {
           </button>
         ) : null}
         {asset.status !== 'ARCHIVED' ? (
-          <button data-testid="media-archive-button" type="button" onClick={() => void onArchive(asset.id)}>
+          <button
+            data-testid="media-archive-button"
+            type="button"
+            onClick={() => void onArchive(asset.id)}
+          >
             Archive
           </button>
         ) : null}

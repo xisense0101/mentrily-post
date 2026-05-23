@@ -72,7 +72,6 @@ describe('MediaLibraryPage', () => {
           sizeBytes: 200,
           checksumSha256: 'hash',
           storageProvider: 'FIXTURE',
-          objectKey: 'media/example.png',
           visibility: 'PRIVATE',
           status: 'AVAILABLE',
           metadata: {},

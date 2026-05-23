@@ -2,6 +2,8 @@ import type {
   MediaAssetStatusContract,
   MediaAssetVisibilityContract,
   MediaFileCategoryContract,
+  MediaProcessingSummaryContract,
+  MediaProcessingTemplateSummaryContract,
   MediaStorageProviderContract,
   MediaScanStatusContract,
   MediaQuarantineStatusContract,
@@ -25,4 +27,6 @@ export interface MediaAssetResponse {
   scanStatus: MediaScanStatusContract;
   scannedAt?: string | undefined;
   quarantine?: MediaQuarantineStatusContract | undefined;
+  processingTemplate?: MediaProcessingTemplateSummaryContract | undefined;
+  processingSummary?: MediaProcessingSummaryContract | undefined;
 }

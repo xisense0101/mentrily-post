@@ -2,9 +2,124 @@
 
 This document serves as a permanent continuity/backtrace system for the Mentrily SaaS codebase. Every task must record its progress here to ensure a reliable audit trail and clear path forward.
 
+### Task 013D — Media Transcoding Custom Templates & Hook Integration
+
+- **Task ID**: 013D
+- **Previous Task**: Task 013C1 — Media Security, CDN, and Storage Lifecycle Hardening Remediation
+- **Work Completed**:
+  - inspected Media Library processing/security/template boundaries
+  - selected a production-safe static template and sync hook model
+  - added typed media processing template and hook definitions in code
+  - added deterministic template resolver and template validation
+  - integrated template summaries and deferred rendition plans into safe media contracts
+  - replaced the media processing worker delay stub with template-driven metadata and rendition behavior
+  - kept real image thumbnail generation fixture-backed only and marked video/audio/document transcoding as deferred
+  - added a feature-flagged hook runner with registered backend-only handlers and no arbitrary code execution
+  - updated Media Library portal cards to show safe template/rendition summaries
+  - updated env examples and architecture/security docs for disabled-by-default hooks and reserved transcoding
+- **Validation Performed**:
+  - `git status --short`: **PASS**
+  - `pnpm lint`: **PASS** after fixing pre-existing media-library adapter lint errors in allowed files
+  - `pnpm typecheck`: **IN PROGRESS**
+  - `pnpm test`: **BASELINE PASS before 013D changes**
+  - `pnpm build`: **PASS** on repaired baseline before final 013D sweep
+  - `pnpm --filter @mentrily/platform-worker test -- --run src/media-processing/media-processing.worker.spec.ts`: **PASS**
+  - `pnpm --filter @mentrily/portal test -- --run src/modules/media-library/tests/media-asset-card.spec.tsx`: **PASS**
+  - `pnpm --filter @mentrily/platform-api test -- --run src/modules/media-library/tests/media-processing-template.resolver.spec.ts src/modules/media-library/tests/media-processing-hook.runner.spec.ts`: **IN PROGRESS** (command executed but package suite continued beyond the targeted specs during task execution)
+- **Remaining Gaps**:
+  - real heavy video/audio transcoding remains future work
+  - real production CDN provider integration remains future work
+  - real production antivirus provider integration remains future work
+  - communication event wiring remains future work
+  - production communication delivery worker loop remains future work
+  - real email/SMS provider enablement remains future work
+- **Next Recommended Task**: Task 013D1 — Media Transcoding Custom Templates & Hook Integration Remediation
+
+---
+
+### Task 013D1 — Media Transcoding Custom Templates & Hook Integration Remediation
+
+- **Task ID**: 013D1
+- **Previous Task**: Task 013D — Media Transcoding Custom Templates & Hook Integration
+- **Root Issue**:
+  - 013D implementation completed, but the full validation matrix was not completed.
+- **Fixes Made**:
+  - reran the missing validation matrix from the 013D worktree
+  - confirmed the 013D media template/hook files still typecheck and package-level unit tests pass
+  - reran `portal build` successfully after isolating a transient `.next/lock` collision caused by concurrent builds
+  - brought up the DB-backed validation environment and reran Prisma/integration validation
+  - reran required safety scans for arbitrary code execution and frontend storage-key exposure
+  - confirmed that remaining validation failures are outside 013D template/hook scope rather than regressions in the media template/hook implementation
+- **Validation Performed**:
+  - `git status --short`: **PASS**
+  - `pnpm lint`: **PASS**
+  - `pnpm typecheck`: **PASS**
+  - `pnpm build`: **PASS**
+  - `pnpm test`: **PASS**
+  - `pnpm --filter @mentrily/platform-api test`: **PASS**
+  - `pnpm --filter @mentrily/platform-api typecheck`: **PASS**
+  - `pnpm --filter @mentrily/platform-api test:integration`: **FAIL**
+    - observed failure in `src/modules/assessment-delivery/tests/assessment-api.integration.spec.ts`
+    - error: `Assessment <id> was not visible after create`
+  - `pnpm --filter @mentrily/platform-worker test`: **PASS**
+  - `pnpm --filter @mentrily/platform-worker typecheck`: **PASS**
+  - `pnpm --filter @mentrily/portal test`: **PASS**
+  - `pnpm --filter @mentrily/portal typecheck`: **PASS**
+  - `pnpm --filter @mentrily/portal build`: **PASS** on rerun
+    - first attempt failed due `.next/lock` contention while root `pnpm build` was already running
+  - `pnpm --filter @mentrily/contract-catalog typecheck`: **PASS**
+  - `pnpm --filter @mentrily/domain-contracts typecheck`: **PASS**
+  - `pnpm --filter @mentrily/security-toolkit test`: **PASS**
+  - `cp .env.test.example .env.test`: **PASS**
+  - `pnpm db:test:up`: **PASS**
+  - `pnpm --filter @mentrily/data-platform prisma:validate`: **PASS**
+  - `pnpm --filter @mentrily/data-platform prisma:generate`: **PASS**
+  - `pnpm --filter @mentrily/data-platform prisma:migrate:deploy`: **PASS**
+  - `node --env-file=.env.test automation/run-integration-tests.mjs`: **FAIL**
+    - observed failures in `@mentrily/data-platform test:integration`
+    - outbox/inbox integration assertions remain red:
+      - missing persisted `PENDING` status expectation
+      - duplicate `eventId` append inconsistency / unique constraint path
+      - empty inbox received-batch claim
+  - `pnpm test:integration`: **FAIL**
+    - blocked by the same DB-backed integration failures above
+  - `pnpm test:e2e`: **FAIL**
+    - this run was polluted by backend harness contention on `0.0.0.0:3001`
+  - `pnpm e2e:content`: **FAIL**
+    - actual failure in portal content flow:
+    - `content-document-editor-page` not visible after opening the created document
+  - `pnpm e2e:learning`: **FAIL**
+    - this run failed due backend port collision `EADDRINUSE: 3001`
+  - `pnpm e2e:assessment`: **FAIL**
+    - this run failed due backend port collision `EADDRINUSE: 3001`
+  - `pnpm e2e:assessment-attempt`: **FAIL**
+    - this run failed due backend port collision `EADDRINUSE: 3001`
+  - `pnpm e2e:assessment-grading`: **FAIL**
+    - this run failed due backend port collision `EADDRINUSE: 3001`
+  - `pnpm e2e:assessment-result`: **FAIL**
+    - this run failed due backend port collision `EADDRINUSE: 3001`
+  - `pnpm e2e:assessment-reliability`: **PASS**
+  - `pnpm db:test:down`: **PASS**
+- **Proof Command Outputs**:
+  - `grep -R "eval(" ...`: **no matches**
+  - `grep -R "new Function" ...`: **no matches**
+  - `grep -R "Function(" ...`: **no matches**
+  - `grep -R "storageKey" ...frontend...`: **no matches**
+  - `grep -R "objectKey" ...frontend...`: **no matches**
+  - `grep -R "bucket" ...frontend...`: **no matches**
+  - `grep -R "base64" backend/applications/platform-api/src/modules/media-library frontend/apps/portal/src/modules/media-library || true`: existing negative test assertion only in `media-library-api-client.spec.ts`, no product storage regression
+- **Remaining Gaps**:
+  - real heavy video/audio transcoding remains future work
+  - real document preview generation remains future work
+  - real production CDN integration remains future work
+  - real production antivirus integration remains future work
+  - communication event wiring remains future work
+  - repo validation is still red due unrelated integration/E2E failures outside 013D template/hook scope
+- **Next Recommended Task**: Task 013D2 — Media Template/Hook Validation Remediation Continuation
+
+---
 
 ### Task 012D1 — Outbox/Scheduler Remediation
-
 
 - **Task ID**: 012D1
 - **Previous Task**: Task 012D — Outbox Event Id Constraint Remediation & Communication Scheduler

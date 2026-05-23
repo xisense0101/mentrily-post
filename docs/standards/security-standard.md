@@ -54,3 +54,9 @@
 - **Asset Reference and Safe Exclusions**: The `MediaLifecycleWorker` must not delete any media asset that is actively referenced in another module (such as `LearningLesson`, `ContentBlock`, `AssessmentQuestion`, or `AssessmentAttemptAnswer`). Lifecycle exclusion checks are mandatory to prevent active course/assessment file reference corruption.
 - **Verification Hook Rules**: Save/mutation requests in Content Studio or Learning Delivery must evaluate and validate the status of referenced media assets at validation time, failing if referenced assets are infected, deleted, or in unauthorized states.
 
+## Task 013D Update (2026-05-23)
+
+- Media processing templates must remain typed configuration only. They must not contain executable code, secrets, webhook URLs, or provider credentials.
+- Media processing hooks must execute only registered backend handlers. `eval`, `new Function`, arbitrary JavaScript, and live outbound provider/webhook calls are prohibited by default.
+- Media processing must not bypass `MediaAccessPolicyService`, must not trust tenant/workspace identifiers from request bodies, and must not promote non-clean media into readable/usable states.
+- Frontend-safe media contracts may expose template keys, deferred rendition summaries, and hook stage summaries, but must not expose storage keys, bucket paths, origin URLs, or scanner internals.

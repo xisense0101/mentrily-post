@@ -48,6 +48,8 @@ export interface MediaAssetContract {
   scanStatus: MediaScanStatusContract;
   scannedAt?: string | undefined;
   quarantine?: MediaQuarantineStatusContract | undefined;
+  processingTemplate?: MediaProcessingTemplateSummaryContract | undefined;
+  processingSummary?: MediaProcessingSummaryContract | undefined;
 }
 
 export interface MediaUploadIntentContract {
@@ -134,6 +136,58 @@ export interface MediaRenditionContract {
   durationSeconds?: number | undefined;
   createdAt: string;
   updatedAt: string;
+}
+
+export type MediaProcessingTemplateKeyContract =
+  | 'IMAGE_STANDARD'
+  | 'VIDEO_RESERVED_STANDARD'
+  | 'AUDIO_RESERVED_STANDARD'
+  | 'DOCUMENT_STANDARD'
+  | 'GENERIC_FILE_STANDARD';
+
+export type MediaProcessingHookStageContract =
+  | 'UPLOAD_COMPLETED'
+  | 'SCAN_CLEAN'
+  | 'SCAN_FAILED'
+  | 'PROCESSING_STARTED'
+  | 'METADATA_EXTRACTED'
+  | 'RENDITION_CREATED'
+  | 'PROCESSING_SUCCEEDED'
+  | 'PROCESSING_FAILED'
+  | 'ASSET_QUARANTINED'
+  | 'ASSET_DELETED';
+
+export type MediaRenditionPlanStatusContract = 'AVAILABLE' | 'DEFERRED' | 'SKIPPED';
+
+export interface MediaProcessingTemplateSummaryContract {
+  key: MediaProcessingTemplateKeyContract;
+  name: string;
+  description: string;
+  fileCategory: MediaFileCategoryContract;
+}
+
+export interface MediaProcessingMetadataPolicyContract {
+  extractBasicMetadata: boolean;
+  extractImageDimensions: boolean;
+  extractDuration: boolean;
+  extractChecksum: boolean;
+}
+
+export interface MediaPlannedRenditionSummaryContract {
+  kind: MediaRenditionKindContract;
+  label: string;
+  status: MediaRenditionPlanStatusContract;
+  format: string;
+  width?: number | undefined;
+  height?: number | undefined;
+}
+
+export interface MediaProcessingSummaryContract {
+  template: MediaProcessingTemplateSummaryContract;
+  metadata: MediaProcessingMetadataPolicyContract;
+  plannedRenditions: MediaPlannedRenditionSummaryContract[];
+  completedHookStages: MediaProcessingHookStageContract[];
+  lastProcessedAt?: string | undefined;
 }
 
 export interface MediaAssetWithProcessingContract extends MediaAssetContract {
@@ -224,7 +278,12 @@ export interface MediaLifecycleJobContract {
   id: string;
   workspaceId: string;
   mediaAssetId?: string | undefined;
-  jobType: 'EXPIRE_UPLOAD' | 'DELETE_ASSET' | 'DELETE_RENDITION' | 'CLEAN_FAILED' | 'CLEAN_ORPHANED';
+  jobType:
+    | 'EXPIRE_UPLOAD'
+    | 'DELETE_ASSET'
+    | 'DELETE_RENDITION'
+    | 'CLEAN_FAILED'
+    | 'CLEAN_ORPHANED';
   status: 'QUEUED' | 'PROCESSING' | 'SUCCEEDED' | 'FAILED' | 'RETRYING' | 'DEAD';
   attempts: number;
   maxAttempts: number;
@@ -234,4 +293,3 @@ export interface MediaLifecycleJobContract {
   createdAt: string;
   updatedAt: string;
 }
-

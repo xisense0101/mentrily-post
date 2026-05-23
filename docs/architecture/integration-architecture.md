@@ -37,6 +37,7 @@ Provider integrations (Clerk, WorkOS, Stripe, email providers, telemetry provide
 - Assessment UX hardening and question-type expansion did not add any new external integrations.
 - File upload remains a placeholder boundary only. There is still no Media Library integration, object storage adapter, signed URL exchange, webhook, or media-processing dependency.
 - Assessment remains intentionally disconnected from Learning Delivery and Content Studio runtime flows.
+
 ## Task 012B Update (2026-05-21)
 
 - The Media Library frontend integrates with platform-api only for control-plane actions:
@@ -54,6 +55,12 @@ Provider integrations (Clerk, WorkOS, Stripe, email providers, telemetry provide
 - The scheduler foundation is intentionally internal-only and limited to noop/fixture delivery providers until provider adapters are introduced behind feature flags.
 - Task 012E adds reserved Communication adapter boundaries only.
 - No Resend, SendGrid, SMTP, Twilio, WhatsApp, Firebase, Expo, or OneSignal SDK/API integration exists yet, and live delivery remains disabled by default.
+
+## Task 013D Update (2026-05-23)
+
+- Media processing templates and hook handlers are internal code-defined integrations only.
+- No live Cloudinary, Mux, AWS MediaConvert, FFmpeg-as-a-service, webhook, or other external media-processing provider is called by default.
+- Hook execution is synchronous, feature-flagged, and limited to registered backend handlers rather than user-provided code or URLs.
 
 ## Task 013A Update (2026-05-22)
 

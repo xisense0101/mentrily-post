@@ -5,7 +5,12 @@ import type { MediaAssetContract } from '../types';
 
 vi.mock('../hooks', () => ({
   useMediaReadUrl: () => ({
-    readUrl: { url: 'https://signed.example/image.png', method: 'GET', headers: {}, expiresAt: '2026-05-21T00:00:00.000Z' },
+    readUrl: {
+      url: 'https://signed.example/image.png',
+      method: 'GET',
+      headers: {},
+      expiresAt: '2026-05-21T00:00:00.000Z',
+    },
     loading: false,
     error: undefined,
     loadReadUrl: vi.fn().mockResolvedValue(undefined),
@@ -46,7 +51,12 @@ describe('MediaAssetCard', () => {
     render(<MediaAssetCard asset={makeAsset({ status: 'PENDING_UPLOAD' })} onArchive={vi.fn()} />);
     expect(screen.queryByTestId('media-open-button')).not.toBeInTheDocument();
 
-    render(<MediaAssetCard asset={makeAsset({ status: 'ARCHIVED', archivedAt: '2026-05-21T01:00:00.000Z' })} onArchive={vi.fn()} />);
+    render(
+      <MediaAssetCard
+        asset={makeAsset({ status: 'ARCHIVED', archivedAt: '2026-05-21T01:00:00.000Z' })}
+        onArchive={vi.fn()}
+      />,
+    );
     expect(screen.queryByTestId('media-open-button')).not.toBeInTheDocument();
   });
 
@@ -57,7 +67,9 @@ describe('MediaAssetCard', () => {
   });
 
   it('renders processing feedback for processing states', () => {
-    const { rerender } = render(<MediaAssetCard asset={makeAsset({ status: 'PROCESSING_QUEUED' })} onArchive={vi.fn()} />);
+    const { rerender } = render(
+      <MediaAssetCard asset={makeAsset({ status: 'PROCESSING_QUEUED' })} onArchive={vi.fn()} />,
+    );
     expect(screen.getByText('Media is currently being processed...')).toBeInTheDocument();
 
     rerender(<MediaAssetCard asset={makeAsset({ status: 'PROCESSING' })} onArchive={vi.fn()} />);
@@ -68,7 +80,53 @@ describe('MediaAssetCard', () => {
   });
 
   it('renders failure feedback for processing failed state', () => {
-    render(<MediaAssetCard asset={makeAsset({ status: 'PROCESSING_FAILED' })} onArchive={vi.fn()} />);
-    expect(screen.getByText('Media processing failed. File may be unreadable.')).toBeInTheDocument();
+    render(
+      <MediaAssetCard asset={makeAsset({ status: 'PROCESSING_FAILED' })} onArchive={vi.fn()} />,
+    );
+    expect(
+      screen.getByText('Media processing failed. File may be unreadable.'),
+    ).toBeInTheDocument();
+  });
+
+  it('renders safe processing template and deferred rendition summary', () => {
+    render(
+      <MediaAssetCard
+        asset={makeAsset({
+          processingTemplate: {
+            key: 'VIDEO_RESERVED_STANDARD',
+            name: 'Video Reserved Standard',
+            description: 'Deferred video processing',
+            fileCategory: 'VIDEO',
+          },
+          processingSummary: {
+            template: {
+              key: 'VIDEO_RESERVED_STANDARD',
+              name: 'Video Reserved Standard',
+              description: 'Deferred video processing',
+              fileCategory: 'VIDEO',
+            },
+            metadata: {
+              extractBasicMetadata: true,
+              extractImageDimensions: true,
+              extractDuration: true,
+              extractChecksum: true,
+            },
+            plannedRenditions: [
+              {
+                kind: 'TRANSCODED_VIDEO',
+                label: 'Adaptive video transcode',
+                status: 'DEFERRED',
+                format: 'video/mp4',
+              },
+            ],
+            completedHookStages: [],
+          },
+        })}
+        onArchive={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText('Template: Video Reserved Standard')).toBeInTheDocument();
+    expect(screen.getByText('Renditions: Adaptive video transcode (deferred)')).toBeInTheDocument();
   });
 });

@@ -27,6 +27,8 @@ Each domain module uses:
 - **Asynchronous Security & Transcoding Pipelines**: Uploads are processed asynchronously. Media uploads start in the `UPLOADED` state and queue a `MediaSecurityScanJob`. The `MediaSecurityScanWorker` scans files and marks them `CLEAN` or `INFECTED`/`QUARANTINED`. Only clean files transition to `AVAILABLE` for reader consumption.
 - **Durable CDN Delivery**: Private asset reading is routed through `PrivateSignedUrlDeliveryAdapter`, while CDN assets leverage `ReservedCdnSignedUrlDeliveryAdapter` with edge-cached key signing.
 - **Reference-Aware Lifecycles**: Unused or abandoned media files are managed by the `MediaLifecycleWorker` to auto-prune storage. However, files referenced by external domains (lessons, content blocks, questions, and attempt answers) are excluded from pruning to protect user-facing course content.
+- **Template-Driven Processing**: Media processing templates are code-defined, typed, and validated before use. They resolve deterministically from media category/mime type and can request safe metadata extraction, real image thumbnails, and deferred video/audio/document steps without storing executable code or provider credentials.
+- **Safe Hook Boundary**: Media processing hooks run only through registered backend handlers. Hooks are synchronous, feature-flagged by `MEDIA_PROCESSING_HOOKS_ENABLED`, idempotent by stage, and do not execute arbitrary user code or live third-party calls by default.
 
 ## Commands and queries
 

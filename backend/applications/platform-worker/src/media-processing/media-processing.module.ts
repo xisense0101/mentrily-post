@@ -4,6 +4,8 @@ import { MediaProcessingWorker } from './media-processing.worker.js';
 import { MediaSecurityScanWorker } from './media-security-scan.worker.js';
 import { MediaLifecycleWorker } from './media-lifecycle.worker.js';
 import { FixtureMediaVirusScanner } from '../../../platform-api/src/modules/media-library/infrastructure/scanning/fixture-media-virus-scanner.adapter.js';
+import { FixtureMediaMetadataExtractor } from '../../../platform-api/src/modules/media-library/infrastructure/processing/fixture-media-metadata-extractor.adapter.js';
+import { FixtureMediaRenditionGenerator } from '../../../platform-api/src/modules/media-library/infrastructure/processing/fixture-media-rendition-generator.adapter.js';
 
 @Module({
   imports: [DataPlatformModule],
@@ -12,6 +14,8 @@ import { FixtureMediaVirusScanner } from '../../../platform-api/src/modules/medi
     MediaSecurityScanWorker,
     MediaLifecycleWorker,
     FixtureMediaVirusScanner,
+    FixtureMediaMetadataExtractor,
+    FixtureMediaRenditionGenerator,
   ],
   exports: [MediaProcessingWorker, MediaSecurityScanWorker, MediaLifecycleWorker],
 })
