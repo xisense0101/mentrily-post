@@ -58,6 +58,7 @@ describe('notification delivery provider registry', () => {
         featureFlags: {
           emailProviderEnabled: true,
           smsProviderEnabled: false,
+          pushProviderEnabled: false,
           allowLiveDelivery: true,
         },
       },

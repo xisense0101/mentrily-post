@@ -45,7 +45,9 @@ function parseNumber(value: string | undefined, fallback: number): number {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
 }
 
-export function loadWorkerEnvironment(env: NodeJS.ProcessEnv = process.env): WorkerEnvironment {
+export function loadWorkerEnvironment(
+  env: NodeJS.ProcessEnv | Record<string, string | undefined> = process.env,
+): WorkerEnvironment {
   return {
     startLoops: parseBoolean(env.WORKER_START_LOOPS, DEFAULT_ENVIRONMENT.startLoops),
     outboxBatchSize: parseNumber(env.OUTBOX_BATCH_SIZE, DEFAULT_ENVIRONMENT.outboxBatchSize),
