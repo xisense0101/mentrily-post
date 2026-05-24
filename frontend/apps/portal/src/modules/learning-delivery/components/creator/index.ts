@@ -1,4 +1,5 @@
 export * from './course-action-bar';
+export * from './course-assessment-link-manager';
 export * from './course-create-form';
 export * from './course-detail-panel';
 export * from './course-empty-state';

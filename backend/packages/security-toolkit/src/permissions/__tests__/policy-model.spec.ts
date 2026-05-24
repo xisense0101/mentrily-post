@@ -26,7 +26,7 @@ describe('Security Toolkit: Permission & Policy Model', () => {
       const key1 = new PermissionKey('workspace.read');
       const key2 = new PermissionKey('workspace.read');
       const key3 = new PermissionKey('workspace.update');
-      
+
       expect(key1.equals(key2)).toBe(true);
       expect(key1.equals(key3)).toBe(false);
     });
@@ -63,64 +63,182 @@ describe('Security Toolkit: Permission & Policy Model', () => {
     });
 
     it('should correctly evaluate owner/admin/creator/learner examples', () => {
-      expect(PolicyModel.hasPermission(['workspace_owner'], PermissionCatalog.WORKSPACE_ROLES_MANAGE)).toBe(true);
-      expect(PolicyModel.hasPermission(['workspace_admin'], PermissionCatalog.WORKSPACE_ROLES_MANAGE)).toBe(false); // Admin doesn't manage roles
-      
+      expect(
+        PolicyModel.hasPermission(['workspace_owner'], PermissionCatalog.WORKSPACE_ROLES_MANAGE),
+      ).toBe(true);
+      expect(
+        PolicyModel.hasPermission(['workspace_admin'], PermissionCatalog.WORKSPACE_ROLES_MANAGE),
+      ).toBe(false); // Admin doesn't manage roles
+
       expect(PolicyModel.hasPermission(['creator'], PermissionCatalog.CONTENT_CREATE)).toBe(true);
-      expect(PolicyModel.hasPermission(['creator'], PermissionCatalog.WORKSPACE_MEMBERS_MANAGE)).toBe(false);
-      expect(PolicyModel.hasPermission(['creator'], PermissionCatalog.LEARNING_COURSE_PUBLISH)).toBe(true);
-      expect(PolicyModel.hasPermission(['creator'], PermissionCatalog.CONTENT_DOCUMENT_PUBLISH)).toBe(true);
-      expect(PolicyModel.hasPermission(['creator'], PermissionCatalog.ASSESSMENT_PUBLISH)).toBe(true);
-      expect(PolicyModel.hasPermission(['creator'], PermissionCatalog.ASSESSMENT_ARCHIVE)).toBe(true);
-      expect(PolicyModel.hasPermission(['creator'], PermissionCatalog.ASSESSMENT_SNAPSHOT_READ)).toBe(true);
-      expect(PolicyModel.hasPermission(['creator'], PermissionCatalog.ASSESSMENT_RESULT_RELEASE)).toBe(true);
+      expect(
+        PolicyModel.hasPermission(['creator'], PermissionCatalog.WORKSPACE_MEMBERS_MANAGE),
+      ).toBe(false);
+      expect(
+        PolicyModel.hasPermission(['creator'], PermissionCatalog.LEARNING_COURSE_PUBLISH),
+      ).toBe(true);
+      expect(
+        PolicyModel.hasPermission(['creator'], PermissionCatalog.LEARNING_ASSESSMENT_LINK_READ),
+      ).toBe(true);
+      expect(
+        PolicyModel.hasPermission(['creator'], PermissionCatalog.LEARNING_ASSESSMENT_LINK_MANAGE),
+      ).toBe(true);
+      expect(
+        PolicyModel.hasPermission(['creator'], PermissionCatalog.LEARNING_COURSE_PROGRESS_READ),
+      ).toBe(true);
+      expect(
+        PolicyModel.hasPermission(['creator'], PermissionCatalog.CONTENT_DOCUMENT_PUBLISH),
+      ).toBe(true);
+      expect(PolicyModel.hasPermission(['creator'], PermissionCatalog.ASSESSMENT_PUBLISH)).toBe(
+        true,
+      );
+      expect(PolicyModel.hasPermission(['creator'], PermissionCatalog.ASSESSMENT_ARCHIVE)).toBe(
+        true,
+      );
+      expect(
+        PolicyModel.hasPermission(['creator'], PermissionCatalog.ASSESSMENT_SNAPSHOT_READ),
+      ).toBe(true);
+      expect(
+        PolicyModel.hasPermission(['creator'], PermissionCatalog.ASSESSMENT_RESULT_RELEASE),
+      ).toBe(true);
       expect(
         PolicyModel.hasPermission(['creator'], PermissionCatalog.ASSESSMENT_RESULT_READ_WORKSPACE),
       ).toBe(true);
-      expect(PolicyModel.hasPermission(['creator'], PermissionCatalog.ASSESSMENT_EXECUTION_READ)).toBe(true);
-      expect(PolicyModel.hasPermission(['creator'], PermissionCatalog.ASSESSMENT_EXECUTION_REQUEST)).toBe(true);
-      expect(PolicyModel.hasPermission(['creator'], PermissionCatalog.ASSESSMENT_EXECUTION_CANCEL)).toBe(true);
-
-      expect(PolicyModel.hasPermission(['workspace_owner'], PermissionCatalog.ASSESSMENT_RESULT_RELEASE)).toBe(true);
       expect(
-        PolicyModel.hasPermission(['workspace_owner'], PermissionCatalog.ASSESSMENT_RESULT_READ_WORKSPACE),
+        PolicyModel.hasPermission(['creator'], PermissionCatalog.ASSESSMENT_EXECUTION_READ),
       ).toBe(true);
-      expect(PolicyModel.hasPermission(['workspace_owner'], PermissionCatalog.ASSESSMENT_EXECUTION_READ)).toBe(true);
-      expect(PolicyModel.hasPermission(['workspace_owner'], PermissionCatalog.ASSESSMENT_EXECUTION_REQUEST)).toBe(true);
-      expect(PolicyModel.hasPermission(['workspace_owner'], PermissionCatalog.ASSESSMENT_EXECUTION_CANCEL)).toBe(true);
-
-      expect(PolicyModel.hasPermission(['workspace_admin'], PermissionCatalog.ASSESSMENT_RESULT_RELEASE)).toBe(true);
       expect(
-        PolicyModel.hasPermission(['workspace_admin'], PermissionCatalog.ASSESSMENT_RESULT_READ_WORKSPACE),
+        PolicyModel.hasPermission(['creator'], PermissionCatalog.ASSESSMENT_EXECUTION_REQUEST),
       ).toBe(true);
-      expect(PolicyModel.hasPermission(['workspace_admin'], PermissionCatalog.ASSESSMENT_EXECUTION_READ)).toBe(true);
-      expect(PolicyModel.hasPermission(['workspace_admin'], PermissionCatalog.ASSESSMENT_EXECUTION_REQUEST)).toBe(true);
-      expect(PolicyModel.hasPermission(['workspace_admin'], PermissionCatalog.ASSESSMENT_EXECUTION_CANCEL)).toBe(true);
-      
+      expect(
+        PolicyModel.hasPermission(['creator'], PermissionCatalog.ASSESSMENT_EXECUTION_CANCEL),
+      ).toBe(true);
+
+      expect(
+        PolicyModel.hasPermission(['workspace_owner'], PermissionCatalog.ASSESSMENT_RESULT_RELEASE),
+      ).toBe(true);
+      expect(
+        PolicyModel.hasPermission(
+          ['workspace_owner'],
+          PermissionCatalog.ASSESSMENT_RESULT_READ_WORKSPACE,
+        ),
+      ).toBe(true);
+      expect(
+        PolicyModel.hasPermission(['workspace_owner'], PermissionCatalog.ASSESSMENT_EXECUTION_READ),
+      ).toBe(true);
+      expect(
+        PolicyModel.hasPermission(
+          ['workspace_owner'],
+          PermissionCatalog.ASSESSMENT_EXECUTION_REQUEST,
+        ),
+      ).toBe(true);
+      expect(
+        PolicyModel.hasPermission(
+          ['workspace_owner'],
+          PermissionCatalog.ASSESSMENT_EXECUTION_CANCEL,
+        ),
+      ).toBe(true);
+
+      expect(
+        PolicyModel.hasPermission(['workspace_admin'], PermissionCatalog.ASSESSMENT_RESULT_RELEASE),
+      ).toBe(true);
+      expect(
+        PolicyModel.hasPermission(
+          ['workspace_admin'],
+          PermissionCatalog.ASSESSMENT_RESULT_READ_WORKSPACE,
+        ),
+      ).toBe(true);
+      expect(
+        PolicyModel.hasPermission(['workspace_admin'], PermissionCatalog.ASSESSMENT_EXECUTION_READ),
+      ).toBe(true);
+      expect(
+        PolicyModel.hasPermission(
+          ['workspace_admin'],
+          PermissionCatalog.ASSESSMENT_EXECUTION_REQUEST,
+        ),
+      ).toBe(true);
+      expect(
+        PolicyModel.hasPermission(
+          ['workspace_admin'],
+          PermissionCatalog.ASSESSMENT_EXECUTION_CANCEL,
+        ),
+      ).toBe(true);
+
       expect(PolicyModel.hasPermission(['learner'], PermissionCatalog.LEARNING_READ)).toBe(true);
-      expect(PolicyModel.hasPermission(['learner'], PermissionCatalog.LEARNING_ENROLLMENT_READ)).toBe(true);
+      expect(
+        PolicyModel.hasPermission(['learner'], PermissionCatalog.LEARNING_ENROLLMENT_READ),
+      ).toBe(true);
+      expect(
+        PolicyModel.hasPermission(['learner'], PermissionCatalog.LEARNING_COURSE_DELIVERY_READ),
+      ).toBe(true);
       expect(PolicyModel.hasPermission(['learner'], PermissionCatalog.CONTENT_CREATE)).toBe(false);
-      expect(PolicyModel.hasPermission(['learner'], PermissionCatalog.CONTENT_DOCUMENT_READ)).toBe(false);
-      expect(PolicyModel.hasPermission(['learner'], PermissionCatalog.CONTENT_SNAPSHOT_READ)).toBe(true);
+      expect(PolicyModel.hasPermission(['learner'], PermissionCatalog.CONTENT_DOCUMENT_READ)).toBe(
+        false,
+      );
+      expect(PolicyModel.hasPermission(['learner'], PermissionCatalog.CONTENT_SNAPSHOT_READ)).toBe(
+        true,
+      );
       expect(PolicyModel.hasPermission(['learner'], PermissionCatalog.ASSESSMENT_READ)).toBe(false);
-      expect(PolicyModel.hasPermission(['learner'], PermissionCatalog.ASSESSMENT_ATTEMPT_START)).toBe(true);
-      expect(PolicyModel.hasPermission(['learner'], PermissionCatalog.ASSESSMENT_ATTEMPT_READ)).toBe(true);
-      expect(PolicyModel.hasPermission(['learner'], PermissionCatalog.ASSESSMENT_ATTEMPT_ANSWER_SAVE)).toBe(true);
-      expect(PolicyModel.hasPermission(['learner'], PermissionCatalog.ASSESSMENT_ATTEMPT_SUBMIT)).toBe(true);
-      expect(PolicyModel.hasPermission(['learner'], PermissionCatalog.ASSESSMENT_ATTEMPT_CANCEL)).toBe(true);
-      expect(PolicyModel.hasPermission(['learner'], PermissionCatalog.ASSESSMENT_RESULT_READ_OWN)).toBe(true);
-      expect(PolicyModel.hasPermission(['learner'], PermissionCatalog.ASSESSMENT_RESULT_RELEASE)).toBe(false);
-      expect(PolicyModel.hasPermission(['learner'], PermissionCatalog.ASSESSMENT_RESULT_READ_WORKSPACE)).toBe(false);
-      expect(PolicyModel.hasPermission(['learner'], PermissionCatalog.ASSESSMENT_EXECUTION_READ)).toBe(false);
-      expect(PolicyModel.hasPermission(['learner'], PermissionCatalog.ASSESSMENT_EXECUTION_REQUEST)).toBe(false);
-      expect(PolicyModel.hasPermission(['learner'], PermissionCatalog.ASSESSMENT_EXECUTION_CANCEL)).toBe(false);
-      expect(PolicyModel.hasPermission(['viewer'], PermissionCatalog.ASSESSMENT_EXECUTION_REQUEST)).toBe(false);
-      expect(PolicyModel.hasPermission(['viewer'], PermissionCatalog.ASSESSMENT_EXECUTION_CANCEL)).toBe(false);
-      expect(PolicyModel.hasPermission(['learner'], PermissionCatalog.COMMUNICATION_SCHEDULER_PROCESS)).toBe(false);
-      expect(PolicyModel.hasPermission(['viewer'], PermissionCatalog.COMMUNICATION_SCHEDULER_PROCESS)).toBe(false);
-      expect(PolicyModel.hasPermission(['creator'], PermissionCatalog.COMMUNICATION_SCHEDULER_PROCESS)).toBe(false);
-      expect(PolicyModel.hasPermission(['workspace_admin'], PermissionCatalog.COMMUNICATION_SCHEDULER_PROCESS)).toBe(false);
-      expect(PolicyModel.hasPermission(['workspace_owner'], PermissionCatalog.COMMUNICATION_SCHEDULER_PROCESS)).toBe(false);
+      expect(
+        PolicyModel.hasPermission(['learner'], PermissionCatalog.ASSESSMENT_ATTEMPT_START),
+      ).toBe(true);
+      expect(
+        PolicyModel.hasPermission(['learner'], PermissionCatalog.ASSESSMENT_ATTEMPT_READ),
+      ).toBe(true);
+      expect(
+        PolicyModel.hasPermission(['learner'], PermissionCatalog.ASSESSMENT_ATTEMPT_ANSWER_SAVE),
+      ).toBe(true);
+      expect(
+        PolicyModel.hasPermission(['learner'], PermissionCatalog.ASSESSMENT_ATTEMPT_SUBMIT),
+      ).toBe(true);
+      expect(
+        PolicyModel.hasPermission(['learner'], PermissionCatalog.ASSESSMENT_ATTEMPT_CANCEL),
+      ).toBe(true);
+      expect(
+        PolicyModel.hasPermission(['learner'], PermissionCatalog.ASSESSMENT_RESULT_READ_OWN),
+      ).toBe(true);
+      expect(
+        PolicyModel.hasPermission(['learner'], PermissionCatalog.ASSESSMENT_RESULT_RELEASE),
+      ).toBe(false);
+      expect(
+        PolicyModel.hasPermission(['learner'], PermissionCatalog.ASSESSMENT_RESULT_READ_WORKSPACE),
+      ).toBe(false);
+      expect(
+        PolicyModel.hasPermission(['learner'], PermissionCatalog.ASSESSMENT_EXECUTION_READ),
+      ).toBe(false);
+      expect(
+        PolicyModel.hasPermission(['learner'], PermissionCatalog.ASSESSMENT_EXECUTION_REQUEST),
+      ).toBe(false);
+      expect(
+        PolicyModel.hasPermission(['learner'], PermissionCatalog.ASSESSMENT_EXECUTION_CANCEL),
+      ).toBe(false);
+      expect(
+        PolicyModel.hasPermission(['viewer'], PermissionCatalog.ASSESSMENT_EXECUTION_REQUEST),
+      ).toBe(false);
+      expect(
+        PolicyModel.hasPermission(['viewer'], PermissionCatalog.ASSESSMENT_EXECUTION_CANCEL),
+      ).toBe(false);
+      expect(
+        PolicyModel.hasPermission(['learner'], PermissionCatalog.COMMUNICATION_SCHEDULER_PROCESS),
+      ).toBe(false);
+      expect(
+        PolicyModel.hasPermission(['viewer'], PermissionCatalog.COMMUNICATION_SCHEDULER_PROCESS),
+      ).toBe(false);
+      expect(
+        PolicyModel.hasPermission(['creator'], PermissionCatalog.COMMUNICATION_SCHEDULER_PROCESS),
+      ).toBe(false);
+      expect(
+        PolicyModel.hasPermission(
+          ['workspace_admin'],
+          PermissionCatalog.COMMUNICATION_SCHEDULER_PROCESS,
+        ),
+      ).toBe(false);
+      expect(
+        PolicyModel.hasPermission(
+          ['workspace_owner'],
+          PermissionCatalog.COMMUNICATION_SCHEDULER_PROCESS,
+        ),
+      ).toBe(false);
     });
   });
 });

@@ -31,6 +31,7 @@ export class GetCourseAssessmentProgressUseCase {
     @Inject(AssessmentRepository) private readonly assessmentRepo: AssessmentRepository,
     @Inject(AssessmentAttemptRepository) private readonly attemptRepo: AssessmentAttemptRepository,
     @Inject(PERMISSION_EVALUATOR) private readonly permissionEvaluator: PermissionEvaluator,
+    @Inject(LearningAssessmentLinkPolicyService)
     private readonly policy: LearningAssessmentLinkPolicyService,
   ) {}
 

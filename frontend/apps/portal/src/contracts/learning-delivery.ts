@@ -1,9 +1,16 @@
 export type {
   AddLearningLessonRequest,
   AddLearningSectionRequest,
+  CourseAssessmentProgressSummaryContract,
+  CreateLearningAssessmentLinkRequest,
   CreateLearningCourseRequest,
   EnrollInLearningCourseRequest,
   EnrollmentStatus,
+  LearnerCourseDeliveryContract,
+  LearnerLinkedAssessmentContract,
+  LearnerLinkedAssessmentStatus,
+  LearningAssessmentLinkContract,
+  LearningAssessmentUnlockPolicy,
   LearningContentKind,
   LearningCourseContract,
   LearningCourseStatus,
@@ -17,5 +24,6 @@ export type {
   MarkLearningProgressRequest,
   ReorderLearningLessonsRequest,
   ReorderLearningSectionsRequest,
+  UpdateLearningAssessmentLinkRequest,
   UpdateLearningCourseRequest,
 } from '@mentrily/domain-contracts';

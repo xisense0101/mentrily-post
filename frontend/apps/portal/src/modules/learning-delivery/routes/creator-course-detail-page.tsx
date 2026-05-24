@@ -5,20 +5,30 @@ import { Button, Card, Input, Select, Textarea } from '@mentrily/ui-system';
 import type {
   AddLearningLessonRequest,
   AddLearningSectionRequest,
+  CourseAssessmentProgressSummaryContract,
+  CreateLearningAssessmentLinkRequest,
+  LearningAssessmentLinkContract,
   LearningCourseContract,
   LearningVisibility,
+  UpdateLearningAssessmentLinkRequest,
   UpdateLearningCourseRequest,
 } from '../types';
 import {
   archiveLearningCourse,
   addLearningLesson,
   addLearningSection,
+  createAssessmentLink,
+  getCourseAssessmentProgressSummary,
   getLearningCourse,
+  listCourseAssessmentLinks,
   publishLearningCourse,
+  removeAssessmentLink,
+  updateAssessmentLink,
   updateLearningCourse,
 } from '../api';
 import {
   CourseActionBar,
+  CourseAssessmentLinkManager,
   CourseDetailPanel,
   CoursePublishPanel,
   LessonCreateForm,
@@ -30,9 +40,7 @@ interface CreatorCourseDetailPageProps {
   courseId: string;
 }
 
-export function CreatorCourseDetailPage({
-  courseId,
-}: CreatorCourseDetailPageProps) {
+export function CreatorCourseDetailPage({ courseId }: CreatorCourseDetailPageProps) {
   const [course, setCourse] = useState<LearningCourseContract | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -47,11 +55,24 @@ export function CreatorCourseDetailPage({
   const [isPublishing, setIsPublishing] = useState(false);
   const [isArchiving, setIsArchiving] = useState(false);
   const [selectedSectionId, setSelectedSectionId] = useState<string>('');
+  const [assessmentLinks, setAssessmentLinks] = useState<LearningAssessmentLinkContract[]>([]);
+  const [progressSummary, setProgressSummary] =
+    useState<CourseAssessmentProgressSummaryContract | null>(null);
+
+  async function loadAssessmentData(targetCourseId: string): Promise<void> {
+    const [nextLinks, nextSummary] = await Promise.all([
+      listCourseAssessmentLinks(targetCourseId),
+      getCourseAssessmentProgressSummary(targetCourseId).catch(() => null),
+    ]);
+    setAssessmentLinks(nextLinks);
+    setProgressSummary(nextSummary);
+  }
 
   async function loadCourse(): Promise<void> {
     setLoading(true);
     try {
       const nextCourse = await getLearningCourse(courseId);
+      await loadAssessmentData(nextCourse.id);
       setCourse(nextCourse);
       setMetaState({
         title: nextCourse.title,
@@ -65,6 +86,38 @@ export function CreatorCourseDetailPage({
     } finally {
       setLoading(false);
     }
+  }
+
+  async function handleCreateAssessmentLink(
+    input: CreateLearningAssessmentLinkRequest,
+  ): Promise<void> {
+    if (!course) {
+      return;
+    }
+
+    await createAssessmentLink(course.id, input);
+    await loadAssessmentData(course.id);
+  }
+
+  async function handleUpdateAssessmentLink(
+    linkId: string,
+    input: UpdateLearningAssessmentLinkRequest,
+  ): Promise<void> {
+    if (!course) {
+      return;
+    }
+
+    await updateAssessmentLink(course.id, linkId, input);
+    await loadAssessmentData(course.id);
+  }
+
+  async function handleRemoveAssessmentLink(linkId: string): Promise<void> {
+    if (!course) {
+      return;
+    }
+
+    await removeAssessmentLink(course.id, linkId);
+    await loadAssessmentData(course.id);
   }
 
   useEffect(() => {
@@ -178,7 +231,9 @@ export function CreatorCourseDetailPage({
   }
 
   if (!course) {
-    return <LearningErrorState message="Course data is unavailable." onRetry={() => void loadCourse()} />;
+    return (
+      <LearningErrorState message="Course data is unavailable." onRetry={() => void loadCourse()} />
+    );
   }
 
   return (
@@ -202,6 +257,14 @@ export function CreatorCourseDetailPage({
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)]">
         <div className="space-y-6">
           <CourseDetailPanel course={course} />
+          <CourseAssessmentLinkManager
+            course={course}
+            links={assessmentLinks}
+            onCreateLink={handleCreateAssessmentLink}
+            onRemoveLink={handleRemoveAssessmentLink}
+            onUpdateLink={handleUpdateAssessmentLink}
+            progressSummary={progressSummary}
+          />
           <SectionCreateForm isPending={isAddingSection} onSubmit={handleAddSection} />
           <Card className="space-y-4">
             <div>

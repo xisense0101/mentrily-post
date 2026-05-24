@@ -76,6 +76,7 @@ export class GetLearnerCourseDeliveryUseCase {
     @Inject(AssessmentAttemptRepository) private readonly attemptRepo: AssessmentAttemptRepository,
     @Inject(MediaAssetRepository) private readonly mediaAssetRepo: MediaAssetRepository,
     @Inject(PERMISSION_EVALUATOR) private readonly permissionEvaluator: PermissionEvaluator,
+    @Inject(LearningAssessmentLinkPolicyService)
     private readonly policy: LearningAssessmentLinkPolicyService,
   ) {}
 

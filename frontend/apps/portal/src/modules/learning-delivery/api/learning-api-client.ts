@@ -1,23 +1,26 @@
 import type {
   AddLearningLessonRequest,
   AddLearningSectionRequest,
+  CourseAssessmentProgressSummaryContract,
+  CreateLearningAssessmentLinkRequest,
   CreateLearningCourseRequest,
   EnrollInLearningCourseRequest,
+  LearnerCourseDeliveryContract,
+  LearningAssessmentLinkContract,
   LearningCourseContract,
   LearningEnrollmentContract,
   LearningProgressContract,
   MarkLearningProgressRequest,
   ReorderLearningLessonsRequest,
   ReorderLearningSectionsRequest,
+  UpdateLearningAssessmentLinkRequest,
   UpdateLearningCourseRequest,
 } from '../types';
 import { buildE2ERequestHeaders } from '@/foundation/e2e/e2e-request-context';
 import { LearningApiError } from './learning-api-errors';
 
 const PUBLIC_PLATFORM_API_URL =
-  process.env.NEXT_PUBLIC_PLATFORM_API_URL ??
-  process.env.NEXT_PUBLIC_PLATFORM_API_BASE_URL ??
-  '';
+  process.env.NEXT_PUBLIC_PLATFORM_API_URL ?? process.env.NEXT_PUBLIC_PLATFORM_API_BASE_URL ?? '';
 
 interface ErrorEnvelope {
   error?: {
@@ -84,10 +87,7 @@ export function createLearningApiClient({
 }: LearningApiClientOptions = {}) {
   const apiBaseUrl = resolveApiBaseUrl(baseUrl, envSource);
 
-  async function request<T>(
-    path: string,
-    init?: RequestInit,
-  ): Promise<T> {
+  async function request<T>(path: string, init?: RequestInit): Promise<T> {
     const e2eHeaders = buildE2ERequestHeaders(undefined, envSource);
     const response = await fetchImpl(withBaseUrl(apiBaseUrl, path), {
       credentials: 'include',
@@ -108,13 +108,59 @@ export function createLearningApiClient({
       return request<LearningCourseContract[]>('/workspace/learning/courses');
     },
     getLearningCourse(courseId: string): Promise<LearningCourseContract> {
-      return request<LearningCourseContract>(
-        `/workspace/learning/courses/${courseId}`,
+      return request<LearningCourseContract>(`/workspace/learning/courses/${courseId}`);
+    },
+    listCourseAssessmentLinks(courseId: string): Promise<LearningAssessmentLinkContract[]> {
+      return request<LearningAssessmentLinkContract[]>(
+        `/workspace/learning/courses/${courseId}/assessments`,
       );
     },
-    createLearningCourse(
-      input: CreateLearningCourseRequest,
-    ): Promise<LearningCourseContract> {
+    createAssessmentLink(
+      courseId: string,
+      input: CreateLearningAssessmentLinkRequest,
+    ): Promise<LearningAssessmentLinkContract> {
+      return request<LearningAssessmentLinkContract>(
+        `/workspace/learning/courses/${courseId}/assessments`,
+        {
+          method: 'POST',
+          body: JSON.stringify(input),
+        },
+      );
+    },
+    updateAssessmentLink(
+      courseId: string,
+      linkId: string,
+      input: UpdateLearningAssessmentLinkRequest,
+    ): Promise<LearningAssessmentLinkContract> {
+      return request<LearningAssessmentLinkContract>(
+        `/workspace/learning/courses/${courseId}/assessments/${linkId}`,
+        {
+          method: 'PATCH',
+          body: JSON.stringify(input),
+        },
+      );
+    },
+    removeAssessmentLink(courseId: string, linkId: string): Promise<{ deleted: boolean }> {
+      return request<{ deleted: boolean }>(
+        `/workspace/learning/courses/${courseId}/assessments/${linkId}`,
+        {
+          method: 'DELETE',
+        },
+      );
+    },
+    getLearnerCourseDelivery(courseId: string): Promise<LearnerCourseDeliveryContract> {
+      return request<LearnerCourseDeliveryContract>(
+        `/workspace/learning/courses/${courseId}/delivery`,
+      );
+    },
+    getCourseAssessmentProgressSummary(
+      courseId: string,
+    ): Promise<CourseAssessmentProgressSummaryContract> {
+      return request<CourseAssessmentProgressSummaryContract>(
+        `/workspace/learning/courses/${courseId}/progress-summary`,
+      );
+    },
+    createLearningCourse(input: CreateLearningCourseRequest): Promise<LearningCourseContract> {
       return request<LearningCourseContract>('/workspace/learning/courses', {
         method: 'POST',
         body: JSON.stringify(input),
@@ -124,25 +170,19 @@ export function createLearningApiClient({
       courseId: string,
       input: UpdateLearningCourseRequest,
     ): Promise<LearningCourseContract> {
-      return request<LearningCourseContract>(
-        `/workspace/learning/courses/${courseId}`,
-        {
-          method: 'PATCH',
-          body: JSON.stringify(input),
-        },
-      );
+      return request<LearningCourseContract>(`/workspace/learning/courses/${courseId}`, {
+        method: 'PATCH',
+        body: JSON.stringify(input),
+      });
     },
     addLearningSection(
       courseId: string,
       input: AddLearningSectionRequest,
     ): Promise<LearningCourseContract> {
-      return request<LearningCourseContract>(
-        `/workspace/learning/courses/${courseId}/sections`,
-        {
-          method: 'POST',
-          body: JSON.stringify(input),
-        },
-      );
+      return request<LearningCourseContract>(`/workspace/learning/courses/${courseId}/sections`, {
+        method: 'POST',
+        body: JSON.stringify(input),
+      });
     },
     addLearningLesson(
       courseId: string,
@@ -183,37 +223,26 @@ export function createLearningApiClient({
       );
     },
     publishLearningCourse(courseId: string): Promise<LearningCourseContract> {
-      return request<LearningCourseContract>(
-        `/workspace/learning/courses/${courseId}/publish`,
-        {
-          method: 'POST',
-        },
-      );
+      return request<LearningCourseContract>(`/workspace/learning/courses/${courseId}/publish`, {
+        method: 'POST',
+      });
     },
     archiveLearningCourse(courseId: string): Promise<LearningCourseContract> {
-      return request<LearningCourseContract>(
-        `/workspace/learning/courses/${courseId}/archive`,
-        {
-          method: 'POST',
-        },
-      );
+      return request<LearningCourseContract>(`/workspace/learning/courses/${courseId}/archive`, {
+        method: 'POST',
+      });
     },
     enrollInLearningCourse(
       courseId: string,
       input: EnrollInLearningCourseRequest = {},
     ): Promise<LearningEnrollmentContract> {
-      return request<LearningEnrollmentContract>(
-        `/workspace/learning/courses/${courseId}/enroll`,
-        {
-          method: 'POST',
-          body: JSON.stringify(input),
-        },
-      );
+      return request<LearningEnrollmentContract>(`/workspace/learning/courses/${courseId}/enroll`, {
+        method: 'POST',
+        body: JSON.stringify(input),
+      });
     },
     listLearnerEnrollments(): Promise<LearningEnrollmentContract[]> {
-      return request<LearningEnrollmentContract[]>(
-        '/workspace/learning/enrollments',
-      );
+      return request<LearningEnrollmentContract[]>('/workspace/learning/enrollments');
     },
     markLearningProgress(
       enrollmentId: string,
@@ -228,9 +257,7 @@ export function createLearningApiClient({
         },
       );
     },
-    completeLearningEnrollment(
-      enrollmentId: string,
-    ): Promise<LearningEnrollmentContract> {
+    completeLearningEnrollment(enrollmentId: string): Promise<LearningEnrollmentContract> {
       return request<LearningEnrollmentContract>(
         `/workspace/learning/enrollments/${enrollmentId}/complete`,
         {
@@ -248,14 +275,20 @@ export const {
   addLearningSection,
   archiveLearningCourse,
   completeLearningEnrollment,
+  createAssessmentLink,
   createLearningCourse,
   enrollInLearningCourse,
+  getCourseAssessmentProgressSummary,
+  getLearnerCourseDelivery,
   getLearningCourse,
   listLearnerEnrollments,
+  listCourseAssessmentLinks,
   listWorkspaceLearningCourses,
   markLearningProgress,
   publishLearningCourse,
   reorderLearningLessons,
   reorderLearningSections,
+  removeAssessmentLink,
+  updateAssessmentLink,
   updateLearningCourse,
 } = learningApiClient;

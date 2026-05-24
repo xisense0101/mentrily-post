@@ -89,10 +89,13 @@ export interface LearningAssessmentLinkContract {
   sectionId?: string | undefined;
   lessonId?: string | undefined;
   assessmentId: string;
+  assessmentTitle?: string | undefined;
+  assessmentStatus?: string | undefined;
   required: boolean;
   position: number;
   unlockPolicy: LearningAssessmentUnlockPolicy;
   minimumScore?: number | undefined;
+  createdByPrincipalId?: string | undefined;
   createdAt: string;
   updatedAt: string;
 }

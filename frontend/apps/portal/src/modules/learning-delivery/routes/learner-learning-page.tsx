@@ -2,11 +2,9 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { Button, Card, Input } from '@mentrily/ui-system';
+import { getLearnerCourseDelivery, markLearningProgress } from '../api';
 import {
-  getLearningCourse,
-  markLearningProgress,
-} from '../api';
-import {
+  CourseAssessmentSummary,
   EnrollmentCard,
   EnrollmentEmptyState,
   EnrollmentListSkeleton,
@@ -15,7 +13,7 @@ import {
 import { LearningErrorState, LearningPageHeader } from '../components/shared';
 import { useLearnerEnrollments } from '../hooks';
 import type {
-  LearningCourseContract,
+  LearnerCourseDeliveryContract,
   LearningEnrollmentContract,
   LearningProgressAction,
   LearningProgressContract,
@@ -26,7 +24,8 @@ export function LearnerLearningPage() {
     useLearnerEnrollments();
   const [enrollCourseId, setEnrollCourseId] = useState('');
   const [selectedEnrollmentId, setSelectedEnrollmentId] = useState<string | null>(null);
-  const [selectedCourse, setSelectedCourse] = useState<LearningCourseContract | null>(null);
+  const [selectedCourseDelivery, setSelectedCourseDelivery] =
+    useState<LearnerCourseDeliveryContract | null>(null);
   const [progressByLessonId, setProgressByLessonId] = useState<
     Record<string, LearningProgressContract | undefined>
   >({});
@@ -39,7 +38,7 @@ export function LearnerLearningPage() {
   const selectedEnrollment = useMemo(
     () =>
       selectedEnrollmentId
-        ? enrollments.find((item) => item.id === selectedEnrollmentId) ?? null
+        ? (enrollments.find((item) => item.id === selectedEnrollmentId) ?? null)
         : null,
     [enrollments, selectedEnrollmentId],
   );
@@ -47,8 +46,15 @@ export function LearnerLearningPage() {
   async function loadCourseOutline(courseId: string): Promise<void> {
     setIsLoadingCourse(true);
     try {
-      const course = await getLearningCourse(courseId);
-      setSelectedCourse(course);
+      const delivery = await getLearnerCourseDelivery(courseId);
+      setSelectedCourseDelivery(delivery);
+      setProgressByLessonId(
+        Object.fromEntries(
+          delivery.sections.flatMap((section) =>
+            section.lessons.map((lesson) => [lesson.id, lesson.progress]),
+          ),
+        ),
+      );
       setSelectedCourseError(null);
     } catch (cause) {
       setSelectedCourseError(
@@ -104,9 +110,7 @@ export function LearnerLearningPage() {
       }));
       setSelectedCourseError(null);
     } catch (cause) {
-      setSelectedCourseError(
-        cause instanceof Error ? cause.message : 'Progress update failed.',
-      );
+      setSelectedCourseError(cause instanceof Error ? cause.message : 'Progress update failed.');
     } finally {
       setPendingLessonId(null);
     }
@@ -153,7 +157,10 @@ export function LearnerLearningPage() {
         </div>
         <div className="flex flex-col gap-3 md:flex-row">
           <div className="flex-1">
-            <label className="mb-2 block text-sm font-medium text-slate-700" htmlFor="enroll-course-id">
+            <label
+              className="mb-2 block text-sm font-medium text-slate-700"
+              htmlFor="enroll-course-id"
+            >
               Course ID
             </label>
             <div data-testid="enroll-course-id-input">
@@ -216,26 +223,26 @@ export function LearnerLearningPage() {
                 Choose an enrollment to inspect the course outline and record learner progress.
               </p>
             </Card>
-          ) : selectedCourse ? (
+          ) : selectedCourseDelivery ? (
             <Card className="space-y-4 rounded-[2rem]">
               <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                 <div>
-                  <h3 className="text-xl font-semibold text-slate-950">{selectedCourse.title}</h3>
+                  <h3 className="text-xl font-semibold text-slate-950">
+                    {selectedCourseDelivery.course.title}
+                  </h3>
                   <p className="text-sm text-slate-600">
                     Enrollment {selectedEnrollment.id} · {selectedEnrollment.status}
                   </p>
                 </div>
                 <div data-testid="enrollment-complete-button">
-                  <Button
-                    disabled={isCompleting}
-                    onClick={() => void handleCompleteEnrollment()}
-                  >
+                  <Button disabled={isCompleting} onClick={() => void handleCompleteEnrollment()}>
                     {isCompleting ? 'Completing...' : 'Complete enrollment'}
                   </Button>
                 </div>
               </div>
+              <CourseAssessmentSummary delivery={selectedCourseDelivery} />
               <LearnerCourseOutline
-                course={selectedCourse}
+                delivery={selectedCourseDelivery}
                 onProgressAction={handleProgressAction}
                 pendingLessonId={pendingLessonId}
                 progressByLessonId={progressByLessonId}

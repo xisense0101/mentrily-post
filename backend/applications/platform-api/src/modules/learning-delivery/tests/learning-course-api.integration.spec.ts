@@ -4,6 +4,7 @@ import { PrismaService } from '@mentrily/data-platform';
 import { createRequestContextFromHeaders } from '@mentrily/service-core';
 import { truncatePublicSchema } from '@mentrily/testing-toolkit';
 import { CreateLearningCourseUseCase } from '../application/use-cases/create-learning-course.use-case.js';
+import { GetLearnerCourseDeliveryUseCase } from '../application/use-cases/get-learner-course-delivery.use-case.js';
 import { GetLearningCourseUseCase } from '../application/use-cases/get-learning-course.use-case.js';
 import { ListWorkspaceLearningCoursesUseCase } from '../application/use-cases/list-workspace-learning-courses.use-case.js';
 import type { CreateLearningCourseInput } from '../application/dto/create-learning-course.dto.js';
@@ -135,6 +136,34 @@ describe('Learning Delivery API (integration)', () => {
     expectHttpStatus(response, expected);
   }
 
+  async function expectDeliveryStatus(
+    response: { statusCode: number; body: string },
+    expected: number,
+    headers: ApiHeaders,
+    courseId: string,
+  ): Promise<void> {
+    if (response.statusCode === expected) {
+      return;
+    }
+
+    try {
+      const useCase = app.get(GetLearnerCourseDeliveryUseCase);
+      await useCase.execute(contextFromHeaders(headers), courseId);
+    } catch (error) {
+      if (error instanceof Error) {
+        throw new Error(
+          `Expected HTTP ${expected} but received ${response.statusCode}. Body: ${response.body}. Direct learner-delivery error: ${error.stack ?? error.message}`,
+        );
+      }
+
+      throw new Error(
+        `Expected HTTP ${expected} but received ${response.statusCode}. Body: ${response.body}. Direct learner-delivery error: ${String(error)}`,
+      );
+    }
+
+    expectHttpStatus(response, expected);
+  }
+
   beforeAll(async () => {
     app = await createLearningApiTestApp();
     prisma = app.get(PrismaService);
@@ -233,6 +262,24 @@ describe('Learning Delivery API (integration)', () => {
     });
     expectHttpStatus(listEnrollRes, 200);
     expect(listEnrollRes.json()).toHaveLength(1);
+
+    const deliveryRes = await app.inject({
+      method: 'GET',
+      url: `/workspace/learning/courses/${created.id}/delivery`,
+      headers: learnerHeaders,
+    });
+    await expectDeliveryStatus(deliveryRes, 200, learnerHeaders, created.id as string);
+    expect(deliveryRes.json()).toMatchObject({
+      course: { id: created.id, title: 'API Course' },
+      enrollment: { id: enrollmentId, courseId: created.id },
+      summary: {
+        totalLinkedAssessments: 0,
+        requiredAssessments: 0,
+        completedRequiredAssessments: 0,
+        blockedRequiredAssessments: 0,
+        canCompleteCourse: true,
+      },
+    });
 
     const completeBefore = await app.inject({
       method: 'POST',
@@ -335,7 +382,12 @@ describe('Learning Delivery API (integration)', () => {
       method: 'POST',
       url: `/workspace/learning/courses/${courseId}/sections/${sectionId}/lessons`,
       headers: baseHeaders,
-      payload: { title: 'Lesson 1', kind: 'VIDEO', contentRef: '11111111-1111-4111-8111-111111111111', isRequired: true },
+      payload: {
+        title: 'Lesson 1',
+        kind: 'VIDEO',
+        contentRef: '11111111-1111-4111-8111-111111111111',
+        isRequired: true,
+      },
     });
     expectHttpStatus(lessonRes, 400);
     expect(lessonRes.json().error.message).toContain('referenced media asset not found');

@@ -178,6 +178,22 @@ describe('WorkspacePermissionEvaluator', () => {
     expect(release.reason).toContain('Missing required permission');
   });
 
+  it('should allow learner course delivery read for learner role', async () => {
+    mockMemberRepo.findByWorkspaceAndPrincipal.mockResolvedValue({
+      id: 'm1',
+      status: MembershipStatus.ACTIVE,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } as any);
+    mockMemberRepo.getMemberRoles.mockResolvedValue(['learner']);
+
+    const result = await evaluator.evaluate(
+      { permission: PermissionCatalog.LEARNING_COURSE_DELIVERY_READ },
+      createContext('w1', 'u1'),
+    );
+
+    expect(result.allowed).toBe(true);
+  });
+
   it('should allow creator result release and workspace result read', async () => {
     mockMemberRepo.findByWorkspaceAndPrincipal.mockResolvedValue({
       id: 'm1',

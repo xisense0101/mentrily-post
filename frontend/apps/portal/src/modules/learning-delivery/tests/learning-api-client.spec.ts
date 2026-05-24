@@ -1,9 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { createLearningApiClient } from '../api';
 import { LearningApiError } from '../api/learning-api-errors';
-import {
-  buildE2ERequestHeaders,
-} from '@/foundation/e2e/e2e-request-context';
+import { buildE2ERequestHeaders } from '@/foundation/e2e/e2e-request-context';
 
 function createJsonResponse(status: number, body: unknown) {
   return {
@@ -203,6 +201,91 @@ describe('learningApiClient', () => {
 
     const calls = fetchImpl.mock.calls as unknown as [string, RequestInit | undefined][];
     expect(calls[0]?.[0]).toBe('/workspace/learning/courses/course-1');
+  });
+
+  it('lists course assessment links with GET /workspace/learning/courses/:courseId/assessments', async () => {
+    const fetchImpl = vi.fn(async () => createJsonResponse(200, []));
+    const client = createLearningApiClient({ fetchImpl });
+
+    await client.listCourseAssessmentLinks('course-1');
+
+    const calls = fetchImpl.mock.calls as unknown as [string, RequestInit | undefined][];
+    expect(calls[0]?.[0]).toBe('/workspace/learning/courses/course-1/assessments');
+  });
+
+  it('creates an assessment link with POST /workspace/learning/courses/:courseId/assessments', async () => {
+    const fetchImpl = vi.fn(async () => createJsonResponse(201, { id: 'link-1' }));
+    const client = createLearningApiClient({ fetchImpl });
+
+    await client.createAssessmentLink('course-1', {
+      assessmentId: 'assessment-1',
+      lessonId: 'lesson-1',
+      required: true,
+      minimumScore: 80,
+    });
+
+    const calls = fetchImpl.mock.calls as unknown as [string, RequestInit | undefined][];
+    expect(calls[0]?.[0]).toBe('/workspace/learning/courses/course-1/assessments');
+    expect(calls[0]?.[1]?.method).toBe('POST');
+    expect(JSON.parse(String(calls[0]?.[1]?.body))).toEqual({
+      assessmentId: 'assessment-1',
+      lessonId: 'lesson-1',
+      required: true,
+      minimumScore: 80,
+    });
+  });
+
+  it('updates an assessment link with PATCH /workspace/learning/courses/:courseId/assessments/:linkId', async () => {
+    const fetchImpl = vi.fn(async () => createJsonResponse(200, { id: 'link-1' }));
+    const client = createLearningApiClient({ fetchImpl });
+
+    await client.updateAssessmentLink('course-1', 'link-1', {
+      required: false,
+      minimumScore: null,
+    });
+
+    const calls = fetchImpl.mock.calls as unknown as [string, RequestInit | undefined][];
+    expect(calls[0]?.[0]).toBe('/workspace/learning/courses/course-1/assessments/link-1');
+    expect(calls[0]?.[1]?.method).toBe('PATCH');
+  });
+
+  it('removes an assessment link with DELETE /workspace/learning/courses/:courseId/assessments/:linkId', async () => {
+    const fetchImpl = vi.fn(async () => createJsonResponse(200, { deleted: true }));
+    const client = createLearningApiClient({ fetchImpl });
+
+    await client.removeAssessmentLink('course-1', 'link-1');
+
+    const calls = fetchImpl.mock.calls as unknown as [string, RequestInit | undefined][];
+    expect(calls[0]?.[0]).toBe('/workspace/learning/courses/course-1/assessments/link-1');
+    expect(calls[0]?.[1]?.method).toBe('DELETE');
+  });
+
+  it('gets learner course delivery with GET /workspace/learning/courses/:courseId/delivery', async () => {
+    const fetchImpl = vi.fn(async () =>
+      createJsonResponse(200, {
+        course: {},
+        enrollment: {},
+        sections: [],
+        courseLinkedAssessments: [],
+        summary: {},
+      }),
+    );
+    const client = createLearningApiClient({ fetchImpl });
+
+    await client.getLearnerCourseDelivery('course-1');
+
+    const calls = fetchImpl.mock.calls as unknown as [string, RequestInit | undefined][];
+    expect(calls[0]?.[0]).toBe('/workspace/learning/courses/course-1/delivery');
+  });
+
+  it('gets course progress summary with GET /workspace/learning/courses/:courseId/progress-summary', async () => {
+    const fetchImpl = vi.fn(async () => createJsonResponse(200, { courseId: 'course-1' }));
+    const client = createLearningApiClient({ fetchImpl });
+
+    await client.getCourseAssessmentProgressSummary('course-1');
+
+    const calls = fetchImpl.mock.calls as unknown as [string, RequestInit | undefined][];
+    expect(calls[0]?.[0]).toBe('/workspace/learning/courses/course-1/progress-summary');
   });
 
   it('enrolls with POST /workspace/learning/courses/:courseId/enroll', async () => {

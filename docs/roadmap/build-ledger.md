@@ -2,6 +2,80 @@
 
 This document serves as a permanent continuity/backtrace system for the Mentrily SaaS codebase. Every task must record its progress here to ensure a reliable audit trail and clear path forward.
 
+### Task 014B1 — Course and Assessment Unified Delivery Experience Remediation
+
+- **Task ID**: 014B1
+- **Previous Task**: Task 014B — Course and Assessment Unified Delivery Experience
+- **Implementation Status**: Complete, remediation implemented and full root validation passed
+- **Why 014B1 Exists**:
+  - Task 014B shipped the backend `LearningAssessmentLink` foundation, but the portal unified delivery UX was incomplete.
+  - Creator-side assessment-link management was not available in the portal.
+  - Learner-side course delivery did not render linked assessments, learner-safe result visibility, or required-assessment completion state.
+  - 014C remained blocked until the full requested validation matrix completed successfully against the remediated portal flow.
+- **Work Completed**:
+  - **Shared Contracts**: Expanded frontend learning-delivery contracts to expose assessment-link CRUD requests, learner course delivery, progress summary, unlock policy, learner-safe linked-assessment status, and creator response fields such as `assessmentTitle` and `assessmentStatus`.
+  - **Frontend Learning API Client**: Added `listCourseAssessmentLinks`, `createAssessmentLink`, `updateAssessmentLink`, `removeAssessmentLink`, `getLearnerCourseDelivery`, and `getCourseAssessmentProgressSummary`.
+  - **Creator Portal UX**: Added course assessment-link management UI so creators can attach published workspace assessments to the course or a lesson, mark them required/optional, edit minimum score, remove links, and see safe progress-summary counters.
+  - **Learner Portal UX**: Switched the learner page from plain course fetches to the learner delivery endpoint, rendered course-level and lesson-level linked assessment cards, showed learner-safe states (`AWAITING_GRADING`, `PASSED`, `FAILED`, etc.), linked to attempt start/result routes, and surfaced required-assessment completion blocking.
+  - **Frontend Tests**: Added targeted tests for the learning API client, creator assessment-link manager, learner linked-assessment card, and learner completion-policy summary flow.
+  - **Backend Policy and Permissions Fixes**: Added missing Nest injection decorators for the learning assessment-link policy service, expanded role grants for learner delivery and creator assessment-link permissions, and covered those grants in security and governance tests.
+  - **Backend Tests**: Added `learning-assessment-link-policy.spec.ts`, extended learning course API integration coverage for learner delivery, and added permission-evaluator/security coverage to verify unreleased score suppression, required-assessment completion blocking, and learner delivery access.
+  - **Portal E2E Stability**: Switched the portal Playwright web server to `next dev --webpack` to avoid the Turbopack panic that was blocking the assessment-attempt suite.
+- **Exact Files Changed**:
+  - `backend/applications/platform-api/src/modules/learning-delivery/application/use-cases/get-course-assessment-progress.use-case.ts`
+  - `backend/applications/platform-api/src/modules/learning-delivery/application/use-cases/get-learner-course-delivery.use-case.ts`
+  - `backend/applications/platform-api/src/modules/learning-delivery/tests/learning-course-api.integration.spec.ts`
+  - `backend/applications/platform-api/src/modules/workspace-governance/tests/workspace-permission-evaluator.spec.ts`
+  - `backend/packages/security-toolkit/src/permissions/__tests__/policy-model.spec.ts`
+  - `backend/packages/security-toolkit/src/permissions/roles.ts`
+  - `backend/applications/platform-api/src/modules/learning-delivery/tests/learning-assessment-link-policy.spec.ts`
+  - `docs/roadmap/build-ledger.md`
+  - `frontend/apps/portal/next-env.d.ts`
+  - `frontend/apps/portal/playwright.config.ts`
+  - `frontend/apps/portal/src/contracts/learning-delivery.ts`
+  - `frontend/apps/portal/src/modules/learning-delivery/api/learning-api-client.ts`
+  - `frontend/apps/portal/src/modules/learning-delivery/components/creator/course-assessment-link-manager.tsx`
+  - `frontend/apps/portal/src/modules/learning-delivery/components/creator/index.ts`
+  - `frontend/apps/portal/src/modules/learning-delivery/components/learner/enrollment-card.tsx`
+  - `frontend/apps/portal/src/modules/learning-delivery/components/learner/course-assessment-summary.tsx`
+  - `frontend/apps/portal/src/modules/learning-delivery/components/learner/index.ts`
+  - `frontend/apps/portal/src/modules/learning-delivery/components/learner/learner-course-outline.tsx`
+  - `frontend/apps/portal/src/modules/learning-delivery/components/learner/learner-linked-assessment-card.tsx`
+  - `frontend/apps/portal/src/modules/learning-delivery/routes/creator-course-detail-page.tsx`
+  - `frontend/apps/portal/src/modules/learning-delivery/routes/learner-learning-page.tsx`
+  - `frontend/apps/portal/src/modules/learning-delivery/tests/course-assessment-link-manager.spec.tsx`
+  - `frontend/apps/portal/src/modules/learning-delivery/tests/learner-learning-page.spec.tsx`
+  - `frontend/apps/portal/src/modules/learning-delivery/tests/learner-linked-assessment-card.spec.tsx`
+  - `frontend/apps/portal/src/modules/learning-delivery/tests/learning-api-client.spec.ts`
+  - `frontend/apps/portal/src/modules/learning-delivery/types/learning-contracts.ts`
+  - `frontend/packages/domain-contracts/src/learning-delivery.ts`
+- **Validation Performed**:
+  - ✅ `git status --short`: **PASS**
+  - ✅ `pnpm lint`: **PASS** (warnings only, no lint errors)
+  - ✅ `pnpm typecheck`: **PASS**
+  - ✅ `pnpm test`: **PASS**
+  - ✅ `pnpm build`: **PASS**
+  - ✅ `pnpm test:integration`: **PASS**
+  - ✅ `pnpm test:e2e`: **PASS**
+  - ✅ `pnpm e2e:content`: **PASS**
+  - ✅ `pnpm e2e:learning`: **PASS**
+  - ✅ `pnpm e2e:assessment`: **PASS**
+  - ✅ `pnpm e2e:assessment-attempt`: **PASS**
+  - ✅ `pnpm e2e:assessment-grading`: **PASS**
+  - ✅ `pnpm e2e:assessment-result`: **PASS**
+  - ✅ `pnpm e2e:assessment-reliability`: **PASS**
+  - ✅ `pnpm --dir frontend/apps/portal typecheck`: **PASS**
+  - ✅ `pnpm --dir frontend/apps/portal test -- src/modules/learning-delivery/tests/learning-api-client.spec.ts src/modules/learning-delivery/tests/course-assessment-link-manager.spec.tsx src/modules/learning-delivery/tests/learner-linked-assessment-card.spec.tsx src/modules/learning-delivery/tests/learner-learning-page.spec.tsx`: **PASS** (portal package test run completed green; Vitest still executed the package suite around the targeted files)
+  - ✅ `pnpm --dir backend/applications/platform-api test -- src/modules/learning-delivery/tests/learning-assessment-link-policy.spec.ts`: **PASS**
+  - ✅ `pnpm --dir backend/packages/security-toolkit test -- src/permissions/__tests__/policy-model.spec.ts`: **PASS**
+  - ✅ `pnpm --dir backend/applications/platform-api test -- src/modules/workspace-governance/tests/workspace-permission-evaluator.spec.ts`: **PASS**
+  - ✅ `pnpm --dir backend/applications/platform-api exec vitest run src/modules/learning-delivery/tests/learning-course-api.integration.spec.ts --config vitest.integration.config.ts`: **PASS**
+- **Current Recommendation**:
+  - Task 014B1 is complete.
+  - Task 014C can now be recommended because the entire requested root validation matrix completed successfully.
+
+---
+
 ### Task 014B — Course and Assessment Unified Delivery Experience
 
 - **Task ID**: 014B
