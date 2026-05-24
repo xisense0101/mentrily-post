@@ -2,6 +2,30 @@
 
 This document serves as a permanent continuity/backtrace system for the Mentrily SaaS codebase. Every task must record its progress here to ensure a reliable audit trail and clear path forward.
 
+### Task 013F1 — Real Provider Integration and Delivery Worker Remediation
+
+- **Task ID**: 013F1
+- **Previous Task**: Task 013F — Real Provider Integration and Production Communication Delivery Workers
+- **Work Completed**:
+  - **Resolved Compilation Errors**: Restored missing dependencies in `NotificationDeliveryProviderFactory` constructor calls inside the unit test files (`communication-scheduler.integration.spec.ts` and `notification-delivery-provider-registry.spec.ts`).
+  - **Wired Platform Worker Main Loop**: Integrated `CommunicationDeliveryWorker` into the platform-worker startup process (`main.ts`), gated strictly by the `COMMUNICATION_DELIVERY_WORKER_ENABLED` configuration.
+  - **Hardened Env Config & Defaults**: Configured safe defaults and validations for the delivery worker environment values inside `worker-environment.ts` and root `.env` templates.
+  - **Atomic Concurrency Claims**: Refactored the claiming mechanism in `CommunicationDeliveryWorker` using a two-step database transaction (updates via strict conditional locks followed by matching queries) to ensure no concurrent worker instances duplicate provider sends.
+  - **Hardened Provider Transport & Error Sanitization**: Gated live provider calls (`RESEND_RESERVED` and `TWILIO_RESERVED`) to require `COMMUNICATION_ALLOW_LIVE_DELIVERY=true` alongside valid keys, failing closed if missing. Mapped vendor-specific errors into safe generic error codes (`VALIDATION_ERROR`, `RATE_LIMIT_EXCEEDED`, `TWILIO_UNVERIFIED_NUMBER`) and sanitized raw response texts/PII prior to storage.
+  - **Fully Deferred Push Provider**: Prevented `RESERVED_PUSH` from mapping onto `IN_APP` channel to keep the push provider fully deferred/reserved since a real PUSH domain channel does not exist yet.
+  - **Comprehensive Validation**: Added and expanded unit tests for environment gating, transport error sanitization, push mapping restrictions, and concurrency locking.
+- **Validation Performed**:
+  - `pnpm lint`: **PASS**
+  - `pnpm typecheck`: **PASS**
+  - `pnpm test`: **PASS** (all package unit tests pass successfully)
+  - `pnpm test:integration`: **PASS** (all DB-backed integration tests pass sequentially)
+  - `pnpm test:e2e`: **PASS** (all end-to-end Playwright tests pass successfully)
+- **Remaining Gaps**:
+  - Live push notification provider integration remains deferred.
+- **Next Recommended Task**: Task 014A — Multi-Workspace Dashboard and Campaign Management Foundation
+
+---
+
 ### Task 013F — Real Provider Integration and Production Communication Delivery Workers
 
 - **Task ID**: 013F
@@ -31,7 +55,7 @@ This document serves as a permanent continuity/backtrace system for the Mentrily
   - `pnpm e2e:assessment-reliability`: **PASS**
 - **Remaining Gaps**:
   - Live push notification provider integration remains deferred.
-- **Next Recommended Task**: Task 014A — Multi-Workspace Dashboard and Campaign Management Foundation
+- **Next Recommended Task**: Task 013F1 — Real Provider Integration and Delivery Worker Remediation
 
 ---
 

@@ -9,6 +9,7 @@ import { OutboxRelayWorker } from './outbox-relay/outbox-relay.worker.js';
 import { MediaProcessingWorker } from './media-processing/media-processing.worker.js';
 import { MediaSecurityScanWorker } from './media-processing/media-security-scan.worker.js';
 import { MediaLifecycleWorker } from './media-processing/media-lifecycle.worker.js';
+import { CommunicationDeliveryWorker } from './communication-delivery/communication-delivery.worker.js';
 import { WorkerModule } from './worker.module.js';
 
 async function bootstrapWorker(): Promise<void> {
@@ -34,6 +35,7 @@ async function bootstrapWorker(): Promise<void> {
   const mediaProcessingWorker = app.get(MediaProcessingWorker);
   const mediaSecurityScanWorker = app.get(MediaSecurityScanWorker);
   const mediaLifecycleWorker = app.get(MediaLifecycleWorker);
+  const communicationDeliveryWorker = app.get(CommunicationDeliveryWorker);
 
   const outboxLoop = startWorkerLoop(
     async () => {
@@ -85,16 +87,34 @@ async function bootstrapWorker(): Promise<void> {
     },
   );
 
+  const loops: Promise<void>[] = [
+    outboxLoop.completion,
+    inboxLoop.completion,
+    mediaLoop.completion,
+    securityScanLoop.completion,
+    lifecycleLoop.completion,
+  ];
+
+  if (environment.communicationDeliveryWorkerEnabled) {
+    const communicationLoop = startWorkerLoop(
+      async () => {
+        await communicationDeliveryWorker.runOnce(environment.communicationDeliveryWorkerBatchSize);
+      },
+      {
+        intervalMs: environment.communicationDeliveryWorkerIntervalMs,
+        signal: shutdown.signal,
+      },
+    );
+    loops.push(communicationLoop.completion);
+    logger.log('communication delivery worker loop started');
+  } else {
+    logger.log('communication delivery worker loop is disabled');
+  }
+
   logger.log('worker loops started');
 
   try {
-    await Promise.all([
-      outboxLoop.completion,
-      inboxLoop.completion,
-      mediaLoop.completion,
-      securityScanLoop.completion,
-      lifecycleLoop.completion,
-    ]);
+    await Promise.all(loops);
   } finally {
     shutdown.dispose();
     await app.close();
@@ -103,6 +123,9 @@ async function bootstrapWorker(): Promise<void> {
 
 void bootstrapWorker().catch((error: unknown) => {
   const logger = new Logger('platform-worker');
-  logger.error('platform-worker bootstrap failed', error instanceof Error ? error.stack : undefined);
+  logger.error(
+    'platform-worker bootstrap failed',
+    error instanceof Error ? error.stack : undefined,
+  );
   process.exitCode = 1;
 });

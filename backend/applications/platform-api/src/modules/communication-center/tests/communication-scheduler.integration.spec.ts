@@ -9,6 +9,7 @@ import {
   PrismaNotificationIntentRepository,
   ReservedEmailNotificationDeliveryProvider,
   ReservedSmsNotificationDeliveryProvider,
+  ReservedPushNotificationDeliveryProvider,
 } from '../infrastructure/index.js';
 import { NotificationIntent } from '../domain/entities/index.js';
 import {
@@ -64,6 +65,7 @@ describe('Communication scheduler (integration)', () => {
         new FixtureNotificationDeliveryProvider(),
         new ReservedEmailNotificationDeliveryProvider(getSafeNotificationProviderConfig(), true),
         new ReservedSmsNotificationDeliveryProvider(getSafeNotificationProviderConfig(), true),
+        new ReservedPushNotificationDeliveryProvider(getSafeNotificationProviderConfig(), true),
       ),
       recipientPolicy,
       policy,
@@ -81,6 +83,7 @@ describe('Communication scheduler (integration)', () => {
         new FixtureNotificationDeliveryProvider(),
         new ReservedEmailNotificationDeliveryProvider(getSafeNotificationProviderConfig(), false),
         new ReservedSmsNotificationDeliveryProvider(getSafeNotificationProviderConfig(), false),
+        new ReservedPushNotificationDeliveryProvider(getSafeNotificationProviderConfig(), false),
       ),
       recipientPolicy,
       policy,
@@ -98,6 +101,7 @@ describe('Communication scheduler (integration)', () => {
         new FixtureNotificationDeliveryProvider(),
         new ReservedEmailNotificationDeliveryProvider(getSafeNotificationProviderConfig(), true),
         new ReservedSmsNotificationDeliveryProvider(getSafeNotificationProviderConfig(), true),
+        new ReservedPushNotificationDeliveryProvider(getSafeNotificationProviderConfig(), true),
       ),
       recipientPolicy,
       policy,

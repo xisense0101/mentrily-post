@@ -6,6 +6,7 @@ import {
   NoopNotificationDeliveryProvider,
   ReservedEmailNotificationDeliveryProvider,
   ReservedSmsNotificationDeliveryProvider,
+  ReservedPushNotificationDeliveryProvider,
 } from '../infrastructure/index.js';
 
 describe('notification delivery provider registry', () => {
@@ -21,6 +22,7 @@ describe('notification delivery provider registry', () => {
       new FixtureNotificationDeliveryProvider(),
       new ReservedEmailNotificationDeliveryProvider(config, isTestEnvironment),
       new ReservedSmsNotificationDeliveryProvider(config, isTestEnvironment),
+      new ReservedPushNotificationDeliveryProvider(config, isTestEnvironment),
     );
   }
 
@@ -30,18 +32,22 @@ describe('notification delivery provider registry', () => {
   });
 
   it('resolves fixture in tests', () => {
-    const provider = createFactory({ defaultProvider: 'FIXTURE' }, true).getProvider({ channel: 'SMS' });
+    const provider = createFactory({ defaultProvider: 'FIXTURE' }, true).getProvider({
+      channel: 'SMS',
+    });
     expect(provider).toBeInstanceOf(FixtureNotificationDeliveryProvider);
   });
 
   it('refuses fixture outside tests', () => {
-    expect(() => createFactory({ defaultProvider: 'FIXTURE' }).getProvider({ channel: 'EMAIL' })).toThrowError(
-      /fixture notification provider is only available in test environments/i,
-    );
+    expect(() =>
+      createFactory({ defaultProvider: 'FIXTURE' }).getProvider({ channel: 'EMAIL' }),
+    ).toThrowError(/fixture notification provider is only available in test environments/i);
   });
 
   it('returns noop when a disabled reserved provider is only configured as default', () => {
-    const provider = createFactory({ defaultProvider: 'RESERVED_EMAIL' }).getProvider({ channel: 'EMAIL' });
+    const provider = createFactory({ defaultProvider: 'RESERVED_EMAIL' }).getProvider({
+      channel: 'EMAIL',
+    });
     expect(provider).toBeInstanceOf(NoopNotificationDeliveryProvider);
   });
 

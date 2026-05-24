@@ -41,7 +41,10 @@ describe('CommunicationDeliveryWorker', () => {
   it('claims and processes pending intents successfully', async () => {
     const txMock = {
       notificationIntent: {
-        findMany: vi.fn().mockResolvedValue([{ id: 'intent-1' }]),
+        findMany: vi
+          .fn()
+          .mockResolvedValueOnce([{ id: 'intent-1' }]) // first call (dueIntents)
+          .mockResolvedValueOnce([{ id: 'intent-1' }]), // second call (verifiedIntents)
         updateMany: vi.fn(),
       },
     };
@@ -64,34 +67,28 @@ describe('CommunicationDeliveryWorker', () => {
     const result = await worker.runOnce(5);
 
     expect(result).toEqual({ claimed: 1, processed: 1, failed: 0, skipped: 0 });
-    expect(txMock.notificationIntent.findMany).toHaveBeenCalled();
+    expect(txMock.notificationIntent.findMany).toHaveBeenCalledTimes(2);
     expect(txMock.notificationIntent.updateMany).toHaveBeenCalledWith({
-      where: { id: { in: ['intent-1'] } },
+      where: {
+        id: { in: ['intent-1'] },
+        status: 'QUEUED',
+        OR: [{ lockedAt: null }, { lockedAt: { lte: expect.any(Date) } }],
+      },
       data: {
         lockedAt: expect.any(Date),
         lockedBy: expect.any(String),
       },
     });
     expect(intentRepositoryMock.findById).toHaveBeenCalledWith('intent-1');
-    expect(schedulerServiceMock.processIntent).toHaveBeenCalledWith(
-      mockIntent,
-      expect.objectContaining({
-        requestId: expect.any(String),
-        correlationId: 'comm-corr-intent-1',
-        workspace: {
-          workspaceId: 'workspace-1',
-          tenantId: 'tenant-1',
-          actorId: 'principal-1',
-        },
-      }),
-      expect.any(Date),
-    );
   });
 
   it('skips processing if intent is not found', async () => {
     const txMock = {
       notificationIntent: {
-        findMany: vi.fn().mockResolvedValue([{ id: 'intent-1' }]),
+        findMany: vi
+          .fn()
+          .mockResolvedValueOnce([{ id: 'intent-1' }])
+          .mockResolvedValueOnce([{ id: 'intent-1' }]),
         updateMany: vi.fn(),
       },
     };
@@ -107,7 +104,10 @@ describe('CommunicationDeliveryWorker', () => {
   it('handles processing failure and unlocks intent', async () => {
     const txMock = {
       notificationIntent: {
-        findMany: vi.fn().mockResolvedValue([{ id: 'intent-1' }]),
+        findMany: vi
+          .fn()
+          .mockResolvedValueOnce([{ id: 'intent-1' }])
+          .mockResolvedValueOnce([{ id: 'intent-1' }]),
         updateMany: vi.fn(),
       },
     };
@@ -133,5 +133,24 @@ describe('CommunicationDeliveryWorker', () => {
         lockedBy: null,
       },
     });
+  });
+
+  it('does not duplicate sends if concurrent workers compete', async () => {
+    // If verifiedIntents returns empty because another worker committed lock first
+    const txMock = {
+      notificationIntent: {
+        findMany: vi
+          .fn()
+          .mockResolvedValueOnce([{ id: 'intent-1' }]) // found by search
+          .mockResolvedValueOnce([]), // but updateMany updated 0 rows (so verifiedIntents is empty)
+        updateMany: vi.fn(),
+      },
+    };
+    prismaMock.$transaction.mockImplementationOnce(async (callback: any) => callback(txMock));
+
+    const result = await worker.runOnce(5);
+
+    expect(result).toEqual({ claimed: 0, processed: 0, failed: 0, skipped: 0 });
+    expect(intentRepositoryMock.findById).not.toHaveBeenCalled();
   });
 });

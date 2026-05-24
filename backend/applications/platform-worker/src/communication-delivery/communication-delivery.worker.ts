@@ -48,14 +48,27 @@ export class CommunicationDeliveryWorker {
       const ids = dueIntents.map((intent) => intent.id);
 
       await tx.notificationIntent.updateMany({
-        where: { id: { in: ids } },
+        where: {
+          id: { in: ids },
+          status: 'QUEUED',
+          OR: [{ lockedAt: null }, { lockedAt: { lte: lockTimeout } }],
+        },
         data: {
           lockedAt: now,
           lockedBy: this.workerId,
         },
       });
 
-      return ids;
+      const verifiedIntents = await tx.notificationIntent.findMany({
+        where: {
+          id: { in: ids },
+          lockedBy: this.workerId,
+          lockedAt: now,
+        },
+        select: { id: true },
+      });
+
+      return verifiedIntents.map((intent) => intent.id);
     });
 
     if (claimedIds.length === 0) {
@@ -94,10 +107,12 @@ export class CommunicationDeliveryWorker {
         } else {
           skipped += 1;
         }
-      } catch (error: any) {
+      } catch (error: unknown) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        const errorStack = error instanceof Error ? error.stack : undefined;
         this.logger.error(
-          `Error processing communication intent ${intentId}: ${error?.message || error}`,
-          error?.stack,
+          `Error processing communication intent ${intentId}: ${errorMessage}`,
+          errorStack,
         );
         failed += 1;
 

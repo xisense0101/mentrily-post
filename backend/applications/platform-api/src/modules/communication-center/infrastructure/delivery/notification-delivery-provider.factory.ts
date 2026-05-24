@@ -43,10 +43,17 @@ export class NotificationDeliveryProviderFactory implements NotificationDelivery
       );
     }
 
+    if (resolvedProvider === 'RESERVED_PUSH') {
+      throw new AppError(
+        'VALIDATION_ERROR',
+        'RESERVED_PUSH provider is deferred and cannot be mapped to any channel because PUSH channel does not exist',
+        500,
+      );
+    }
+
     if (
       (resolvedProvider === 'RESERVED_EMAIL' && input.channel !== 'EMAIL') ||
-      (resolvedProvider === 'RESERVED_SMS' && input.channel !== 'SMS') ||
-      (resolvedProvider === 'RESERVED_PUSH' && input.channel !== 'IN_APP')
+      (resolvedProvider === 'RESERVED_SMS' && input.channel !== 'SMS')
     ) {
       throw new AppError(
         'VALIDATION_ERROR',

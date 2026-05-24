@@ -27,7 +27,7 @@ export function isNotificationProviderEnabled(input: {
     case 'RESERVED_SMS':
       return input.channel === 'SMS' && input.config.featureFlags.smsProviderEnabled;
     case 'RESERVED_PUSH':
-      return input.channel === 'IN_APP' && input.config.featureFlags.pushProviderEnabled;
+      return false; // Deferred/reserved. Push channel does not exist yet. Do not deliver IN_APP externally.
     default:
       return false;
   }
