@@ -2,11 +2,7 @@ import type { MediaAssetContract } from './media-library.js';
 
 export type LearningCourseStatus = 'DRAFT' | 'PUBLISHED' | 'ARCHIVED';
 
-export type LearningVisibility =
-  | 'PRIVATE'
-  | 'WORKSPACE'
-  | 'PUBLIC'
-  | 'UNLISTED';
+export type LearningVisibility = 'PRIVATE' | 'WORKSPACE' | 'PUBLIC' | 'UNLISTED';
 
 export type LearningContentKind =
   | 'TEXT'
@@ -18,16 +14,22 @@ export type LearningContentKind =
 
 export type EnrollmentStatus = 'ACTIVE' | 'COMPLETED' | 'CANCELLED';
 
-export type LearningProgressStatus =
-  | 'NOT_STARTED'
-  | 'IN_PROGRESS'
-  | 'COMPLETED';
+export type LearningProgressStatus = 'NOT_STARTED' | 'IN_PROGRESS' | 'COMPLETED';
 
-export type LearningProgressAction =
-  | 'STARTED'
-  | 'SEEN'
-  | 'COMPLETED'
-  | 'RESET';
+export type LearningProgressAction = 'STARTED' | 'SEEN' | 'COMPLETED' | 'RESET';
+
+export type LearningAssessmentUnlockPolicy = 'IMMEDIATE' | 'AFTER_LESSON_COMPLETE';
+
+export type LearnerLinkedAssessmentStatus =
+  | 'NOT_STARTED'
+  | 'AVAILABLE'
+  | 'IN_PROGRESS'
+  | 'SUBMITTED'
+  | 'AWAITING_GRADING'
+  | 'RESULT_RELEASED'
+  | 'PASSED'
+  | 'FAILED'
+  | 'UNAVAILABLE';
 
 export interface LearningLessonContract {
   id: string;
@@ -81,6 +83,80 @@ export interface LearningProgressContract {
   lastSeenAt?: string | undefined;
 }
 
+export interface LearningAssessmentLinkContract {
+  id: string;
+  courseId: string;
+  sectionId?: string | undefined;
+  lessonId?: string | undefined;
+  assessmentId: string;
+  required: boolean;
+  position: number;
+  unlockPolicy: LearningAssessmentUnlockPolicy;
+  minimumScore?: number | undefined;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface LearnerLinkedAssessmentContract {
+  id: string;
+  courseId: string;
+  sectionId?: string | undefined;
+  lessonId?: string | undefined;
+  assessmentId: string;
+  assessmentTitle?: string | undefined;
+  required: boolean;
+  position: number;
+  unlockPolicy: LearningAssessmentUnlockPolicy;
+  minimumScore?: number | undefined;
+  status: LearnerLinkedAssessmentStatus;
+  available: boolean;
+  attemptId?: string | undefined;
+  resultReleased: boolean;
+  releasedAt?: string | undefined;
+  score?: number | undefined;
+  maxScore?: number | undefined;
+  passed?: boolean | undefined;
+  blockingCompletion: boolean;
+  unavailableReason?: string | undefined;
+}
+
+export interface LearnerLessonDeliveryContract extends LearningLessonContract {
+  progress?: LearningProgressContract | undefined;
+  linkedAssessments: LearnerLinkedAssessmentContract[];
+}
+
+export interface LearnerSectionDeliveryContract extends LearningSectionContract {
+  lessons: LearnerLessonDeliveryContract[];
+}
+
+export interface CourseAssessmentProgressSummaryContract {
+  courseId: string;
+  totalLinkedAssessments: number;
+  requiredAssessments: number;
+  learnersAssigned: number;
+  attemptsStarted: number;
+  submissions: number;
+  pendingGrading: number;
+  resultsReleased: number;
+  blockedRequiredAssessments: number;
+  completedRequiredAssessments: number;
+  passRate?: number | undefined;
+}
+
+export interface LearnerCourseDeliveryContract {
+  course: LearningCourseContract;
+  enrollment: LearningEnrollmentContract;
+  sections: LearnerSectionDeliveryContract[];
+  courseLinkedAssessments: LearnerLinkedAssessmentContract[];
+  summary: {
+    totalLinkedAssessments: number;
+    requiredAssessments: number;
+    completedRequiredAssessments: number;
+    blockedRequiredAssessments: number;
+    canCompleteCourse: boolean;
+  };
+}
+
 export interface CreateLearningCourseRequest {
   title: string;
   slug: string;
@@ -118,4 +194,20 @@ export type EnrollInLearningCourseRequest = Record<string, never>;
 
 export interface MarkLearningProgressRequest {
   action: LearningProgressAction;
+}
+
+export interface CreateLearningAssessmentLinkRequest {
+  assessmentId: string;
+  required?: boolean | undefined;
+  position?: number | undefined;
+  unlockPolicy?: LearningAssessmentUnlockPolicy | undefined;
+  minimumScore?: number | undefined;
+  lessonId?: string | undefined;
+}
+
+export interface UpdateLearningAssessmentLinkRequest {
+  required?: boolean | undefined;
+  position?: number | undefined;
+  unlockPolicy?: LearningAssessmentUnlockPolicy | undefined;
+  minimumScore?: number | null | undefined;
 }

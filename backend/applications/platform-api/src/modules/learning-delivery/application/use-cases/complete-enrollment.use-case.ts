@@ -22,6 +22,10 @@ import {
   ensureEnrollmentOwnership,
   requireLearningActor,
 } from '../support/learning-context.js';
+import { LearningAssessmentLinkRepository } from '../../domain/repositories/learning-assessment-link.repository.js';
+import { LearningAssessmentLinkPolicyService } from '../services/learning-assessment-link-policy.service.js';
+import { AssessmentAttemptRepository } from '../../../assessment-delivery/domain/repositories/assessment-attempt.repository.js';
+import { AssessmentRepository } from '../../../assessment-delivery/domain/repositories/assessment.repository.js';
 
 @Injectable()
 export class CompleteEnrollmentUseCase {
@@ -29,6 +33,13 @@ export class CompleteEnrollmentUseCase {
     @Inject(LearningCourseRepository) private readonly courseRepo: LearningCourseRepository,
     @Inject(EnrollmentRepository) private readonly enrollmentRepo: EnrollmentRepository,
     @Inject(LearningProgressRepository) private readonly progressRepo: LearningProgressRepository,
+    @Inject(LearningAssessmentLinkRepository)
+    private readonly linkRepo: LearningAssessmentLinkRepository,
+    @Inject(LearningAssessmentLinkPolicyService)
+    private readonly linkPolicy: LearningAssessmentLinkPolicyService,
+    @Inject(AssessmentRepository) private readonly assessmentRepo: AssessmentRepository,
+    @Inject(AssessmentAttemptRepository)
+    private readonly attemptRepo: AssessmentAttemptRepository,
     @Inject(PERMISSION_EVALUATOR) private readonly permissionEvaluator: PermissionEvaluator,
     @Inject(TRANSACTION_RUNNER) private readonly transactionRunner: TransactionRunner,
     @Inject(AUDIT_RECORDER) private readonly auditRecorder: AuditRecorder,
@@ -54,6 +65,7 @@ export class CompleteEnrollmentUseCase {
       if (!course) throw new AppError('NOT_FOUND', 'course not found', 404);
       ensureCourseOwnership(course, context);
 
+      // Check required lessons completion
       const completedLessonIds = new Set(
         (await this.progressRepo.listCompletedByEnrollment(enrollment.id, tx)).map(
           (p) => p.lessonId,
@@ -62,11 +74,50 @@ export class CompleteEnrollmentUseCase {
       const requiredLessonIds = course.sections.flatMap((s) =>
         s.lessons.filter((l) => l.isRequired).map((l) => l.id),
       );
-      const allRequiredDone = requiredLessonIds.every((lessonId) =>
+      const allRequiredLessonsDone = requiredLessonIds.every((lessonId) =>
         completedLessonIds.has(lessonId),
       );
-      if (!allRequiredDone)
+      if (!allRequiredLessonsDone)
         throw new AppError('CONFLICT', 'required lessons are not completed', 409);
+
+      // Check required course-level linked assessments satisfaction
+      const courseLinks = await this.linkRepo.listByCourse(course.id, tx);
+      const requiredCourseLinks = courseLinks.filter((l) => l.lessonId === null && l.required);
+
+      if (requiredCourseLinks.length > 0) {
+        const attempts = await this.attemptRepo.listByLearner(
+          {
+            workspaceId: enrollment.workspaceId,
+            learnerPrincipalId: enrollment.learnerPrincipalId,
+          },
+          tx,
+        );
+        const attemptsByLinkId = new Map(
+          requiredCourseLinks.map((l) => [
+            l.id,
+            attempts.find((a) => a.assessmentId === l.assessmentId) ?? null,
+          ]),
+        );
+
+        const assessmentsByLinkId = new Map<string, any>();
+        for (const link of requiredCourseLinks) {
+          const assessment = await this.assessmentRepo.findById(link.assessmentId, tx);
+          assessmentsByLinkId.set(link.id, assessment);
+        }
+
+        const unsatisfiedLinks = requiredCourseLinks.filter((link) => {
+          const attempt = attemptsByLinkId.get(link.id);
+          const assessment = assessmentsByLinkId.get(link.id);
+          return (
+            !this.linkPolicy.isAssessmentPublished(assessment) ||
+            !this.linkPolicy.isRequiredAssessmentSatisfied({ link, attempt })
+          );
+        });
+
+        if (unsatisfiedLinks.length > 0) {
+          throw new AppError('CONFLICT', 'required course assessments are not completed', 409);
+        }
+      }
 
       enrollment.complete();
       const saved = await this.enrollmentRepo.save(enrollment, tx);

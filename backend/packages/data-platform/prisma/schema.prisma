@@ -521,8 +521,9 @@ model LearningCourse {
   publishedAt        DateTime?
   archivedAt         DateTime?
 
-  sections    LearningSection[]
-  enrollments LearningEnrollment[]
+  sections         LearningSection[]
+  enrollments      LearningEnrollment[]
+  assessmentLinks  LearningAssessmentLink[]
 
   @@unique([workspaceId, slug])
   @@index([tenantId])
@@ -542,8 +543,9 @@ model LearningSection {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  course  LearningCourse   @relation(fields: [courseId], references: [id], onDelete: Cascade)
-  lessons LearningLesson[]
+  course           LearningCourse          @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  lessons          LearningLesson[]
+  assessmentLinks  LearningAssessmentLink[]
 
   @@unique([courseId, position])
   @@index([courseId])
@@ -562,7 +564,8 @@ model LearningLesson {
   createdAt        DateTime            @default(now())
   updatedAt        DateTime            @updatedAt
 
-  section LearningSection @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+  section         LearningSection         @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+  assessmentLinks LearningAssessmentLink[]
 
   @@unique([sectionId, position])
   @@index([sectionId])
@@ -625,6 +628,45 @@ model LearningProgress {
   @@index([status])
   @@index([completedAt])
   @@index([lastSeenAt])
+}
+
+enum LearningAssessmentUnlockPolicy {
+  IMMEDIATE
+  AFTER_LESSON_COMPLETE
+}
+
+model LearningAssessmentLink {
+  id                 String                       @id @default(uuid()) @db.Uuid
+  tenantId           String                       @db.Uuid
+  workspaceId        String                       @db.Uuid
+  courseId           String                       @db.Uuid
+  sectionId          String?                      @db.Uuid
+  lessonId           String?                      @db.Uuid
+  assessmentId       String                       @db.Uuid
+  required           Boolean                      @default(true)
+  position           Int
+  unlockPolicy       LearningAssessmentUnlockPolicy @default(IMMEDIATE)
+  minimumScore       Float?
+  createdByPrincipalId String                      @db.Uuid
+  createdAt          DateTime                     @default(now())
+  updatedAt          DateTime                     @updatedAt
+
+  course     LearningCourse   @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  section    LearningSection? @relation(fields: [sectionId], references: [id], onDelete: SetNull)
+  lesson     LearningLesson?  @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  assessment Assessment       @relation(fields: [assessmentId], references: [id], onDelete: Restrict)
+
+  @@index([tenantId])
+  @@index([workspaceId])
+  @@index([courseId])
+  @@index([sectionId])
+  @@index([lessonId])
+  @@index([assessmentId])
+  @@index([createdByPrincipalId])
+  @@index([workspaceId, courseId])
+  @@index([workspaceId, lessonId])
+  @@index([workspaceId, assessmentId])
+  @@index([workspaceId, courseId, position])
 }
 
 model ContentDocument {
@@ -757,6 +799,7 @@ model Assessment {
   gradingRules        AssessmentGradingRule[]
   snapshots           AssessmentPublishedSnapshot[] @relation("AssessmentSnapshots")
   attempts            AssessmentAttempt[]
+  learningLinks       LearningAssessmentLink[]
 
   @@index([tenantId])
   @@index([workspaceId])

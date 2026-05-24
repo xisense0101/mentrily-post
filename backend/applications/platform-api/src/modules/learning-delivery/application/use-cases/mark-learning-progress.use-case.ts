@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { Inject, Injectable } from '@nestjs/common';
 import {
   AppError,
@@ -10,14 +11,18 @@ import {
   TransactionRunner,
 } from '@mentrily/service-core';
 import { PermissionCatalog } from '@mentrily/security-toolkit';
+import { AssessmentAttemptRepository } from '../../../assessment-delivery/domain/repositories/index.js';
+import { AssessmentRepository } from '../../../assessment-delivery/domain/repositories/index.js';
 import { LearningProgressRepository } from '../../domain/repositories/learning-progress.repository.js';
 import { EnrollmentRepository } from '../../domain/repositories/enrollment.repository.js';
 import { LearningCourseRepository } from '../../domain/repositories/learning-course.repository.js';
+import { LearningAssessmentLinkRepository } from '../../domain/repositories/learning-assessment-link.repository.js';
 import { MarkLearningProgressInput } from '../dto/mark-learning-progress.dto.js';
 import { LearningProgress } from '../../domain/entities/learning-progress.entity.js';
 import { LearningProgressStatus } from '../../domain/value-objects/learning-progress-status.vo.js';
 import { LearningEventPublisherService } from '../services/learning-event-publisher.service.js';
 import { progressCompleted } from '../../domain/events/learning-events.js';
+import { LearningAssessmentLinkPolicyService } from '../services/learning-assessment-link-policy.service.js';
 import {
   ensureCourseOwnership,
   ensureEnrollmentLearner,
@@ -25,15 +30,25 @@ import {
   requireLearningActor,
 } from '../support/learning-context.js';
 
+function latestAttempt<T extends { id: string }>(attempts: T[]): T | null {
+  return attempts[0] ?? null;
+}
+
 @Injectable()
 export class MarkLearningProgressUseCase {
   constructor(
     @Inject(LearningCourseRepository) private readonly courseRepo: LearningCourseRepository,
     @Inject(EnrollmentRepository) private readonly enrollmentRepo: EnrollmentRepository,
     @Inject(LearningProgressRepository) private readonly progressRepo: LearningProgressRepository,
+    @Inject(LearningAssessmentLinkRepository)
+    private readonly linkRepo: LearningAssessmentLinkRepository,
+    @Inject(AssessmentRepository) private readonly assessmentRepo: AssessmentRepository,
+    @Inject(AssessmentAttemptRepository) private readonly attemptRepo: AssessmentAttemptRepository,
     @Inject(PERMISSION_EVALUATOR) private readonly permissionEvaluator: PermissionEvaluator,
     @Inject(TRANSACTION_RUNNER) private readonly transactionRunner: TransactionRunner,
     @Inject(AUDIT_RECORDER) private readonly auditRecorder: AuditRecorder,
+    @Inject(LearningAssessmentLinkPolicyService)
+    private readonly linkPolicy: LearningAssessmentLinkPolicyService,
     @Inject(LearningEventPublisherService)
     private readonly eventPublisher: LearningEventPublisherService,
   ) {}
@@ -49,21 +64,29 @@ export class MarkLearningProgressUseCase {
       { permission: PermissionCatalog.LEARNING_PROGRESS_UPDATE, workspace },
       context,
     );
-    if (!perm.allowed) throw new AppError('FORBIDDEN', 'permission denied', 403);
+    if (!perm.allowed) {
+      throw new AppError('FORBIDDEN', 'permission denied', 403);
+    }
 
     return this.transactionRunner.run(async (tx) => {
       const enrollment = await this.enrollmentRepo.findById(enrollmentId, tx);
-      if (!enrollment) throw new AppError('NOT_FOUND', 'enrollment not found', 404);
+      if (!enrollment) {
+        throw new AppError('NOT_FOUND', 'enrollment not found', 404);
+      }
       ensureEnrollmentOwnership(enrollment, context);
       ensureEnrollmentLearner(enrollment, context);
 
       const course = await this.courseRepo.findById(enrollment.courseId, tx);
-      if (!course) throw new AppError('NOT_FOUND', 'course not found', 404);
+      if (!course) {
+        throw new AppError('NOT_FOUND', 'course not found', 404);
+      }
       ensureCourseOwnership(course, context);
 
       const section = course.sections.find((s) => s.lessons.some((l) => l.id === lessonId));
       const lesson = section?.lessons.find((l) => l.id === lessonId);
-      if (!lesson || !section) throw new AppError('NOT_FOUND', 'lesson not found', 404);
+      if (!lesson || !section) {
+        throw new AppError('NOT_FOUND', 'lesson not found', 404);
+      }
 
       let progress = await this.progressRepo.findByEnrollmentAndLesson(enrollmentId, lessonId, tx);
       if (!progress) {
@@ -78,9 +101,41 @@ export class MarkLearningProgressUseCase {
         });
       }
 
-      if (input.action === 'STARTED' || input.action === 'SEEN') progress.markSeen();
-      if (input.action === 'COMPLETED') progress.markCompleted();
-      if (input.action === 'RESET') progress.reset();
+      if (input.action === 'COMPLETED') {
+        const lessonLinks = (await this.linkRepo.listByCourse(course.id, tx)).filter(
+          (link) => link.lessonId === lessonId,
+        );
+        for (const link of lessonLinks) {
+          if (!link.required) {
+            continue;
+          }
+          const assessment = await this.assessmentRepo.findById(link.assessmentId, tx);
+          const attempts = await this.attemptRepo.listByAssessmentAndLearner(
+            {
+              assessmentId: link.assessmentId,
+              learnerPrincipalId: enrollment.learnerPrincipalId,
+            },
+            tx,
+          );
+          const attempt = latestAttempt(attempts);
+          const satisfied =
+            this.linkPolicy.isAssessmentPublished(assessment) &&
+            this.linkPolicy.isRequiredAssessmentSatisfied({ link, attempt });
+          if (!satisfied) {
+            throw new AppError('CONFLICT', 'required assessment must be completed first', 409);
+          }
+        }
+      }
+
+      if (input.action === 'STARTED' || input.action === 'SEEN') {
+        progress.markSeen();
+      }
+      if (input.action === 'COMPLETED') {
+        progress.markCompleted();
+      }
+      if (input.action === 'RESET') {
+        progress.reset();
+      }
 
       const saved = await this.progressRepo.save(progress, tx);
 
@@ -111,4 +166,3 @@ export class MarkLearningProgressUseCase {
     });
   }
 }
-import { randomUUID } from 'node:crypto';

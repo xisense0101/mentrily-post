@@ -5,6 +5,7 @@ import { EnrollInLearningCourseUseCase } from '../../application/use-cases/enrol
 import { ListLearningEnrollmentsUseCase } from '../../application/use-cases/list-learning-enrollments.use-case.js';
 import { MarkLearningProgressUseCase } from '../../application/use-cases/mark-learning-progress.use-case.js';
 import { CompleteEnrollmentUseCase } from '../../application/use-cases/complete-enrollment.use-case.js';
+import { GetLearnerCourseDeliveryUseCase } from '../../application/use-cases/get-learner-course-delivery.use-case.js';
 import { EnrollInLearningCourseInput } from '../../application/dto/enroll-in-learning-course.dto.js';
 import { MarkLearningProgressInput } from '../../application/dto/mark-learning-progress.dto.js';
 import { mapEnrollmentToResponse } from '../../application/mappers/learning-enrollment-response.mapper.js';
@@ -22,6 +23,8 @@ export class LearnerLearningController {
     private readonly markProgress: MarkLearningProgressUseCase,
     @Inject(CompleteEnrollmentUseCase)
     private readonly completeEnrollmentUseCase: CompleteEnrollmentUseCase,
+    @Inject(GetLearnerCourseDeliveryUseCase)
+    private readonly getLearnerCourseDelivery: GetLearnerCourseDeliveryUseCase,
   ) {}
 
   @Post('/courses/:courseId/enroll')
@@ -70,6 +73,11 @@ export class LearnerLearningController {
       enrollmentId,
     );
     return mapEnrollmentToResponse(enrollment);
+  }
+
+  @Get('/courses/:courseId/delivery')
+  async getCourseDelivery(@Req() request: FastifyRequest, @Param('courseId') courseId: string) {
+    return this.getLearnerCourseDelivery.execute(this.requestContext(request), courseId);
   }
 
   private requestContext(request: FastifyRequest): RequestContext {

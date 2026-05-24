@@ -1,4 +1,4 @@
-import { Controller, Post, Patch, Body, Req, Param, Get, Inject } from '@nestjs/common';
+import { Controller, Post, Patch, Body, Req, Param, Get, Inject, Delete } from '@nestjs/common';
 import type { FastifyRequest } from 'fastify';
 import { AppError, RequestContext } from '@mentrily/service-core';
 import { CreateLearningCourseUseCase } from '../../application/use-cases/create-learning-course.use-case.js';
@@ -11,6 +11,11 @@ import { ReorderLearningSectionsUseCase } from '../../application/use-cases/reor
 import { ReorderLearningLessonsUseCase } from '../../application/use-cases/reorder-learning-lessons.use-case.js';
 import { PublishLearningCourseUseCase } from '../../application/use-cases/publish-learning-course.use-case.js';
 import { ArchiveLearningCourseUseCase } from '../../application/use-cases/archive-learning-course.use-case.js';
+import { CreateLearningAssessmentLinkUseCase } from '../../application/use-cases/create-learning-assessment-link.use-case.js';
+import { UpdateLearningAssessmentLinkUseCase } from '../../application/use-cases/update-learning-assessment-link.use-case.js';
+import { RemoveLearningAssessmentLinkUseCase } from '../../application/use-cases/remove-learning-assessment-link.use-case.js';
+import { ListLearningAssessmentLinksUseCase } from '../../application/use-cases/list-learning-assessment-links.use-case.js';
+import { GetCourseAssessmentProgressUseCase } from '../../application/use-cases/get-course-assessment-progress.use-case.js';
 import { CreateLearningCourseInput } from '../../application/dto/create-learning-course.dto.js';
 import { UpdateLearningCourseInput } from '../../application/dto/update-learning-course.dto.js';
 import { AddLearningSectionInput } from '../../application/dto/add-learning-section.dto.js';
@@ -18,6 +23,8 @@ import { AddLearningLessonInput } from '../../application/dto/add-learning-lesso
 import { ReorderLearningSectionsInput } from '../../application/dto/reorder-learning-sections.dto.js';
 import { ReorderLearningLessonsInput } from '../../application/dto/reorder-learning-lessons.dto.js';
 import { PublishLearningCourseInput } from '../../application/dto/publish-learning-course.dto.js';
+import { CreateLearningAssessmentLinkInput } from '../../application/dto/create-learning-assessment-link.dto.js';
+import { UpdateLearningAssessmentLinkInput } from '../../application/dto/update-learning-assessment-link.dto.js';
 import { MediaAssetRepository } from '../../../media-library/domain/repositories/index.js';
 import { mapCourseToResponse } from '../../application/mappers/learning-course-response.mapper.js';
 
@@ -44,6 +51,16 @@ export class CreatorLearningController {
     private readonly publishCourse: PublishLearningCourseUseCase,
     @Inject(ArchiveLearningCourseUseCase)
     private readonly archiveCourse: ArchiveLearningCourseUseCase,
+    @Inject(CreateLearningAssessmentLinkUseCase)
+    private readonly createLink: CreateLearningAssessmentLinkUseCase,
+    @Inject(UpdateLearningAssessmentLinkUseCase)
+    private readonly updateLink: UpdateLearningAssessmentLinkUseCase,
+    @Inject(RemoveLearningAssessmentLinkUseCase)
+    private readonly removeLink: RemoveLearningAssessmentLinkUseCase,
+    @Inject(ListLearningAssessmentLinksUseCase)
+    private readonly listLinks: ListLearningAssessmentLinksUseCase,
+    @Inject(GetCourseAssessmentProgressUseCase)
+    private readonly getCourseProgress: GetCourseAssessmentProgressUseCase,
     @Inject(MediaAssetRepository)
     private readonly mediaAssetRepo: MediaAssetRepository,
   ) {}
@@ -155,5 +172,44 @@ export class CreatorLearningController {
   async archive(@Req() request: FastifyRequest, @Param('courseId') courseId: string) {
     const course = await this.archiveCourse.execute(this.requestContext(request), courseId);
     return await mapCourseToResponse(course, this.mediaAssetRepo);
+  }
+
+  @Post('/:courseId/assessments')
+  async createAssessmentLink(
+    @Req() request: FastifyRequest,
+    @Param('courseId') courseId: string,
+    @Body() body: CreateLearningAssessmentLinkInput,
+  ) {
+    return await this.createLink.execute(this.requestContext(request), courseId, body);
+  }
+
+  @Get('/:courseId/assessments')
+  async listAssessmentLinks(@Req() request: FastifyRequest, @Param('courseId') courseId: string) {
+    return await this.listLinks.execute(this.requestContext(request), courseId);
+  }
+
+  @Patch('/:courseId/assessments/:linkId')
+  async updateAssessmentLink(
+    @Req() request: FastifyRequest,
+    @Param('courseId') courseId: string,
+    @Param('linkId') linkId: string,
+    @Body() body: UpdateLearningAssessmentLinkInput,
+  ) {
+    return await this.updateLink.execute(this.requestContext(request), courseId, linkId, body);
+  }
+
+  @Delete('/:courseId/assessments/:linkId')
+  async removeAssessmentLink(
+    @Req() request: FastifyRequest,
+    @Param('courseId') courseId: string,
+    @Param('linkId') linkId: string,
+  ) {
+    await this.removeLink.execute(this.requestContext(request), courseId, linkId);
+    return { deleted: true };
+  }
+
+  @Get('/:courseId/progress-summary')
+  async getProgressSummary(@Req() request: FastifyRequest, @Param('courseId') courseId: string) {
+    return await this.getCourseProgress.execute(this.requestContext(request), courseId);
   }
 }
