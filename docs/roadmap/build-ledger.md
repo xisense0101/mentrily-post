@@ -2,6 +2,39 @@
 
 This document serves as a permanent continuity/backtrace system for the Mentrily SaaS codebase. Every task must record its progress here to ensure a reliable audit trail and clear path forward.
 
+### Task 013F — Real Provider Integration and Production Communication Delivery Workers
+
+- **Task ID**: 013F
+- **Previous Task**: Task 013E2 — Communication Event Wiring Provider-Readiness Hardening
+- **Work Completed**:
+  - **Operational Env Flags**: Added `COMMUNICATION_DELIVERY_WORKER_ENABLED`, `COMMUNICATION_DELIVERY_WORKER_INTERVAL_MS`, `COMMUNICATION_DELIVERY_WORKER_BATCH_SIZE`, `COMMUNICATION_DELIVERY_MAX_ATTEMPTS`, and `COMMUNICATION_DELIVERY_RETRY_BASE_MS` to control the worker lifecycle and retry limits.
+  - **Deterministic Loop Control**: Integrated env-gated enablement checks in the worker loop so it only schedules interval runs if enabled. The `runOnce` entry point remains deterministic and loop-free for integration tests.
+  - **Hardened Provider Transport**: Created `CommunicationProviderTransport` default `NOOP` behavior and allowed `FIXTURE` mode exclusively in test environments. Implemented live providers (`RESEND_RESERVED` for Resend and `TWILIO_RESERVED` for Twilio) which are disabled by default and require `COMMUNICATION_ALLOW_LIVE_DELIVERY=true` alongside valid API keys/credentials, falling back to clean failure/closed states if credentials are missing.
+  - **Safe Error/Response Sanitization**: Sanitized raw provider errors and payloads. Mapped vendor-specific failures into safe generic error codes (`DELIVERY_FAILED`, `RATE_LIMIT_EXCEEDED`, etc.) and messages instead of storing raw, implementation-leaking response text. Strictly scrubbed auth headers, tokens, and recipient bodies from logs.
+  - **Replaced Explicit Types**: Removed `any` from transport variables and error scopes, using safe unknown narrowing and TypeScript typings.
+  - **Deferred SMS/Push Support**: PUSH transport was added behind `ReservedPushNotificationDeliveryProvider` as deferred/mock only. Live Twilio SMS calls require explicit enablement and are fully mocked in unit and integration suites to prevent real network calls.
+  - **Verification Matrix & Tests**: Verified the whole suite including noop, fixture, concurrent execution safety, retry/backoff limits, and workspace filters.
+- **Validation Performed**:
+  - `git status --short`: **PASS** (working tree clean, changes committed and pushed)
+  - `pnpm lint`: **PASS** (13/13 tasks successful, 0 errors)
+  - `pnpm typecheck`: **PASS** (20/20 tasks successful, 0 errors)
+  - `pnpm test`: **PASS** (all unit/spec tests pass successfully)
+  - `pnpm build`: **PASS** (successful build workspace)
+  - `pnpm test:integration`: **PASS** (all integration tests pass including scheduler and delivery worker)
+  - `pnpm test:e2e`: **PASS** (all 6 E2E suites pass)
+  - `pnpm e2e:content`: **PASS**
+  - `pnpm e2e:learning`: **PASS**
+  - `pnpm e2e:assessment`: **PASS**
+  - `pnpm e2e:assessment-attempt`: **PASS**
+  - `pnpm e2e:assessment-grading`: **PASS**
+  - `pnpm e2e:assessment-result`: **PASS**
+  - `pnpm e2e:assessment-reliability`: **PASS**
+- **Remaining Gaps**:
+  - Live push notification provider integration remains deferred.
+- **Next Recommended Task**: Task 014A — Multi-Workspace Dashboard and Campaign Management Foundation
+
+---
+
 ### Task 013E2 — Communication Event Wiring Provider-Readiness Hardening
 
 - **Task ID**: 013E2
