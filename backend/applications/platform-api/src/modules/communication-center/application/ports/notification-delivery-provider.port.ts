@@ -20,6 +20,7 @@ export interface NotificationDeliveryProviderResult {
   errorCode?: string | undefined;
   errorMessage?: string | undefined;
   metadata: Record<string, unknown>;
+  retryable?: boolean;
 }
 
 export interface NotificationDeliveryProvider {

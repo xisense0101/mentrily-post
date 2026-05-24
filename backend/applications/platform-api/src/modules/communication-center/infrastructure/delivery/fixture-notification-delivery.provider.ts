@@ -7,7 +7,9 @@ import type {
 
 @Injectable()
 export class FixtureNotificationDeliveryProvider implements NotificationDeliveryProvider {
-  async deliver(input: NotificationDeliveryProviderRequest): Promise<NotificationDeliveryProviderResult> {
+  async deliver(
+    input: NotificationDeliveryProviderRequest,
+  ): Promise<NotificationDeliveryProviderResult> {
     if (input.metadata.fixtureResult === 'FAILED') {
       return {
         status: 'FAILED',
@@ -15,6 +17,17 @@ export class FixtureNotificationDeliveryProvider implements NotificationDelivery
         errorCode: 'FIXTURE_FAILURE',
         errorMessage: 'fixture provider simulated failure',
         metadata: { simulated: true },
+      };
+    }
+
+    if (input.metadata.fixtureResult === 'RETRYABLE') {
+      return {
+        status: 'FAILED',
+        provider: 'FIXTURE',
+        errorCode: 'FIXTURE_RETRYABLE_FAILURE',
+        errorMessage: 'fixture provider simulated retryable failure',
+        metadata: { simulated: true },
+        retryable: true,
       };
     }
 

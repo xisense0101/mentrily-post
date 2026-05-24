@@ -11,6 +11,7 @@ describe('notification provider config', () => {
       featureFlags: {
         emailProviderEnabled: false,
         smsProviderEnabled: false,
+        pushProviderEnabled: false,
         allowLiveDelivery: false,
       },
     });

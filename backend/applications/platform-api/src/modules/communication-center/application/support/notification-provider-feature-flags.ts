@@ -1,18 +1,22 @@
-import type { NotificationChannel, NotificationProvider } from '../../domain/value-objects/index.js';
-import type { CommunicationProviderMode, NotificationProviderConfig } from './notification-provider-config.js';
+import type {
+  NotificationChannel,
+  NotificationProvider,
+} from '../../domain/value-objects/index.js';
+import type {
+  CommunicationProviderMode,
+  NotificationProviderConfig,
+} from './notification-provider-config.js';
 
 export function isNotificationProviderFixtureAllowed(isTestEnvironment: boolean): boolean {
   return isTestEnvironment;
 }
 
-export function isNotificationProviderEnabled(
-  input: {
-    provider: NotificationProvider | CommunicationProviderMode;
-    channel: NotificationChannel;
-    config: NotificationProviderConfig;
-    isTestEnvironment: boolean;
-  },
-): boolean {
+export function isNotificationProviderEnabled(input: {
+  provider: NotificationProvider | CommunicationProviderMode;
+  channel: NotificationChannel;
+  config: NotificationProviderConfig;
+  isTestEnvironment: boolean;
+}): boolean {
   switch (input.provider) {
     case 'NOOP':
       return true;
@@ -22,11 +26,17 @@ export function isNotificationProviderEnabled(
       return input.channel === 'EMAIL' && input.config.featureFlags.emailProviderEnabled;
     case 'RESERVED_SMS':
       return input.channel === 'SMS' && input.config.featureFlags.smsProviderEnabled;
+    case 'RESERVED_PUSH':
+      return input.channel === 'IN_APP' && input.config.featureFlags.pushProviderEnabled;
     default:
       return false;
   }
 }
 
-export function requiresLiveDelivery(provider: NotificationProvider | CommunicationProviderMode): boolean {
-  return provider === 'RESERVED_EMAIL' || provider === 'RESERVED_SMS';
+export function requiresLiveDelivery(
+  provider: NotificationProvider | CommunicationProviderMode,
+): boolean {
+  return (
+    provider === 'RESERVED_EMAIL' || provider === 'RESERVED_SMS' || provider === 'RESERVED_PUSH'
+  );
 }

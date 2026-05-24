@@ -31,6 +31,8 @@ export interface NotificationIntentProps {
   failedAt?: Date | undefined;
   cancelledAt?: Date | undefined;
   failureReason?: string | undefined;
+  lockedAt?: Date | undefined;
+  lockedBy?: string | undefined;
   metadata: Record<string, unknown>;
   createdByPrincipalId: string;
   createdAt: Date;
@@ -72,6 +74,8 @@ export class NotificationIntent {
   readonly failedAt?: Date | undefined;
   readonly cancelledAt?: Date | undefined;
   readonly failureReason?: string | undefined;
+  readonly lockedAt?: Date | undefined;
+  readonly lockedBy?: string | undefined;
   readonly metadata: Record<string, unknown>;
   readonly createdByPrincipalId: string;
   readonly createdAt: Date;
@@ -95,6 +99,8 @@ export class NotificationIntent {
     this.failedAt = props.failedAt;
     this.cancelledAt = props.cancelledAt;
     this.failureReason = props.failureReason?.trim() || undefined;
+    this.lockedAt = props.lockedAt;
+    this.lockedBy = props.lockedBy;
     this.metadata = { ...props.metadata };
     this.createdByPrincipalId = required(props.createdByPrincipalId, 'createdByPrincipalId');
     this.createdAt = props.createdAt;
@@ -102,7 +108,10 @@ export class NotificationIntent {
   }
 
   static createQueued(
-    input: Omit<NotificationIntentProps, 'status' | 'priority' | 'createdAt' | 'updatedAt' | 'queuedAt' | 'metadata'> & {
+    input: Omit<
+      NotificationIntentProps,
+      'status' | 'priority' | 'createdAt' | 'updatedAt' | 'queuedAt' | 'metadata'
+    > & {
       priority?: NotificationPriority | undefined;
       metadata?: Record<string, unknown> | undefined;
       createdAt?: Date | undefined;
@@ -123,7 +132,10 @@ export class NotificationIntent {
   }
 
   static createDraft(
-    input: Omit<NotificationIntentProps, 'status' | 'priority' | 'createdAt' | 'updatedAt' | 'metadata'> & {
+    input: Omit<
+      NotificationIntentProps,
+      'status' | 'priority' | 'createdAt' | 'updatedAt' | 'metadata'
+    > & {
       priority?: NotificationPriority | undefined;
       metadata?: Record<string, unknown> | undefined;
       createdAt?: Date | undefined;
@@ -189,6 +201,24 @@ export class NotificationIntent {
       ...this,
       status: 'CANCELLED',
       cancelledAt: occurredAt,
+      updatedAt: occurredAt,
+    });
+  }
+
+  lock(lockedBy: string, lockedAt = new Date()): NotificationIntent {
+    return new NotificationIntent({
+      ...this,
+      lockedAt,
+      lockedBy,
+      updatedAt: lockedAt,
+    });
+  }
+
+  unlock(occurredAt = new Date()): NotificationIntent {
+    return new NotificationIntent({
+      ...this,
+      lockedAt: undefined,
+      lockedBy: undefined,
       updatedAt: occurredAt,
     });
   }

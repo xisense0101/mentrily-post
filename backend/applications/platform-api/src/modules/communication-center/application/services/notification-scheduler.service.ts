@@ -1,6 +1,12 @@
 import { randomUUID } from 'node:crypto';
 import { Inject, Injectable } from '@nestjs/common';
-import { AUDIT_RECORDER, type AuditRecorder, type RequestContext, TRANSACTION_RUNNER, type TransactionRunner } from '@mentrily/service-core';
+import {
+  AUDIT_RECORDER,
+  type AuditRecorder,
+  type RequestContext,
+  TRANSACTION_RUNNER,
+  type TransactionRunner,
+} from '@mentrily/service-core';
 import { DataError, DataErrorType } from '@mentrily/data-platform';
 import type { NotificationDeliveryProviderResult } from '../ports/index.js';
 import {
@@ -32,7 +38,8 @@ export interface NotificationSchedulerProcessResult {
 @Injectable()
 export class NotificationSchedulerService {
   constructor(
-    @Inject(NotificationIntentRepository) private readonly intentRepository: NotificationIntentRepository,
+    @Inject(NotificationIntentRepository)
+    private readonly intentRepository: NotificationIntentRepository,
     @Inject(NotificationDeliveryAttemptRepository)
     private readonly attemptRepository: NotificationDeliveryAttemptRepository,
     @Inject(NOTIFICATION_DELIVERY_PROVIDER_REGISTRY)
@@ -135,7 +142,12 @@ export class NotificationSchedulerService {
         createdAt: now,
       });
 
-      const claimedAttempt = await this.savePendingAttempt(pendingAttempt, currentIntent.id, now, tx);
+      const claimedAttempt = await this.savePendingAttempt(
+        pendingAttempt,
+        currentIntent.id,
+        now,
+        tx,
+      );
       if (!claimedAttempt) {
         return { intentId: currentIntent.id, status: 'SKIPPED' };
       }
@@ -231,6 +243,34 @@ export class NotificationSchedulerService {
         tx,
       );
 
+      const attemptsCount = currentAttempts.length + 1;
+      const isRetryable =
+        providerResult.retryable === true && attemptsCount < this.schedulerPolicy.maxAttempts;
+
+      if (isRetryable) {
+        const retryBaseDelayMs = Number(process.env.COMMUNICATION_DELIVERY_RETRY_BASE_MS) || 1000;
+        const delayMs = retryBaseDelayMs * Math.pow(2, attemptsCount - 1);
+        const nextScheduledFor = new Date(now.getTime() + delayMs);
+
+        await (tx.client as any).notificationIntent.update({
+          where: { id: currentIntent.id },
+          data: {
+            scheduledFor: nextScheduledFor,
+            lockedAt: null,
+            lockedBy: null,
+            updatedAt: now,
+          },
+        });
+
+        return {
+          intentId: currentIntent.id,
+          status: 'SKIPPED',
+          deliveryAttemptId: failedAttempt.id,
+          errorCode: providerResult.errorCode,
+          errorMessage: providerResult.errorMessage,
+        };
+      }
+
       const failedIntent = await this.intentRepository.markFailedIfQueued(
         {
           intentId: currentIntent.id,
@@ -262,7 +302,11 @@ export class NotificationSchedulerService {
     });
   }
 
-  private evaluateEligibility(intent: NotificationIntent, attempts: NotificationDeliveryAttempt[], now: Date) {
+  private evaluateEligibility(
+    intent: NotificationIntent,
+    attempts: NotificationDeliveryAttempt[],
+    now: Date,
+  ) {
     let recipientValid = true;
 
     try {
@@ -322,7 +366,11 @@ export class NotificationSchedulerService {
   }
 
   private resolveFailureReason(providerResult: NotificationDeliveryProviderResult): string {
-    return providerResult.errorMessage?.trim() || providerResult.errorCode?.trim() || 'notification delivery failed';
+    return (
+      providerResult.errorMessage?.trim() ||
+      providerResult.errorCode?.trim() ||
+      'notification delivery failed'
+    );
   }
 
   private async recordIntentFailure(

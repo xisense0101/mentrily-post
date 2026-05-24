@@ -10,9 +10,7 @@ import {
   ReservedEmailNotificationDeliveryProvider,
   ReservedSmsNotificationDeliveryProvider,
 } from '../infrastructure/index.js';
-import {
-  NotificationIntent,
-} from '../domain/entities/index.js';
+import { NotificationIntent } from '../domain/entities/index.js';
 import {
   NotificationRecipientPolicyService,
   NotificationSchedulerPolicyService,
@@ -119,7 +117,9 @@ describe('Communication scheduler (integration)', () => {
     await truncatePublicSchema(prisma);
   });
 
-  async function createIntent(overrides: Partial<ConstructorParameters<typeof NotificationIntent>[0]> = {}) {
+  async function createIntent(
+    overrides: Partial<ConstructorParameters<typeof NotificationIntent>[0]> = {},
+  ) {
     const intent = new NotificationIntent({
       id: overrides.id ?? '11111111-1111-4111-8111-111111111111',
       tenantId: '22222222-2222-4222-8222-222222222222',
@@ -173,7 +173,11 @@ describe('Communication scheduler (integration)', () => {
 
   it('dispatches fixture-backed intents and persists delivery attempts', async () => {
     const intent = await createIntent();
-    const useCase = new ProcessDueNotificationIntentsUseCase(intentRepo, fixtureScheduler, permissionEvaluator as never);
+    const useCase = new ProcessDueNotificationIntentsUseCase(
+      intentRepo,
+      fixtureScheduler,
+      permissionEvaluator as never,
+    );
 
     const result = await useCase.execute({ context, workspaceId: intent.workspaceId, now });
 
@@ -194,7 +198,11 @@ describe('Communication scheduler (integration)', () => {
 
   it('marks noop delivery as failed without any real provider integration', async () => {
     const intent = await createIntent({ provider: 'NOOP' });
-    const useCase = new ProcessDueNotificationIntentsUseCase(intentRepo, noopScheduler, permissionEvaluator as never);
+    const useCase = new ProcessDueNotificationIntentsUseCase(
+      intentRepo,
+      noopScheduler,
+      permissionEvaluator as never,
+    );
 
     const result = await useCase.execute({ context, workspaceId: intent.workspaceId, now });
 
@@ -247,7 +255,11 @@ describe('Communication scheduler (integration)', () => {
       queuedAt: new Date('2026-05-21T09:01:00.000Z'),
       createdAt: new Date('2026-05-21T09:01:00.000Z'),
     });
-    const useCase = new ProcessDueNotificationIntentsUseCase(intentRepo, fixtureScheduler, permissionEvaluator as never);
+    const useCase = new ProcessDueNotificationIntentsUseCase(
+      intentRepo,
+      fixtureScheduler,
+      permissionEvaluator as never,
+    );
 
     const dueIntents = await intentRepo.findDueQueued({
       workspaceId: failingIntent.workspaceId,
@@ -270,7 +282,11 @@ describe('Communication scheduler (integration)', () => {
       recipient: {},
       channel: 'EMAIL',
     });
-    const useCase = new ProcessDueNotificationIntentsUseCase(intentRepo, fixtureScheduler, permissionEvaluator as never);
+    const useCase = new ProcessDueNotificationIntentsUseCase(
+      intentRepo,
+      fixtureScheduler,
+      permissionEvaluator as never,
+    );
 
     const result = await useCase.execute({ context, workspaceId: intent.workspaceId, now });
 
@@ -286,7 +302,11 @@ describe('Communication scheduler (integration)', () => {
 
   it('does not dispatch an already successful intent twice', async () => {
     const intent = await createIntent();
-    const useCase = new ProcessDueNotificationIntentsUseCase(intentRepo, fixtureScheduler, permissionEvaluator as never);
+    const useCase = new ProcessDueNotificationIntentsUseCase(
+      intentRepo,
+      fixtureScheduler,
+      permissionEvaluator as never,
+    );
 
     const first = await useCase.execute({ context, workspaceId: intent.workspaceId, now });
     const second = await useCase.execute({ context, workspaceId: intent.workspaceId, now });
@@ -298,7 +318,11 @@ describe('Communication scheduler (integration)', () => {
 
   it('avoids duplicate dispatch under concurrent scheduler runs', async () => {
     const intent = await createIntent();
-    const useCase = new ProcessDueNotificationIntentsUseCase(intentRepo, fixtureScheduler, permissionEvaluator as never);
+    const useCase = new ProcessDueNotificationIntentsUseCase(
+      intentRepo,
+      fixtureScheduler,
+      permissionEvaluator as never,
+    );
 
     const [first, second] = await Promise.all([
       useCase.execute({ context, workspaceId: intent.workspaceId, now }),
@@ -308,5 +332,28 @@ describe('Communication scheduler (integration)', () => {
     expect(first.dispatched + second.dispatched).toBe(1);
     expect(await attemptRepo.countByIntentId(intent.id)).toBe(1);
     expect((await intentRepo.findById(intent.id))?.status).toBe('DISPATCHED');
+  });
+
+  it('schedules retry with exponential backoff on retryable delivery failures', async () => {
+    const intent = await createIntent({
+      metadata: { fixtureResult: 'RETRYABLE' },
+    });
+    const useCase = new ProcessDueNotificationIntentsUseCase(
+      intentRepo,
+      fixtureScheduler,
+      permissionEvaluator as never,
+    );
+
+    const result = await useCase.execute({ context, workspaceId: intent.workspaceId, now });
+
+    expect(result.processed).toBe(1);
+    expect(result.failed).toBe(0);
+    expect(result.skipped).toBe(1);
+
+    const updated = await intentRepo.findById(intent.id);
+    expect(updated?.status).toBe('QUEUED');
+    expect(updated?.scheduledFor).toBeDefined();
+    expect(updated?.scheduledFor?.getTime()).toBe(now.getTime() + 1000);
+    expect(await attemptRepo.countByIntentId(intent.id)).toBe(1);
   });
 });

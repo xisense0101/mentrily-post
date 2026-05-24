@@ -63,6 +63,8 @@ import {
   PrismaNotificationTemplateRepository,
   ReservedEmailNotificationDeliveryProvider,
   ReservedSmsNotificationDeliveryProvider,
+  ReservedPushNotificationDeliveryProvider,
+  CommunicationProviderTransport,
   PrismaNotificationPreferenceRepository,
 } from './infrastructure/index.js';
 import { CommunicationCenterController } from './presentation/index.js';
@@ -135,16 +137,31 @@ import { CommunicationCenterController } from './presentation/index.js';
     UpdatePreferencesUseCase,
     NoopNotificationDeliveryProvider,
     FixtureNotificationDeliveryProvider,
+    CommunicationProviderTransport,
     {
       provide: ReservedEmailNotificationDeliveryProvider,
-      useFactory: (config: NotificationProviderConfig) =>
-        new ReservedEmailNotificationDeliveryProvider(config, process.env.NODE_ENV === 'test'),
-      inject: [NOTIFICATION_PROVIDER_CONFIG],
+      useFactory: (config: NotificationProviderConfig, transport: CommunicationProviderTransport) =>
+        new ReservedEmailNotificationDeliveryProvider(
+          config,
+          process.env.NODE_ENV === 'test',
+          transport,
+        ),
+      inject: [NOTIFICATION_PROVIDER_CONFIG, CommunicationProviderTransport],
     },
     {
       provide: ReservedSmsNotificationDeliveryProvider,
+      useFactory: (config: NotificationProviderConfig, transport: CommunicationProviderTransport) =>
+        new ReservedSmsNotificationDeliveryProvider(
+          config,
+          process.env.NODE_ENV === 'test',
+          transport,
+        ),
+      inject: [NOTIFICATION_PROVIDER_CONFIG, CommunicationProviderTransport],
+    },
+    {
+      provide: ReservedPushNotificationDeliveryProvider,
       useFactory: (config: NotificationProviderConfig) =>
-        new ReservedSmsNotificationDeliveryProvider(config, process.env.NODE_ENV === 'test'),
+        new ReservedPushNotificationDeliveryProvider(config, process.env.NODE_ENV === 'test'),
       inject: [NOTIFICATION_PROVIDER_CONFIG],
     },
     {
@@ -155,6 +172,7 @@ import { CommunicationCenterController } from './presentation/index.js';
         fixtureProvider: FixtureNotificationDeliveryProvider,
         reservedEmailProvider: ReservedEmailNotificationDeliveryProvider,
         reservedSmsProvider: ReservedSmsNotificationDeliveryProvider,
+        reservedPushProvider: ReservedPushNotificationDeliveryProvider,
       ) =>
         new NotificationDeliveryProviderFactory(
           config,
@@ -163,6 +181,7 @@ import { CommunicationCenterController } from './presentation/index.js';
           fixtureProvider,
           reservedEmailProvider,
           reservedSmsProvider,
+          reservedPushProvider,
         ),
       inject: [
         NOTIFICATION_PROVIDER_CONFIG,
@@ -170,6 +189,7 @@ import { CommunicationCenterController } from './presentation/index.js';
         FixtureNotificationDeliveryProvider,
         ReservedEmailNotificationDeliveryProvider,
         ReservedSmsNotificationDeliveryProvider,
+        ReservedPushNotificationDeliveryProvider,
       ],
     },
   ],
@@ -185,6 +205,7 @@ import { CommunicationCenterController } from './presentation/index.js';
     FixtureNotificationDeliveryProvider,
     ReservedEmailNotificationDeliveryProvider,
     ReservedSmsNotificationDeliveryProvider,
+    ReservedPushNotificationDeliveryProvider,
     NotificationSchedulerService,
     ProcessDueNotificationIntentsUseCase,
   ],

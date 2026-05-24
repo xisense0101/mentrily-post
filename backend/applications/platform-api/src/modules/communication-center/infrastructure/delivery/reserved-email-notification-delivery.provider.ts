@@ -35,7 +35,9 @@ export class ReservedEmailNotificationDeliveryProvider implements NotificationDe
     private readonly transport?: NotificationProviderTransport,
   ) {}
 
-  async deliver(input: NotificationDeliveryProviderRequest): Promise<NotificationDeliveryProviderResult> {
+  async deliver(
+    input: NotificationDeliveryProviderRequest,
+  ): Promise<NotificationDeliveryProviderResult> {
     mapReservedEmailDeliveryRequest(input);
 
     if (
@@ -45,7 +47,8 @@ export class ReservedEmailNotificationDeliveryProvider implements NotificationDe
         config: this.providerConfig,
         isTestEnvironment: this.isTestEnvironment,
       }) ||
-      (requiresLiveDelivery('RESERVED_EMAIL') && !this.providerConfig.featureFlags.allowLiveDelivery)
+      (requiresLiveDelivery('RESERVED_EMAIL') &&
+        !this.providerConfig.featureFlags.allowLiveDelivery)
     ) {
       return {
         status: 'FAILED',
@@ -86,6 +89,7 @@ export class ReservedEmailNotificationDeliveryProvider implements NotificationDe
           errorCode: result.errorCode ?? 'PROVIDER_TRANSPORT_FAILED',
           errorMessage: result.errorMessage ?? 'Email provider transport failed.',
           metadata: result.metadata ?? { safe: true },
+          retryable: result.metadata?.retryable === true,
         };
   }
 }

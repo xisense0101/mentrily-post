@@ -6,3 +6,5 @@ export * from './reserved-email-provider.mapper.js';
 export * from './reserved-sms-provider.mapper.js';
 export * from './reserved-email-notification-delivery.provider.js';
 export * from './reserved-sms-notification-delivery.provider.js';
+export * from './reserved-push-notification-delivery.provider.js';
+export * from './communication-provider.transport.js';

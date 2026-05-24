@@ -1176,6 +1176,7 @@ enum NotificationProvider {
   FIXTURE
   RESERVED_EMAIL
   RESERVED_SMS
+  RESERVED_PUSH
 }
 
 model MediaAsset {
@@ -1462,6 +1463,9 @@ model NotificationIntent {
   cancelledAt          DateTime?
   failureReason        String?
   metadata             Json
+  idempotencyKey       String?
+  lockedAt             DateTime?
+  lockedBy             String?
   createdByPrincipalId String                   @db.Uuid
   createdAt            DateTime                 @default(now())
   updatedAt            DateTime                 @updatedAt
@@ -1478,6 +1482,7 @@ model NotificationIntent {
   @@index([scheduledFor])
   @@index([queuedAt])
   @@index([createdAt])
+  @@index([idempotencyKey])
 }
 
 model NotificationDeliveryAttempt {

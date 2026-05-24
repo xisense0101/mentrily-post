@@ -7,7 +7,12 @@ export type NotificationIntentStatusContract =
   | 'CANCELLED';
 export type NotificationTemplateStatusContract = 'DRAFT' | 'ACTIVE' | 'ARCHIVED';
 export type NotificationPriorityContract = 'LOW' | 'NORMAL' | 'HIGH' | 'URGENT';
-export type NotificationProviderContract = 'NOOP' | 'FIXTURE' | 'RESERVED_EMAIL' | 'RESERVED_SMS';
+export type NotificationProviderContract =
+  | 'NOOP'
+  | 'FIXTURE'
+  | 'RESERVED_EMAIL'
+  | 'RESERVED_SMS'
+  | 'RESERVED_PUSH';
 export type NotificationInboxStatusContract = 'UNREAD' | 'READ' | 'ARCHIVED';
 export type NotificationPreferenceChannelContract = 'IN_APP' | 'EMAIL' | 'SMS';
 export type NotificationPreferenceCategoryContract =

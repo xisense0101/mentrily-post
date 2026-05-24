@@ -19,15 +19,32 @@ function renderSimpleTemplate(
   });
 }
 
-function validatePayload<T extends Record<string, any>>(
-  payload: unknown,
-  schema: { [K in keyof T]: 'string' | 'number' | 'boolean' | 'string?' | 'number?' | 'boolean?' },
-): T {
+type PayloadSchema = Record<
+  string,
+  'string' | 'number' | 'boolean' | 'string?' | 'number?' | 'boolean?'
+>;
+type InferPayload<S extends PayloadSchema> = {
+  [K in keyof S]: S[K] extends 'string'
+    ? string
+    : S[K] extends 'number'
+      ? number
+      : S[K] extends 'boolean'
+        ? boolean
+        : S[K] extends 'string?'
+          ? string | undefined
+          : S[K] extends 'number?'
+            ? number | undefined
+            : S[K] extends 'boolean?'
+              ? boolean | undefined
+              : never;
+};
+
+function validatePayload<S extends PayloadSchema>(payload: unknown, schema: S): InferPayload<S> {
   if (payload === null || typeof payload !== 'object') {
     throw new Error('Invalid payload: must be an object');
   }
-  const typedPayload = payload as Record<string, any>;
-  const result = {} as any;
+  const typedPayload = payload as Record<string, unknown>;
+  const result: Record<string, unknown> = {};
 
   for (const [key, type] of Object.entries(schema)) {
     const value = typedPayload[key];
@@ -47,7 +64,7 @@ function validatePayload<T extends Record<string, any>>(
     }
   }
 
-  return result as T;
+  return result as InferPayload<S>;
 }
 
 function sanitizeResultMessage(status: string, rawMessage?: string): string {
@@ -122,13 +139,14 @@ export class NotificationHelper {
     if (
       externalIdentity &&
       externalIdentity.metadata &&
-      typeof externalIdentity.metadata === 'object'
+      typeof externalIdentity.metadata === 'object' &&
+      !Array.isArray(externalIdentity.metadata)
     ) {
-      const meta = externalIdentity.metadata as Record<string, any>;
-      if (typeof meta.phoneNumber === 'string') {
-        phoneNumber = meta.phoneNumber;
-      } else if (typeof meta.phone_number === 'string') {
-        phoneNumber = meta.phone_number;
+      const meta = externalIdentity.metadata as Record<string, unknown>;
+      if (typeof meta['phoneNumber'] === 'string') {
+        phoneNumber = meta['phoneNumber'];
+      } else if (typeof meta['phone_number'] === 'string') {
+        phoneNumber = meta['phone_number'];
       }
     }
 
@@ -187,24 +205,19 @@ export class NotificationHelper {
         continue;
       }
 
-      // Check for duplicate intent
-      const existingIntents = await this.prisma.notificationIntent.findMany({
-        where: {
-          workspaceId,
-          channel,
-          recipient: {
-            path: ['principalId'],
-            equals: userId,
-          },
-          metadata: {
-            path: ['eventId'],
-            equals: externalEventId,
-          },
-        },
+      // Compute deterministic idempotency key: sha256(eventId:userId:channel:templateKey)
+      // This prevents duplicate intents under concurrent event processing.
+      const rawKey = `${externalEventId}:${userId}:${channel}:${templateKey}`;
+      const idempotencyKey = crypto.createHash('sha256').update(rawKey).digest('hex');
+
+      // Upsert: if a row with this idempotency key already exists, skip creation.
+      const existing = await this.prisma.notificationIntent.findFirst({
+        where: { idempotencyKey },
+        select: { id: true },
       });
-      if (existingIntents.length > 0) {
+      if (existing) {
         this.logger.debug(
-          `Notification intent already exists for event ${externalEventId}, user ${userId}, channel ${channel}`,
+          `Notification intent already exists for idempotency key (event ${externalEventId}, user ${userId}, channel ${channel})`,
         );
         continue;
       }
@@ -254,25 +267,44 @@ export class NotificationHelper {
       const isTest = process.env.NODE_ENV === 'test';
       const provider = isTest ? 'FIXTURE' : 'NOOP';
 
-      await this.prisma.notificationIntent.create({
-        data: {
-          id: intentId,
-          tenantId,
-          workspaceId,
-          templateId,
-          channel,
-          recipient,
-          subject,
-          body,
-          priority: 'NORMAL',
-          status: 'QUEUED',
-          provider,
-          createdByPrincipalId: user.id,
-          metadata: {
-            eventId: externalEventId,
+      // Use createOrSkip via a try/catch on unique violation for the idempotency key.
+      // The findFirst above handles the common path; this is the race-condition safety net.
+      try {
+        await this.prisma.notificationIntent.create({
+          data: {
+            id: intentId,
+            tenantId,
+            workspaceId,
+            templateId,
+            channel,
+            recipient,
+            subject,
+            body,
+            priority: 'NORMAL',
+            status: 'QUEUED',
+            provider,
+            idempotencyKey,
+            createdByPrincipalId: user.id,
+            metadata: {
+              eventId: externalEventId,
+            },
           },
-        },
-      });
+        });
+      } catch (err: unknown) {
+        // P2002 = unique constraint violation — another concurrent worker already created this intent
+        if (
+          err &&
+          typeof err === 'object' &&
+          'code' in err &&
+          (err as Record<string, unknown>)['code'] === 'P2002'
+        ) {
+          this.logger.debug(
+            `Concurrent intent creation skipped for event ${externalEventId}, user ${userId}, channel ${channel}`,
+          );
+          continue;
+        }
+        throw err;
+      }
 
       this.logger.log(
         `Created queued notification intent ${intentId} for user ${userId} via ${channel}`,
@@ -298,16 +330,8 @@ export class NotificationHelper {
       select: { principalId: true },
     });
 
-    if (admins.length > 0) {
-      return admins.map((a) => a.principalId);
-    }
-
-    // Fallback to all active workspace members if no admin exists
-    const allMembers = await this.prisma.workspaceMember.findMany({
-      where: { workspaceId, status: 'ACTIVE' },
-      select: { principalId: true },
-    });
-    return allMembers.map((m) => m.principalId);
+    // Safe: if no admin role exists, return empty — do NOT fall back to all active members.
+    return admins.map((a) => a.principalId);
   }
 }
 
@@ -328,7 +352,7 @@ export class AssessmentPublishedInboxHandler implements InboxEventHandler {
     const workspaceId = outbox.workspaceId;
     const tenantId = outbox.tenantId;
 
-    const payload = validatePayload<{ assessmentId?: string }>(outbox.payload, {
+    const payload = validatePayload(outbox.payload, {
       assessmentId: 'string?',
     });
 
@@ -371,8 +395,8 @@ export class AssessmentPublishedInboxHandler implements InboxEventHandler {
 @Injectable()
 export class AssessmentAttemptSubmittedInboxHandler implements InboxEventHandler {
   constructor(
-    private readonly prisma: PrismaService,
-    private readonly helper: NotificationHelper,
+    @Inject(PrismaService) private readonly prisma: PrismaService,
+    @Inject(NotificationHelper) private readonly helper: NotificationHelper,
   ) {}
 
   async handle(record: InboxRecord): Promise<void> {
@@ -384,13 +408,10 @@ export class AssessmentAttemptSubmittedInboxHandler implements InboxEventHandler
     const workspaceId = outbox.workspaceId;
     const tenantId = outbox.tenantId;
 
-    const payload = validatePayload<{ assessmentId: string; learnerPrincipalId: string }>(
-      outbox.payload,
-      {
-        assessmentId: 'string',
-        learnerPrincipalId: 'string',
-      },
-    );
+    const payload = validatePayload(outbox.payload, {
+      assessmentId: 'string',
+      learnerPrincipalId: 'string',
+    });
 
     const assessment = await this.prisma.assessment.findUnique({
       where: { id: payload.assessmentId },
@@ -432,8 +453,8 @@ export class AssessmentAttemptSubmittedInboxHandler implements InboxEventHandler
 @Injectable()
 export class AssessmentGradingRunCompletedInboxHandler implements InboxEventHandler {
   constructor(
-    private readonly prisma: PrismaService,
-    private readonly helper: NotificationHelper,
+    @Inject(PrismaService) private readonly prisma: PrismaService,
+    @Inject(NotificationHelper) private readonly helper: NotificationHelper,
   ) {}
 
   async handle(record: InboxRecord): Promise<void> {
@@ -445,12 +466,7 @@ export class AssessmentGradingRunCompletedInboxHandler implements InboxEventHand
     const workspaceId = outbox.workspaceId;
     const tenantId = outbox.tenantId;
 
-    const payload = validatePayload<{
-      attemptId: string;
-      assessmentId: string;
-      totalScore: number;
-      maxScore: number;
-    }>(outbox.payload, {
+    const payload = validatePayload(outbox.payload, {
       attemptId: 'string',
       assessmentId: 'string',
       totalScore: 'number',
@@ -488,8 +504,8 @@ export class AssessmentGradingRunCompletedInboxHandler implements InboxEventHand
 @Injectable()
 export class AssessmentResultReleasedInboxHandler implements InboxEventHandler {
   constructor(
-    private readonly prisma: PrismaService,
-    private readonly helper: NotificationHelper,
+    @Inject(PrismaService) private readonly prisma: PrismaService,
+    @Inject(NotificationHelper) private readonly helper: NotificationHelper,
   ) {}
 
   async handle(record: InboxRecord): Promise<void> {
@@ -501,12 +517,7 @@ export class AssessmentResultReleasedInboxHandler implements InboxEventHandler {
     const workspaceId = outbox.workspaceId;
     const tenantId = outbox.tenantId;
 
-    const payload = validatePayload<{
-      assessmentId: string;
-      learnerPrincipalId: string;
-      score: number;
-      maxScore: number;
-    }>(outbox.payload, {
+    const payload = validatePayload(outbox.payload, {
       assessmentId: 'string',
       learnerPrincipalId: 'string',
       score: 'number',
@@ -539,8 +550,8 @@ export class AssessmentResultReleasedInboxHandler implements InboxEventHandler {
 @Injectable()
 export class LearningCoursePublishedInboxHandler implements InboxEventHandler {
   constructor(
-    private readonly prisma: PrismaService,
-    private readonly helper: NotificationHelper,
+    @Inject(PrismaService) private readonly prisma: PrismaService,
+    @Inject(NotificationHelper) private readonly helper: NotificationHelper,
   ) {}
 
   async handle(record: InboxRecord): Promise<void> {
@@ -552,7 +563,7 @@ export class LearningCoursePublishedInboxHandler implements InboxEventHandler {
     const workspaceId = outbox.workspaceId;
     const tenantId = outbox.tenantId;
 
-    const payload = validatePayload<{ courseId: string }>(outbox.payload, {
+    const payload = validatePayload(outbox.payload, {
       courseId: 'string',
     });
 
@@ -593,8 +604,8 @@ export class LearningCoursePublishedInboxHandler implements InboxEventHandler {
 @Injectable()
 export class LearningEnrollmentCreatedInboxHandler implements InboxEventHandler {
   constructor(
-    private readonly prisma: PrismaService,
-    private readonly helper: NotificationHelper,
+    @Inject(PrismaService) private readonly prisma: PrismaService,
+    @Inject(NotificationHelper) private readonly helper: NotificationHelper,
   ) {}
 
   async handle(record: InboxRecord): Promise<void> {
@@ -606,7 +617,7 @@ export class LearningEnrollmentCreatedInboxHandler implements InboxEventHandler 
     const workspaceId = outbox.workspaceId;
     const tenantId = outbox.tenantId;
 
-    const payload = validatePayload<{ enrollmentId: string }>(outbox.payload, {
+    const payload = validatePayload(outbox.payload, {
       enrollmentId: 'string',
     });
 
@@ -666,8 +677,8 @@ export class LearningEnrollmentCreatedInboxHandler implements InboxEventHandler 
 @Injectable()
 export class LearningProgressCompletedInboxHandler implements InboxEventHandler {
   constructor(
-    private readonly prisma: PrismaService,
-    private readonly helper: NotificationHelper,
+    @Inject(PrismaService) private readonly prisma: PrismaService,
+    @Inject(NotificationHelper) private readonly helper: NotificationHelper,
   ) {}
 
   async handle(record: InboxRecord): Promise<void> {
@@ -679,7 +690,7 @@ export class LearningProgressCompletedInboxHandler implements InboxEventHandler 
     const workspaceId = outbox.workspaceId;
     const tenantId = outbox.tenantId;
 
-    const payload = validatePayload<{ progressId: string }>(outbox.payload, {
+    const payload = validatePayload(outbox.payload, {
       progressId: 'string',
     });
 
@@ -749,8 +760,8 @@ export class LearningProgressCompletedInboxHandler implements InboxEventHandler 
 @Injectable()
 export class LearningEnrollmentCompletedInboxHandler implements InboxEventHandler {
   constructor(
-    private readonly prisma: PrismaService,
-    private readonly helper: NotificationHelper,
+    @Inject(PrismaService) private readonly prisma: PrismaService,
+    @Inject(NotificationHelper) private readonly helper: NotificationHelper,
   ) {}
 
   async handle(record: InboxRecord): Promise<void> {
@@ -762,7 +773,7 @@ export class LearningEnrollmentCompletedInboxHandler implements InboxEventHandle
     const workspaceId = outbox.workspaceId;
     const tenantId = outbox.tenantId;
 
-    const payload = validatePayload<{ enrollmentId: string }>(outbox.payload, {
+    const payload = validatePayload(outbox.payload, {
       enrollmentId: 'string',
     });
 
@@ -822,8 +833,8 @@ export class LearningEnrollmentCompletedInboxHandler implements InboxEventHandle
 @Injectable()
 export class ContentDocumentPublishedInboxHandler implements InboxEventHandler {
   constructor(
-    private readonly prisma: PrismaService,
-    private readonly helper: NotificationHelper,
+    @Inject(PrismaService) private readonly prisma: PrismaService,
+    @Inject(NotificationHelper) private readonly helper: NotificationHelper,
   ) {}
 
   async handle(record: InboxRecord): Promise<void> {
@@ -835,7 +846,7 @@ export class ContentDocumentPublishedInboxHandler implements InboxEventHandler {
     const workspaceId = outbox.workspaceId;
     const tenantId = outbox.tenantId;
 
-    const payload = validatePayload<{ documentId: string }>(outbox.payload, {
+    const payload = validatePayload(outbox.payload, {
       documentId: 'string',
     });
 
@@ -876,8 +887,8 @@ export class ContentDocumentPublishedInboxHandler implements InboxEventHandler {
 @Injectable()
 export class ContentDocumentDraftBlocksReplacedInboxHandler implements InboxEventHandler {
   constructor(
-    private readonly prisma: PrismaService,
-    private readonly helper: NotificationHelper,
+    @Inject(PrismaService) private readonly prisma: PrismaService,
+    @Inject(NotificationHelper) private readonly helper: NotificationHelper,
   ) {}
 
   async handle(record: InboxRecord): Promise<void> {
@@ -889,7 +900,7 @@ export class ContentDocumentDraftBlocksReplacedInboxHandler implements InboxEven
     const workspaceId = outbox.workspaceId;
     const tenantId = outbox.tenantId;
 
-    const payload = validatePayload<{ documentId: string }>(outbox.payload, {
+    const payload = validatePayload(outbox.payload, {
       documentId: 'string',
     });
 
@@ -930,8 +941,8 @@ export class ContentDocumentDraftBlocksReplacedInboxHandler implements InboxEven
 @Injectable()
 export class ContentDocumentReviewReadyInboxHandler implements InboxEventHandler {
   constructor(
-    private readonly prisma: PrismaService,
-    private readonly helper: NotificationHelper,
+    @Inject(PrismaService) private readonly prisma: PrismaService,
+    @Inject(NotificationHelper) private readonly helper: NotificationHelper,
   ) {}
 
   async handle(record: InboxRecord): Promise<void> {
@@ -943,7 +954,7 @@ export class ContentDocumentReviewReadyInboxHandler implements InboxEventHandler
     const workspaceId = outbox.workspaceId;
     const tenantId = outbox.tenantId;
 
-    const payload = validatePayload<{ documentId: string }>(outbox.payload, {
+    const payload = validatePayload(outbox.payload, {
       documentId: 'string',
     });
 
@@ -984,8 +995,8 @@ export class ContentDocumentReviewReadyInboxHandler implements InboxEventHandler
 @Injectable()
 export class MediaProcessingSucceededInboxHandler implements InboxEventHandler {
   constructor(
-    private readonly prisma: PrismaService,
-    private readonly helper: NotificationHelper,
+    @Inject(PrismaService) private readonly prisma: PrismaService,
+    @Inject(NotificationHelper) private readonly helper: NotificationHelper,
   ) {}
 
   async handle(record: InboxRecord): Promise<void> {
@@ -997,7 +1008,7 @@ export class MediaProcessingSucceededInboxHandler implements InboxEventHandler {
     const workspaceId = outbox.workspaceId;
     const tenantId = outbox.tenantId;
 
-    const payload = validatePayload<{ assetId: string; ownerPrincipalId: string }>(outbox.payload, {
+    const payload = validatePayload(outbox.payload, {
       assetId: 'string',
       ownerPrincipalId: 'string',
     });
@@ -1028,8 +1039,8 @@ export class MediaProcessingSucceededInboxHandler implements InboxEventHandler {
 @Injectable()
 export class MediaProcessingFailedInboxHandler implements InboxEventHandler {
   constructor(
-    private readonly prisma: PrismaService,
-    private readonly helper: NotificationHelper,
+    @Inject(PrismaService) private readonly prisma: PrismaService,
+    @Inject(NotificationHelper) private readonly helper: NotificationHelper,
   ) {}
 
   async handle(record: InboxRecord): Promise<void> {
@@ -1041,28 +1052,30 @@ export class MediaProcessingFailedInboxHandler implements InboxEventHandler {
     const workspaceId = outbox.workspaceId;
     const tenantId = outbox.tenantId;
 
-    const payload = validatePayload<{
-      assetId: string;
-      ownerPrincipalId: string;
-      errorMessage: 'string?';
-    }>(outbox.payload, {
+    const payload = validatePayload(outbox.payload, {
       assetId: 'string',
       ownerPrincipalId: 'string',
       errorMessage: 'string?',
     });
+    type MediaProcessingFailedPayload = {
+      assetId: string;
+      ownerPrincipalId: string;
+      errorMessage?: string;
+    };
+    const typedPayload = payload as MediaProcessingFailedPayload;
 
     const asset = await this.prisma.mediaAsset.findUnique({
-      where: { id: payload.assetId },
+      where: { id: typedPayload.assetId },
     });
     if (!asset) return;
 
     const filename = asset.filename;
-    const errorMsg = payload.errorMessage ?? 'Unknown processing error';
+    const errorMsg = typedPayload.errorMessage ?? 'Unknown processing error';
 
     await this.helper.checkPreferenceAndCreateIntents({
       workspaceId,
       tenantId,
-      userId: payload.ownerPrincipalId,
+      userId: typedPayload.ownerPrincipalId,
       category: 'MEDIA',
       templateKey: 'media.processing.failed',
       fallbackSubject: 'Media Processing Failed: {{ filename }}',
@@ -1078,8 +1091,8 @@ export class MediaProcessingFailedInboxHandler implements InboxEventHandler {
 @Injectable()
 export class MediaSecurityScanCompletedInboxHandler implements InboxEventHandler {
   constructor(
-    private readonly prisma: PrismaService,
-    private readonly helper: NotificationHelper,
+    @Inject(PrismaService) private readonly prisma: PrismaService,
+    @Inject(NotificationHelper) private readonly helper: NotificationHelper,
   ) {}
 
   async handle(record: InboxRecord): Promise<void> {
@@ -1091,18 +1104,20 @@ export class MediaSecurityScanCompletedInboxHandler implements InboxEventHandler
     const workspaceId = outbox.workspaceId;
     const tenantId = outbox.tenantId;
 
-    const payload = validatePayload<{
-      assetId: string;
-      scanStatus: string;
-      resultMessage: 'string?';
-    }>(outbox.payload, {
+    const payload = validatePayload(outbox.payload, {
       assetId: 'string',
       scanStatus: 'string',
       resultMessage: 'string?',
     });
+    type MediaSecurityScanPayload = {
+      assetId: string;
+      scanStatus: string;
+      resultMessage?: string;
+    };
+    const typedScanPayload = payload as MediaSecurityScanPayload;
 
     const asset = await this.prisma.mediaAsset.findUnique({
-      where: { id: payload.assetId },
+      where: { id: typedScanPayload.assetId },
     });
     if (!asset) return;
 
@@ -1110,11 +1125,11 @@ export class MediaSecurityScanCompletedInboxHandler implements InboxEventHandler
     const ownerPrincipalId = asset.ownerPrincipalId;
 
     const sanitizedMsg = sanitizeResultMessage(
-      payload.scanStatus,
-      payload.resultMessage || undefined,
+      typedScanPayload.scanStatus,
+      typedScanPayload.resultMessage || undefined,
     );
 
-    if (payload.scanStatus === 'QUARANTINED') {
+    if (typedScanPayload.scanStatus === 'QUARANTINED') {
       // Notify Owner
       await this.helper.checkPreferenceAndCreateIntents({
         workspaceId,
@@ -1146,7 +1161,7 @@ export class MediaSecurityScanCompletedInboxHandler implements InboxEventHandler
           externalEventId: record.externalEventId,
         });
       }
-    } else if (payload.scanStatus === 'SCAN_FAILED') {
+    } else if (typedScanPayload.scanStatus === 'SCAN_FAILED') {
       // Notify Owner
       await this.helper.checkPreferenceAndCreateIntents({
         workspaceId,
@@ -1186,8 +1201,8 @@ export class MediaSecurityScanCompletedInboxHandler implements InboxEventHandler
 @Injectable()
 export class MediaLifecycleDeletedInboxHandler implements InboxEventHandler {
   constructor(
-    private readonly prisma: PrismaService,
-    private readonly helper: NotificationHelper,
+    @Inject(PrismaService) private readonly prisma: PrismaService,
+    @Inject(NotificationHelper) private readonly helper: NotificationHelper,
   ) {}
 
   async handle(record: InboxRecord): Promise<void> {
@@ -1199,7 +1214,7 @@ export class MediaLifecycleDeletedInboxHandler implements InboxEventHandler {
     const workspaceId = outbox.workspaceId;
     const tenantId = outbox.tenantId;
 
-    const payload = validatePayload<{ assetId: string; ownerPrincipalId: string }>(outbox.payload, {
+    const payload = validatePayload(outbox.payload, {
       assetId: 'string',
       ownerPrincipalId: 'string',
     });

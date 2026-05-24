@@ -24,7 +24,11 @@ export class InboxProcessingWorker {
         await handler.handle(record);
         await this.inboxRepository.markProcessed(record.id);
         processed += 1;
-      } catch (_error) {
+      } catch (error) {
+        this.logger.error(
+          `Inbox handler failed for event "${record.eventName}" on message ID ${record.id}:`,
+          error,
+        );
         await this.inboxRepository.markFailed(record.id);
         failed += 1;
       }

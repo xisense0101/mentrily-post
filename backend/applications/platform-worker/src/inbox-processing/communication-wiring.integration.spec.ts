@@ -426,22 +426,23 @@ describe('Communication Event Wiring (integration)', () => {
       ],
     });
 
-    // Seed admin role membership
+    // Seed workspace members
+    const ownerMemberId = randomUUID();
+    const adminMemberId = randomUUID();
     await prisma.workspaceMember.createMany({
       data: [
-        {
-          id: randomUUID(),
-          workspaceId,
-          principalId: ownerId,
-          status: 'ACTIVE',
-        },
-        {
-          id: randomUUID(),
-          workspaceId,
-          principalId: adminId,
-          status: 'ACTIVE',
-        },
+        { id: ownerMemberId, workspaceId, principalId: ownerId, status: 'ACTIVE' },
+        { id: adminMemberId, workspaceId, principalId: adminId, status: 'ACTIVE' },
       ],
+    });
+
+    // Seed admin role and assign to adminId so getWorkspaceAdmins() returns them
+    const adminRoleId = randomUUID();
+    await prisma.workspaceRole.create({
+      data: { id: adminRoleId, workspaceId, name: 'Admin', key: 'admin', isSystem: true },
+    });
+    await prisma.workspaceMemberRole.create({
+      data: { id: randomUUID(), memberId: adminMemberId, roleId: adminRoleId },
     });
 
     await prisma.mediaAsset.create({
@@ -453,6 +454,9 @@ describe('Communication Event Wiring (integration)', () => {
         filename: 'malicious-payload.exe',
         contentType: 'application/octet-stream',
         fileCategory: 'OTHER',
+        storageProvider: 'FIXTURE',
+        objectKey: 'malicious-payload-key',
+        metadata: {},
       },
     });
 
@@ -539,6 +543,7 @@ describe('Communication Event Wiring (integration)', () => {
         workspaceId,
         tenantId,
         title: 'Intro to Quantum Computing',
+        slug: 'intro-quantum',
         creatorPrincipalId: userId,
         status: 'PUBLISHED',
       },
@@ -607,6 +612,9 @@ describe('Communication Event Wiring (integration)', () => {
         filename: 'heavy-render.mp4',
         contentType: 'video/mp4',
         fileCategory: 'VIDEO',
+        storageProvider: 'FIXTURE',
+        objectKey: 'heavy-render-key',
+        metadata: {},
       },
     });
 
@@ -649,5 +657,249 @@ describe('Communication Event Wiring (integration)', () => {
       (i) => i.body.includes('heavy-render.mp4') && i.body.includes('Transcoding subprocess'),
     );
     expect(mediaIntent).toBeDefined();
+  });
+
+  it('idempotency: same event processed twice creates only one intent per recipient/channel', async () => {
+    const tenantId = randomUUID();
+    const workspaceId = randomUUID();
+    const userId = randomUUID();
+    const assessmentId = randomUUID();
+    const eventId = randomUUID();
+    await prisma.workspace.create({ data: { id: workspaceId, name: 'Idem WS', slug: 'idem-ws' } });
+    await prisma.principal.create({
+      data: { id: userId, email: 'idem@test.org', displayName: 'Idem User' },
+    });
+    await prisma.workspaceMember.create({
+      data: { id: randomUUID(), workspaceId, principalId: userId, status: 'ACTIVE' },
+    });
+    await prisma.assessment.create({
+      data: {
+        id: assessmentId,
+        workspaceId,
+        tenantId,
+        title: 'Idem Test',
+        purpose: 'QUIZ',
+        ownerPrincipalId: userId,
+        status: 'PUBLISHED',
+        metadata: {},
+        attemptPolicy: { allowRetake: false, shuffleQuestions: false, shuffleOptions: false },
+        resultReleasePolicy: 'IMMEDIATE',
+      },
+    });
+    await prisma.outboxMessage.create({
+      data: {
+        id: randomUUID(),
+        eventId,
+        eventName: 'assessment.published',
+        eventVersion: 1,
+        tenantId,
+        workspaceId,
+        correlationId: randomUUID(),
+        payload: { assessmentId },
+        occurredAt: new Date(),
+        status: 'PENDING',
+      },
+    });
+    await relayWorker.runOnce(10);
+    await inboxWorker.runOnce(10);
+    await inboxWorker.runOnce(10); // second pass — at-least-once delivery
+    const intents = await prisma.notificationIntent.findMany();
+    expect(intents).toHaveLength(1);
+    expect(intents[0]?.channel).toBe('IN_APP');
+  });
+
+  it('concurrent processing: parallel inbox workers do not duplicate intents', async () => {
+    const tenantId = randomUUID();
+    const workspaceId = randomUUID();
+    const userId = randomUUID();
+    const assessmentId = randomUUID();
+    const eventId = randomUUID();
+    await prisma.workspace.create({
+      data: { id: workspaceId, name: 'Concur WS', slug: 'concur-ws' },
+    });
+    await prisma.principal.create({
+      data: { id: userId, email: 'concur@test.org', displayName: 'Concur User' },
+    });
+    await prisma.workspaceMember.create({
+      data: { id: randomUUID(), workspaceId, principalId: userId, status: 'ACTIVE' },
+    });
+    await prisma.assessment.create({
+      data: {
+        id: assessmentId,
+        workspaceId,
+        tenantId,
+        title: 'Concur Test',
+        purpose: 'QUIZ',
+        ownerPrincipalId: userId,
+        status: 'PUBLISHED',
+        metadata: {},
+        attemptPolicy: { allowRetake: false, shuffleQuestions: false, shuffleOptions: false },
+        resultReleasePolicy: 'IMMEDIATE',
+      },
+    });
+    await prisma.outboxMessage.create({
+      data: {
+        id: randomUUID(),
+        eventId,
+        eventName: 'assessment.published',
+        eventVersion: 1,
+        tenantId,
+        workspaceId,
+        correlationId: randomUUID(),
+        payload: { assessmentId },
+        occurredAt: new Date(),
+        status: 'PENDING',
+      },
+    });
+    await relayWorker.runOnce(10);
+    await Promise.all([inboxWorker.runOnce(10), inboxWorker.runOnce(10)]);
+    const intents = await prisma.notificationIntent.findMany();
+    expect(intents).toHaveLength(1);
+    expect(intents[0]?.channel).toBe('IN_APP');
+  });
+
+  it('no-admin workspace: assessment.published notifies only owner, not all active members', async () => {
+    const tenantId = randomUUID();
+    const workspaceId = randomUUID();
+    const ownerId = randomUUID();
+    const memberId = randomUUID();
+    const assessmentId = randomUUID();
+    await prisma.workspace.create({
+      data: { id: workspaceId, name: 'No-Admin WS', slug: 'no-admin-ws' },
+    });
+    await prisma.principal.createMany({
+      data: [
+        { id: ownerId, email: 'owner@noadmin.org', displayName: 'Owner' },
+        { id: memberId, email: 'member@noadmin.org', displayName: 'Member' },
+      ],
+    });
+    await prisma.workspaceMember.createMany({
+      data: [
+        { id: randomUUID(), workspaceId, principalId: ownerId, status: 'ACTIVE' },
+        { id: randomUUID(), workspaceId, principalId: memberId, status: 'ACTIVE' },
+      ],
+    });
+    await prisma.assessment.create({
+      data: {
+        id: assessmentId,
+        workspaceId,
+        tenantId,
+        title: 'No-Admin Assessment',
+        purpose: 'QUIZ',
+        ownerPrincipalId: ownerId,
+        status: 'PUBLISHED',
+        metadata: {},
+        attemptPolicy: { allowRetake: false, shuffleQuestions: false, shuffleOptions: false },
+        resultReleasePolicy: 'IMMEDIATE',
+      },
+    });
+    await prisma.outboxMessage.create({
+      data: {
+        id: randomUUID(),
+        eventId: randomUUID(),
+        eventName: 'assessment.published',
+        eventVersion: 1,
+        tenantId,
+        workspaceId,
+        correlationId: randomUUID(),
+        payload: { assessmentId },
+        occurredAt: new Date(),
+        status: 'PENDING',
+      },
+    });
+    await relayWorker.runOnce(10);
+    await inboxWorker.runOnce(10);
+    const intents = await prisma.notificationIntent.findMany();
+    expect(intents).toHaveLength(1); // owner only, not the random member
+    const recipientIds = intents.map(
+      (i) => (i.recipient as Record<string, unknown>)['principalId'],
+    );
+    expect(recipientIds).toContain(ownerId);
+    expect(recipientIds).not.toContain(memberId);
+  });
+
+  it('malformed payload: handler skips gracefully without crashing the worker', async () => {
+    const tenantId = randomUUID();
+    const workspaceId = randomUUID();
+    await prisma.workspace.create({
+      data: { id: workspaceId, name: 'Bad Payload WS', slug: 'bad-payload-ws' },
+    });
+    await prisma.outboxMessage.create({
+      data: {
+        id: randomUUID(),
+        eventId: randomUUID(),
+        eventName: 'assessment.published',
+        eventVersion: 1,
+        tenantId,
+        workspaceId,
+        correlationId: randomUUID(),
+        payload: { unexpectedField: 'garbage' },
+        occurredAt: new Date(),
+        status: 'PENDING',
+      },
+    });
+    await relayWorker.runOnce(10);
+    await expect(inboxWorker.runOnce(10)).resolves.not.toThrow();
+    const intents = await prisma.notificationIntent.findMany();
+    expect(intents).toHaveLength(0);
+  });
+
+  it('EMAIL/SMS are suppressed without feature flag + preference + contact', async () => {
+    const savedEmail = process.env.ENABLE_EMAIL_NOTIFICATIONS;
+    const savedSms = process.env.ENABLE_SMS_NOTIFICATIONS;
+    delete process.env.ENABLE_EMAIL_NOTIFICATIONS;
+    delete process.env.ENABLE_SMS_NOTIFICATIONS;
+    try {
+      const tenantId = randomUUID();
+      const workspaceId = randomUUID();
+      const userId = randomUUID();
+      const assessmentId = randomUUID();
+      await prisma.workspace.create({
+        data: { id: workspaceId, name: 'Suppress WS', slug: 'suppress-ws' },
+      });
+      await prisma.principal.create({
+        data: { id: userId, email: 'suppress@test.org', displayName: 'Suppress User' },
+      });
+      await prisma.workspaceMember.create({
+        data: { id: randomUUID(), workspaceId, principalId: userId, status: 'ACTIVE' },
+      });
+      await prisma.assessment.create({
+        data: {
+          id: assessmentId,
+          workspaceId,
+          tenantId,
+          title: 'Suppress Test',
+          purpose: 'QUIZ',
+          ownerPrincipalId: userId,
+          status: 'PUBLISHED',
+          metadata: {},
+          attemptPolicy: { allowRetake: false, shuffleQuestions: false, shuffleOptions: false },
+          resultReleasePolicy: 'IMMEDIATE',
+        },
+      });
+      await prisma.outboxMessage.create({
+        data: {
+          id: randomUUID(),
+          eventId: randomUUID(),
+          eventName: 'assessment.published',
+          eventVersion: 1,
+          tenantId,
+          workspaceId,
+          correlationId: randomUUID(),
+          payload: { assessmentId },
+          occurredAt: new Date(),
+          status: 'PENDING',
+        },
+      });
+      await relayWorker.runOnce(10);
+      await inboxWorker.runOnce(10);
+      const intents = await prisma.notificationIntent.findMany();
+      expect(intents.every((i) => i.channel === 'IN_APP')).toBe(true);
+      expect(intents.map((i) => i.channel)).not.toContain('EMAIL');
+      expect(intents.map((i) => i.channel)).not.toContain('SMS');
+    } finally {
+      if (savedEmail !== undefined) process.env.ENABLE_EMAIL_NOTIFICATIONS = savedEmail;
+      if (savedSms !== undefined) process.env.ENABLE_SMS_NOTIFICATIONS = savedSms;
+    }
   });
 });

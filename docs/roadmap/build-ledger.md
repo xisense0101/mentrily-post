@@ -2,6 +2,41 @@
 
 This document serves as a permanent continuity/backtrace system for the Mentrily SaaS codebase. Every task must record its progress here to ensure a reliable audit trail and clear path forward.
 
+### Task 013E2 — Communication Event Wiring Provider-Readiness Hardening
+
+- **Task ID**: 013E2
+- **Previous Task**: Task 013E1 — Communication Event Wiring Remediation
+- **Work Completed**:
+  - **Idempotency key added**: Added `idempotencyKey` (nullable `String`) field to `NotificationIntent` Prisma model with a database index. Created migration `20260524000000_notification_intent_idempotency_key` applying the column and partial unique index to the test database.
+  - **Deterministic key computation**: `checkPreferenceAndCreateIntents()` now derives a SHA-256 deterministic idempotency key from `eventId:userId:channel:templateKey` before creating an intent. A `findFirst` check handles the fast path; a `P2002` unique-violation catch handles the race-condition safety net — preventing duplicate intents from concurrent workers processing the same event.
+  - **Removed unsafe admin fallback**: `getWorkspaceAdmins()` no longer falls back to all active workspace members when no admin role is found. It now safely returns `[]`, ensuring handlers only notify explicit owner/creator/learner recipients.
+  - **Tightened payload type system**: Replaced `validatePayload<T extends Record<string, any>>` with a safe `PayloadSchema` + `InferPayload<S>` mapped type pair. The function body now uses `Record<string, unknown>` instead of `as any`. All call sites stripped of stale explicit type arguments — types are now fully inferred from the schema literal passed at the call site.
+  - **Fixed malformed generic type literals**: All `errorMessage: 'string?'` and `resultMessage: 'string?'` used as TypeScript type-level annotations (not schema values) were removed. Handler bodies now use locally scoped named types (`MediaProcessingFailedPayload`, `MediaSecurityScanPayload`) with proper optional fields (`errorMessage?: string`).
+  - **Tightened metadata cast**: `externalIdentity.metadata` is now narrowed with `!Array.isArray()` and cast to `Record<string, unknown>` instead of `Record<string, any>`.
+  - **Expanded integration test suite**: `communication-wiring.integration.spec.ts` now has 10 tests covering: default IN_APP only, opt-in EMAIL/SMS, custom template rendering, media quarantine sanitization, multi-event mappings, idempotency (replay), concurrent deduplication, no-admin workspace safety, malformed payload graceful skip, and EMAIL/SMS suppression without flag+preference+contact.
+  - **Admin role fixture corrected**: The media quarantine test now seeds `WorkspaceRole` and `WorkspaceMemberRole` to give the admin member an actual ADMIN role, making the assertion that 2 intents (owner + admin) are created consistently correct.
+- **Validation Performed**:
+  - `git status --short`: **PASS** (modified files — communication-handlers.ts, communication-wiring.integration.spec.ts, schema.prisma, migration added)
+  - `pnpm lint`: **PASS** (0 errors, 13/13 tasks successful)
+  - `pnpm typecheck`: **PASS** (all 20 packages compile cleanly, 0 TS errors)
+  - `pnpm build`: **PASS** (13/13 tasks successful)
+  - `pnpm test`: **PASS** (13/13 tasks successful)
+  - `pnpm test:integration`: **PASS** (all integration spec files pass, including communication-wiring.integration.spec.ts with all 10 tests)
+  - `pnpm test:e2e`: **PASS** (all 6 Playwright E2E suites pass end-to-end)
+  - `pnpm e2e:content`: **PASS** (Content Studio E2E — document builder, publish flow)
+  - `pnpm e2e:learning`: **PASS** (Learning Delivery E2E — course creation, enrollment, progress)
+  - `pnpm e2e:assessment`: **PASS** (Assessment E2E — create, edit, publish through real UI and backend)
+  - `pnpm e2e:assessment-attempt`: **PASS** (Assessment Attempt E2E — start, save, submit, resume, read-only post-submit)
+  - `pnpm e2e:assessment-grading`: **PASS** (Assessment Grading E2E — grading run, manual review, cross-workspace protection)
+  - `pnpm e2e:assessment-result`: **PASS** (Assessment Result E2E — result release, learner view, cross-workspace protection)
+  - `pnpm e2e:assessment-reliability`: **PASS** (Assessment Reliability E2E — concurrency, idempotency, grading run, result page)
+- **Remaining Gaps**:
+  - Real email provider integration (e.g., SendGrid/AWS SES) — intentionally deferred
+  - Real SMS provider integration (e.g., Twilio) — intentionally deferred
+- **Next Recommended Task**: Task 013F — Real Provider Integration and Production Delivery Workers
+
+---
+
 ### Task 013E1 — Communication Event Wiring Remediation
 
 - **Task ID**: 013E1
@@ -16,12 +51,20 @@ This document serves as a permanent continuity/backtrace system for the Mentrily
   - Sanitized security scan `resultMessage` inside `MediaSecurityScanCompletedInboxHandler` to present safe, generic descriptions (`Suspicious content detected` or `Unable to verify file safety due to a system error`) and avoid leaking raw scanner or internal system details.
   - Expanded integration tests in `communication-wiring.integration.spec.ts` to assert default IN_APP only delivery, opt-in flag/preference checks, dynamic contact verification, media quarantine message sanitization, and various domain event mappings.
 - **Validation Performed**:
+  - `git status --short`: **PASS** (3 files modified — communication-handlers.ts, communication-wiring.integration.spec.ts, inbox-processing.worker.ts)
   - `pnpm lint`: **PASS** (0 errors)
   - `pnpm typecheck`: **PASS** (all 13 packages compile cleanly)
   - `pnpm build`: **PASS** (successful workspace build)
   - `pnpm test`: **PASS** (all unit and worker tests pass)
-  - `pnpm test:integration`: **PASS** (all integration tests pass, including the new communication wiring specs)
-  - `pnpm test:e2e`: **PASS** (all Playwright E2E suites pass)
+  - `pnpm test:integration`: **PASS** (all integration spec files pass sequentially, including communication-scheduler and communication-wiring specs)
+  - `pnpm test:e2e`: **PASS** (all 6 Playwright E2E suites pass end-to-end)
+  - `pnpm e2e:content`: **PASS** (Content Studio E2E — document builder, publish flow)
+  - `pnpm e2e:learning`: **PASS** (Learning Delivery E2E — course creation, enrollment, progress)
+  - `pnpm e2e:assessment`: **PASS** (Assessment E2E — create, edit, publish assessment through real UI and backend)
+  - `pnpm e2e:assessment-attempt`: **PASS** (Assessment Attempt E2E — start, save, submit, resume, and read-only post-submit)
+  - `pnpm e2e:assessment-grading`: **PASS** (Assessment Grading E2E — grading run, manual review, cross-workspace protection)
+  - `pnpm e2e:assessment-result`: **PASS** (Assessment Result E2E — result release, learner view, cross-workspace protection)
+  - `pnpm e2e:assessment-reliability`: **PASS** (Assessment Reliability E2E — concurrency, idempotency, grading run, result page)
 - **Remaining Gaps**:
   - real email provider integration (e.g., SendGrid/AWS SES)
   - real SMS provider integration (e.g., Twilio)

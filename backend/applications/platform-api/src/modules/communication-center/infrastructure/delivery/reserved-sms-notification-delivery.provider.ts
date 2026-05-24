@@ -20,7 +20,9 @@ export class ReservedSmsNotificationDeliveryProvider implements NotificationDeli
     private readonly transport?: NotificationProviderTransport,
   ) {}
 
-  async deliver(input: NotificationDeliveryProviderRequest): Promise<NotificationDeliveryProviderResult> {
+  async deliver(
+    input: NotificationDeliveryProviderRequest,
+  ): Promise<NotificationDeliveryProviderResult> {
     mapReservedSmsDeliveryRequest(input);
 
     if (
@@ -71,6 +73,7 @@ export class ReservedSmsNotificationDeliveryProvider implements NotificationDeli
           errorCode: result.errorCode ?? 'PROVIDER_TRANSPORT_FAILED',
           errorMessage: result.errorMessage ?? 'SMS provider transport failed.',
           metadata: result.metadata ?? { safe: true },
+          retryable: result.metadata?.retryable === true,
         };
   }
 }

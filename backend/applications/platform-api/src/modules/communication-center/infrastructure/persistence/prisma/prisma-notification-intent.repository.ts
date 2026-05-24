@@ -140,6 +140,8 @@ export class PrismaNotificationIntentRepository implements NotificationIntentRep
           provider: input.provider,
           dispatchedAt: input.occurredAt,
           updatedAt: input.occurredAt,
+          lockedAt: null,
+          lockedBy: null,
           metadata: {
             ...(typeof current.metadata === 'object' &&
             current.metadata !== null &&
@@ -191,6 +193,8 @@ export class PrismaNotificationIntentRepository implements NotificationIntentRep
           failureReason: input.failureReason,
           failedAt: input.occurredAt,
           updatedAt: input.occurredAt,
+          lockedAt: null,
+          lockedBy: null,
           metadata: {
             ...(typeof current.metadata === 'object' &&
             current.metadata !== null &&

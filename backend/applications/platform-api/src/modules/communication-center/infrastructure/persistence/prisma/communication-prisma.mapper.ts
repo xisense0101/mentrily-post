@@ -48,6 +48,8 @@ type PersistenceNotificationIntent = {
   failedAt: Date | null;
   cancelledAt: Date | null;
   failureReason: string | null;
+  lockedAt: Date | null;
+  lockedBy: string | null;
   metadata: unknown;
   createdByPrincipalId: string;
   createdAt: Date;
@@ -135,6 +137,8 @@ export function toDomainNotificationIntent(
     ...(record.failedAt ? { failedAt: record.failedAt } : {}),
     ...(record.cancelledAt ? { cancelledAt: record.cancelledAt } : {}),
     ...(record.failureReason ? { failureReason: record.failureReason } : {}),
+    ...(record.lockedAt ? { lockedAt: record.lockedAt } : {}),
+    ...(record.lockedBy ? { lockedBy: record.lockedBy } : {}),
     metadata: asRecord(record.metadata),
     createdByPrincipalId: record.createdByPrincipalId,
     createdAt: record.createdAt,
@@ -201,6 +205,8 @@ export function toPersistenceNotificationIntentCreate(intent: NotificationIntent
     failedAt: intent.failedAt ?? null,
     cancelledAt: intent.cancelledAt ?? null,
     failureReason: intent.failureReason ?? null,
+    lockedAt: intent.lockedAt ?? null,
+    lockedBy: intent.lockedBy ?? null,
     metadata: toInputJsonValue(intent.metadata),
     createdByPrincipalId: intent.createdByPrincipalId,
     createdAt: intent.createdAt,
@@ -226,6 +232,8 @@ export function toPersistenceNotificationIntentUpdate(intent: NotificationIntent
     failedAt: intent.failedAt ?? null,
     cancelledAt: intent.cancelledAt ?? null,
     failureReason: intent.failureReason ?? null,
+    lockedAt: intent.lockedAt ?? null,
+    lockedBy: intent.lockedBy ?? null,
     metadata: toInputJsonValue(intent.metadata),
     createdByPrincipalId: intent.createdByPrincipalId,
     updatedAt: intent.updatedAt,
