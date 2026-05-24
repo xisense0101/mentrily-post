@@ -86,6 +86,7 @@ This map is derived from existing docs only (`docs/product`, `docs/architecture`
 - **Current implementation truth**: backend persistence/API slice is complete; portal frontend foundation exists for creator course management shells and learner enrollment shells; the first cross-stack Playwright E2E slice now validates the real frontend + real backend + real test Postgres workflow.
 
 ### `assessment-delivery`
+
 - **010D1 baseline**: Assessment Builder authoring domain, persistence/API, frontend authoring shell, and cross-stack Assessment Builder E2E already exist.
 - **011A current state**: learner assessment attempt runtime backend foundation now exists as a separate runtime slice. It uses published assessment snapshots only, persists learner attempt/session/answer/result-placeholder records, exposes backend attempt APIs, enforces lifecycle and ownership rules, and emits audit/outbox-backed attempt events.
 - **011B current state**: learner attempt frontend and cross-stack E2E now exist. Learners can start/resume attempts, read learner-safe published snapshots, save answers, submit attempts, review submitted status/result placeholders, and list learner-owned attempts through the real portal frontend.
@@ -184,6 +185,7 @@ This sequence aligns to existing `enterprise-transition-roadmap.md` and dependen
 - Expand/contract cleanups, reliability drills, release hardening, enterprise readiness.
 
 ## Task 011D Update (2026-05-18)
+
 - Manual grading UI now exists for creator/admin review.
 - Creator/admin can view pending manual-review answers, open grading runs, and submit manual score + feedback.
 - Learner result page is not implemented yet.
@@ -192,7 +194,6 @@ This sequence aligns to existing `enterprise-transition-roadmap.md` and dependen
 - Learning Delivery is not connected to Assessment grading.
 - Content Studio is not connected to Assessment grading.
 - Grading E2E uses real frontend + real backend + test Postgres.
-
 
 ## Assessment Result Release Dependency Note
 
@@ -230,3 +231,8 @@ Assessment result release depends on assessment attempts, published snapshots, a
 - Assessment, Learning Delivery, Media Library, and Content Studio remain upstream future producers of communication intents rather than current dependencies.
 - The internal scheduler foundation depends on the same boundaries plus delivery-attempt persistence, but it still avoids real provider adapters and worker loops in this phase.
 - Communication Center now depends on backend-only provider configuration and adapter selection boundaries, but still has no outbound live provider integration.
+
+## Task 014A Additions
+
+- Dashboard depends on workspace governance, learning delivery, assessment delivery, content studio, media library, audit data, and campaign persistence.
+- Campaign management depends on workspace governance, communication center template safety, and existing workspace member/course/assessment/content/media relations.

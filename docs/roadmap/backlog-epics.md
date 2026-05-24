@@ -101,3 +101,8 @@
 
 - The current Communication Center epic now covers authenticated in-app inbox viewing and workspace-scoped notification preference management.
 - Future backlog remains unchanged for event wiring, production worker loop, live providers, and campaign/broadcast surfaces.
+
+## Task 014A Additions
+
+- Dashboard analytics remains a foundation epic with richer analytics deferred.
+- Campaign management remains a staged epic: draft and preview foundation now, delivery automation later.

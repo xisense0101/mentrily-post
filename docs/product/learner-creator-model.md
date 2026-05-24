@@ -98,3 +98,9 @@ Learners can read only their own released assessment results. Creators, admins, 
 
 - Learners, creators, admins, and workspace owners can only view and update their own notification inbox and preference records through the portal.
 - Notification preferences remain tenant/workspace scoped and do not grant access to provider operations or workspace-wide notification administration.
+
+## Task 014A Additions
+
+- Learners remain excluded from workspace campaign management.
+- Creators can still interact with existing learning/content workflows, while campaign write access remains policy-controlled.
+- Dashboard data is read-only and scoped to the active workspace context.

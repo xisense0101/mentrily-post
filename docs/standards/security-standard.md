@@ -60,3 +60,9 @@
 - Media processing hooks must execute only registered backend handlers. `eval`, `new Function`, arbitrary JavaScript, and live outbound provider/webhook calls are prohibited by default.
 - Media processing must not bypass `MediaAccessPolicyService`, must not trust tenant/workspace identifiers from request bodies, and must not promote non-clean media into readable/usable states.
 - Frontend-safe media contracts may expose template keys, deferred rendition summaries, and hook stage summaries, but must not expose storage keys, bucket paths, origin URLs, or scanner internals.
+
+## Task 014A Additions
+
+- Dashboard and campaign reads must remain workspace-scoped and permission-enforced.
+- Audience preview must never accept arbitrary raw email or phone inputs for this foundation.
+- Live provider delivery remains disabled by default for campaign flows.

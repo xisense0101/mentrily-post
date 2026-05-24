@@ -59,3 +59,8 @@ Each ticket includes:
 
 - `012F` now includes the portal Notification Inbox and Notification Preferences foundation on top of the existing Communication Center backend.
 - `012G` should not begin until the full package/backend/portal/integration/root/E2E validation matrix is green for the completed `012F` surface.
+
+## Task 014A Additions
+
+- Added multi-workspace dashboard foundation and campaign management foundation as a bounded admin experience.
+- Deferred campaign automation, analytics, and live bulk fanout to later tasks.

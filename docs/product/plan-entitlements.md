@@ -180,3 +180,9 @@ Assessment result release depends on workspace-scoped assessment permissions. Th
 
 - Notification Inbox and Notification Preferences are authenticated workspace features, not provider-configuration features.
 - Saved `EMAIL` and `SMS` preferences only store user intent; they do not imply that live delivery providers are enabled for any plan.
+
+## Task 014A Additions
+
+- Multi-workspace dashboard reads are permission-gated.
+- Campaign management currently covers workspace-scoped drafting, preview, and scheduling metadata only.
+- Campaign automation, analytics, and live blast delivery remain future-plan items.

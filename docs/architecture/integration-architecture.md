@@ -70,3 +70,9 @@ Provider integrations (Clerk, WorkOS, Stripe, email providers, telemetry provide
   - Refactored `mapCourseToResponse` in the mapping layer to asynchronously resolve media asset details and attach them to `LearningLessonContract` using the `MediaAssetRepository`.
   - Integrated the frontend lesson create form with the `AssetPickerDialog` to select media assets directly.
   - Added `EditableMediaBlock` to render `IMAGE`, `VIDEO`, and `FILE` kind blocks dynamically in both editable and read-only preview modes using the signed URL resolver hook `useMediaReadUrl`.
+
+## Task 014A Additions
+
+- Campaign message preview reuses the existing Communication Center safe template renderer.
+- Campaign audience preview is resolved from existing workspace-scoped internal relations only.
+- Provider execution remains gated behind existing communication delivery controls and is not triggered by dashboard or campaign preview endpoints.

@@ -62,6 +62,22 @@ export class PrismaNotificationIntentRepository implements NotificationIntentRep
     }
   }
 
+  async lock(id: string, transaction?: TransactionContext): Promise<NotificationIntent | null> {
+    const client = getPrismaClient(this.prisma, transaction);
+    try {
+      const rawRecords: any[] = await (client as any).$queryRawUnsafe(
+        `SELECT * FROM "NotificationIntent" WHERE id = $1::uuid FOR UPDATE`,
+        id,
+      );
+      if (rawRecords.length === 0) {
+        return null;
+      }
+      return toDomainNotificationIntent(rawRecords[0]);
+    } catch (error) {
+      throw mapPrismaError(error);
+    }
+  }
+
   async listByWorkspace(
     input: {
       workspaceId: string;

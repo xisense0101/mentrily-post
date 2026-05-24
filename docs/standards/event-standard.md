@@ -176,3 +176,8 @@ When payload structure changes:
 - Event persistence through the outbox must be idempotent by `eventId`, including concurrent duplicate append attempts.
 - Event payloads may include safe Communication provider identifiers, but must never include provider credentials, API keys, auth tokens, or raw transport request bodies.
 - Provider enablement changes remain configuration concerns and are not emitted as public-facing domain events in Task 012E.
+
+## Task 014A Additions
+
+- Task 014A does not add a public bulk-send event or uncontrolled campaign fanout path.
+- Campaign preview and scheduling foundation do not emit provider delivery events by default.

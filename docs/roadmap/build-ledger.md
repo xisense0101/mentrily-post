@@ -2,6 +2,41 @@
 
 This document serves as a permanent continuity/backtrace system for the Mentrily SaaS codebase. Every task must record its progress here to ensure a reliable audit trail and clear path forward.
 
+### Task 014A — Multi-Workspace Dashboard and Campaign Management Foundation
+
+- **Task ID**: 014A
+- **Previous Task**: Task 013F1 — Real Provider Integration and Delivery Worker Remediation
+- **Work Completed**:
+  - inspected workspace, communication, dashboard, and campaign boundaries in the current paused worktree
+  - selected a read-model dashboard approach and moved dashboard routing into a dedicated backend `dashboard` module
+  - added a dedicated backend `campaign-management` route surface for workspace-scoped campaign CRUD, preview, and scheduling
+  - preserved Communication Center ownership of safe template rendering and campaign audience resolution
+  - added dashboard and campaign frontend module foundations and rewired the workspace portal routes to use them
+  - added dashboard integration coverage and updated campaign integration coverage to exercise the new `/workspace/campaigns` surface
+  - updated product, architecture, standards, and roadmap docs for workspace scoping and delivery gating
+- **Validation Performed**:
+  - `git status --short`: **PASS** (paused 014A worktree resumed with existing in-progress changes)
+  - `pnpm lint`: **PASS**
+  - `pnpm typecheck`: **PASS**
+  - `pnpm test`: **PASS**
+  - `pnpm build`: **PASS**
+  - `pnpm test:integration`: **PASS**
+  - `pnpm --filter @mentrily/platform-api test`: **PASS**
+  - `pnpm --filter @mentrily/platform-api typecheck`: **PASS**
+  - `POOL=forks pnpm --filter @mentrily/platform-api exec vitest run --config vitest.integration.config.ts src/modules/communication-center/tests/campaign-api.integration.spec.ts`: **PASS**
+  - `pnpm lint` rerun after remediation: **PASS**
+  - full Phase 21 / root / sequential E2E matrix: **INCOMPLETE**
+    - a long full-matrix rerun surfaced and repaired a root lint error in `frontend/apps/portal/src/modules/campaign-management/routes/campaigns-page.tsx`
+    - the full rerun was not completed end-to-end again within this run after the repair
+- **Remaining Gaps**:
+  - full campaign automation and journeys remain future work
+  - live campaign fanout and provider delivery remain deferred by default
+  - advanced dashboard analytics remain future work
+  - the complete final validation matrix still must be rerun end-to-end after the last lint and route fixes
+- **Next Recommended Task**: Task 014A1 — Dashboard and Campaign Foundation Remediation
+
+---
+
 ### Task 013F1 — Real Provider Integration and Delivery Worker Remediation
 
 - **Task ID**: 013F1

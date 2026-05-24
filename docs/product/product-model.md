@@ -201,3 +201,9 @@ Creators and admins can release graded assessment results to learners. Learners 
 - Authenticated workspace users now have an in-app notification inbox foundation in the portal.
 - Users can manage their own workspace-scoped notification preferences for `IN_APP`, `EMAIL`, and `SMS` channels without enabling live provider delivery.
 - Provider configuration remains backend-only and environment-controlled; no real email or SMS sending is enabled by this product surface.
+
+## Task 014A Additions
+
+- Workspace admins and owners now have a workspace-scoped dashboard foundation for operational counts and recent activity.
+- Campaign management is now a draft, preview, archive, and schedule foundation only.
+- Live mass campaign delivery remains deferred and disabled by default.

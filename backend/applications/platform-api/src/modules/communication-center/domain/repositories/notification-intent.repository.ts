@@ -11,6 +11,7 @@ export abstract class NotificationIntentRepository {
     id: string,
     transaction?: TransactionContext,
   ): Promise<NotificationIntent | null>;
+  abstract lock(id: string, transaction?: TransactionContext): Promise<NotificationIntent | null>;
   abstract listByWorkspace(
     input: {
       workspaceId: string;

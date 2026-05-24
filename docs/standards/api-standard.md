@@ -107,3 +107,8 @@ Learner result endpoints must never expose unreleased scores, correct answer key
 
 - Notification inbox and notification preference request bodies must not accept `tenantId` or `workspaceId`; scope is derived from authenticated context.
 - Frontend-safe Communication Center DTOs must not expose provider configuration, provider mode, provider credentials, or transport payload metadata.
+
+## Task 014A Additions
+
+- Dashboard and campaign endpoints must resolve workspace context server-side and never trust `tenantId` or `workspaceId` from request bodies.
+- Campaign preview responses must remain frontend-safe and exclude provider configuration, private URLs, storage keys, and scanner output.

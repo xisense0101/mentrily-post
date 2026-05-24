@@ -217,3 +217,8 @@ Assessment result release requires backend unit/integration coverage, frontend u
 
 - Communication Center frontend work must cover loading, empty, error, mutation, and preference-save states in portal tests.
 - Backend coverage must confirm own-record scoping, idempotent notification mutations, safe preference upserts, and absence of provider-config leakage.
+
+## Task 014A Additions
+
+- Dashboard and campaign changes require route-level validation plus portal coverage for loading, empty, and success states.
+- Campaign preview tests must verify safe rendering without provider execution side effects.

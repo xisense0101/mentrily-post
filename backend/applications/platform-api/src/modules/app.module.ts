@@ -8,6 +8,8 @@ import { ContentStudioModule } from './content-studio/content-studio.module.js';
 import { AssessmentDeliveryModule } from './assessment-delivery/assessment-delivery.module.js';
 import { MediaLibraryModule } from './media-library/media-library.module.js';
 import { CommunicationCenterModule } from './communication-center/communication-center.module.js';
+import { DashboardModule } from './dashboard/dashboard.module.js';
+import { CampaignManagementModule } from './campaign-management/campaign-management.module.js';
 
 @Module({
   imports: [
@@ -20,6 +22,8 @@ import { CommunicationCenterModule } from './communication-center/communication-
     AssessmentDeliveryModule,
     MediaLibraryModule,
     CommunicationCenterModule,
+    DashboardModule,
+    CampaignManagementModule,
   ],
 })
 export class AppModule {}

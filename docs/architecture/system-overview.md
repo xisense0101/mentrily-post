@@ -58,3 +58,9 @@
 - Internal scheduler processing for due queued notification intents now exists, but it is not a public product flow and does not send real email or SMS.
 - Communication Center now includes explicit provider configuration, feature flags, and registry-based provider selection behind backend-only boundaries.
 - Real email/SMS delivery remains intentionally inactive in all example environments.
+
+## Task 014A Additions
+
+- The portal now includes dashboard and campaign management foundations for authenticated workspace users with the required permissions.
+- Dashboard and campaign APIs remain backend-owned and workspace-scoped.
+- Communication Center continues to own template safety and provider boundaries.

@@ -292,3 +292,9 @@ The platform API now exposes result release and result read use cases inside the
 - The Communication Center backend exposes own-notification inbox and own-preference endpoints through the platform API.
 - In-app inbox items are sourced from existing `NotificationIntent` records with sanitized metadata-derived read/archive state.
 - Provider configuration and provider secrets remain outside frontend-safe contracts and are not returned by inbox/preferences APIs.
+
+## Task 014A Additions
+
+- Added a `dashboard` read-model module for workspace summary and multi-workspace overview endpoints.
+- Added a `campaign-management` module that exposes campaign CRUD and preview routes while reusing Communication Center safety services.
+- Campaign execution fanout is not performed from campaign endpoints in this foundation.

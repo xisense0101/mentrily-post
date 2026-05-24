@@ -1,6 +1,25 @@
-import { Body, Controller, Get, Inject, Param, Post, Put, Query, Req } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Inject,
+  Param,
+  Patch,
+  Post,
+  Put,
+  Query,
+  Req,
+} from '@nestjs/common';
 import type { FastifyRequest } from 'fastify';
 import { AppError, type RequestContext } from '@mentrily/service-core';
+import type {
+  CreateCampaignRequestContract,
+  UpdateCampaignRequestContract,
+  ScheduleCampaignRequestContract,
+  CampaignAudiencePreviewRequestContract,
+  CampaignMessagePreviewRequestContract,
+} from '@mentrily/contract-catalog';
 import {
   ArchiveNotificationTemplateUseCase,
   CreateNotificationIntentUseCase,
@@ -20,6 +39,14 @@ import {
   GetUnreadCountUseCase,
   GetPreferencesUseCase,
   UpdatePreferencesUseCase,
+  CreateCampaignUseCase,
+  UpdateCampaignUseCase,
+  GetCampaignUseCase,
+  ListCampaignsUseCase,
+  ArchiveCampaignUseCase,
+  ScheduleCampaignUseCase,
+  PreviewCampaignAudienceUseCase,
+  PreviewCampaignMessageUseCase,
   type CreateNotificationIntentInput,
   type CreateNotificationTemplateInput,
   type MarkNotificationIntentDispatchedInput,
@@ -63,6 +90,22 @@ export class CommunicationCenterController {
     @Inject(GetPreferencesUseCase) private readonly getPreferencesUseCase: GetPreferencesUseCase,
     @Inject(UpdatePreferencesUseCase)
     private readonly updatePreferencesUseCase: UpdatePreferencesUseCase,
+    @Inject(CreateCampaignUseCase)
+    private readonly createCampaignUseCase: CreateCampaignUseCase,
+    @Inject(UpdateCampaignUseCase)
+    private readonly updateCampaignUseCase: UpdateCampaignUseCase,
+    @Inject(GetCampaignUseCase)
+    private readonly getCampaignUseCase: GetCampaignUseCase,
+    @Inject(ListCampaignsUseCase)
+    private readonly listCampaignsUseCase: ListCampaignsUseCase,
+    @Inject(ArchiveCampaignUseCase)
+    private readonly archiveCampaignUseCase: ArchiveCampaignUseCase,
+    @Inject(ScheduleCampaignUseCase)
+    private readonly scheduleCampaignUseCase: ScheduleCampaignUseCase,
+    @Inject(PreviewCampaignAudienceUseCase)
+    private readonly previewCampaignAudienceUseCase: PreviewCampaignAudienceUseCase,
+    @Inject(PreviewCampaignMessageUseCase)
+    private readonly previewCampaignMessageUseCase: PreviewCampaignMessageUseCase,
   ) {}
 
   private requestContext(request: FastifyRequest): RequestContext {
@@ -230,5 +273,71 @@ export class CommunicationCenterController {
     @Body() body: UpdateNotificationPreferencesInput,
   ) {
     return this.updatePreferencesUseCase.execute(this.requestContext(request), body);
+  }
+
+  @Post('/campaigns')
+  async createCampaign(
+    @Req() request: FastifyRequest,
+    @Body() body: CreateCampaignRequestContract,
+  ) {
+    return this.createCampaignUseCase.execute(this.requestContext(request), body);
+  }
+
+  @Get('/campaigns')
+  async listCampaigns(@Req() request: FastifyRequest) {
+    return this.listCampaignsUseCase.execute(this.requestContext(request));
+  }
+
+  @Get('/campaigns/:campaignId')
+  async getCampaign(@Req() request: FastifyRequest, @Param('campaignId') campaignId: string) {
+    return this.getCampaignUseCase.execute(this.requestContext(request), campaignId);
+  }
+
+  @Patch('/campaigns/:campaignId')
+  async updateCampaign(
+    @Req() request: FastifyRequest,
+    @Param('campaignId') campaignId: string,
+    @Body() body: UpdateCampaignRequestContract,
+  ) {
+    return this.updateCampaignUseCase.execute(this.requestContext(request), campaignId, body);
+  }
+
+  @Delete('/campaigns/:campaignId')
+  async deleteCampaign(@Req() request: FastifyRequest, @Param('campaignId') campaignId: string) {
+    return this.archiveCampaignUseCase.execute(this.requestContext(request), campaignId);
+  }
+
+  @Post('/campaigns/:campaignId/archive')
+  async archiveCampaign(@Req() request: FastifyRequest, @Param('campaignId') campaignId: string) {
+    return this.archiveCampaignUseCase.execute(this.requestContext(request), campaignId);
+  }
+
+  @Post('/campaigns/:campaignId/schedule')
+  async scheduleCampaign(
+    @Req() request: FastifyRequest,
+    @Param('campaignId') campaignId: string,
+    @Body() body: ScheduleCampaignRequestContract,
+  ) {
+    return this.scheduleCampaignUseCase.execute(
+      this.requestContext(request),
+      campaignId,
+      body.scheduledFor,
+    );
+  }
+
+  @Post('/campaigns/preview-audience')
+  async previewAudience(
+    @Req() request: FastifyRequest,
+    @Body() body: CampaignAudiencePreviewRequestContract,
+  ) {
+    return this.previewCampaignAudienceUseCase.execute(this.requestContext(request), body);
+  }
+
+  @Post('/campaigns/preview-message')
+  async previewMessage(
+    @Req() request: FastifyRequest,
+    @Body() body: CampaignMessagePreviewRequestContract,
+  ) {
+    return this.previewCampaignMessageUseCase.execute(this.requestContext(request), body);
   }
 }

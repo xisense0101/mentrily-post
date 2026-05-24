@@ -292,3 +292,9 @@ Result release reuses the existing `AssessmentAttemptResult` record with `gradin
 - `NotificationIntent` remains the source of truth for in-app inbox records; no separate inbox table is required for `012F`.
 - `NotificationPreference` remains the source of truth for workspace-scoped user notification preferences.
 - Inbox read/archive state is stored in sanitized metadata and returned through frontend-safe DTO mapping only.
+
+## Task 014A Additions
+
+- Introduced a workspace-scoped `Campaign` persistence model with narrow status and scheduling metadata.
+- Dashboard reads remain aggregate queries over existing learning, assessment, content, media, audit, and campaign tables.
+- No provider credentials, storage keys, or scanner payloads are persisted in dashboard or campaign contracts.

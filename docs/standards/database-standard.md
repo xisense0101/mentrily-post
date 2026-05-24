@@ -167,3 +167,8 @@ Deduplication rule:
 - Outbox `eventId` uniqueness must not be weakened; duplicate append behavior should return the existing row rather than overwrite payload or suppress unrelated unique errors.
 - Task 012E prefers no schema change; provider adapter prep must reuse existing Communication intent and delivery-attempt storage unless metadata requirements force otherwise.
 - Delivery-attempt failure metadata must remain secret-free and safe to persist.
+
+## Task 014A Additions
+
+- Campaign persistence is limited to workspace-scoped draft/schedule metadata and typed audience configuration JSON.
+- Campaign indexes must stay narrow: workspace plus status, created time, and scheduled time.

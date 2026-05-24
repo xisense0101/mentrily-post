@@ -95,7 +95,7 @@ export class NotificationSchedulerService {
     }
 
     return this.transactionRunner.run(async (tx) => {
-      const currentIntent = await this.intentRepository.findById(intent.id, tx);
+      const currentIntent = await this.intentRepository.lock(intent.id, tx);
       if (!currentIntent) {
         return { intentId: intent.id, status: 'SKIPPED' };
       }
