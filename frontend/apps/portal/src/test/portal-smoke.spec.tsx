@@ -11,7 +11,7 @@ describe('portal workspace scaffold', () => {
     expect(screen.getByRole('heading', { name: 'Dashboard' })).toBeInTheDocument();
     expect(
       screen.getByText(
-        /workspace-scoped activity, content, assessment, media, and campaign summary cards/i,
+        /workspace-scoped creator metrics driven by normalized analytics-safe read models/i,
       ),
     ).toBeInTheDocument();
   });

@@ -2,6 +2,188 @@
 
 This document serves as a permanent continuity/backtrace system for the Mentrily SaaS codebase. Every task must record its progress here to ensure a reliable audit trail and clear path forward.
 
+### Task 014C — Analytics Event Normalization and Creator Dashboard Read Models
+
+- **Task ID**: 014C
+- **Previous Task**: Task 014B1 — Course and Assessment Unified Delivery Experience Remediation
+- **Implementation Status**: Complete, full validation matrix passed
+- **Baseline Validation Discipline**:
+  - Initial baseline run surfaced an environment failure before feature work: root `pnpm test:e2e` could not proceed because the shared test PostgreSQL container was not running.
+  - Baseline was fixed before 014C implementation by running `pnpm db:test:up`, then re-running the required baseline validation until it was green.
+  - A later apparent red integration run was caused by concurrent validation against the shared test DB harness and was treated as operator error, not product failure; all subsequent DB-backed validation was rerun sequentially.
+- **Analytics Model Decision**:
+  - Chosen model: **direct read models over source-of-truth product tables plus normalized reads over persisted outbox messages**.
+  - No new Prisma analytics tables or migrations were added.
+  - Why:
+    - workspace-scoped creator metrics were already safely derivable from existing product tables
+    - recent creator activity could be normalized from persisted outbox messages without copying raw payloads
+    - this kept the slice idempotent, retry-safe, and narrow without schema drift
+- **Work Completed**:
+  - inspected dashboard, event, learning, assessment, content, media, communication, and campaign boundaries
+  - selected the analytics normalization model and documented the scope as operational reporting only
+  - added shared analytics contracts for categories, subject types, metric keys, and normalized activity items
+  - added backend analytics module wiring in `platform-api`
+  - implemented `AnalyticsEventNormalizerService` to normalize supported outbox events into safe creator activity items
+  - implemented `AnalyticsDashboardReadModelService` for workspace-scoped creator metrics across learning, assessment, content, media, communication, and campaigns
+  - made recent activity retry-safe/idempotent by deduplicating normalized activity entries by source `eventId`
+  - updated dashboard use cases and controller routes to use analytics read-model services instead of ad-hoc counts
+  - added creator dashboard endpoints:
+    - `GET /workspace/dashboard/creator/summary`
+    - `GET /workspace/dashboard/creator/activity`
+    - `GET /workspace/dashboard/creator/metrics/learning`
+    - `GET /workspace/dashboard/creator/metrics/assessment`
+    - `GET /workspace/dashboard/creator/metrics/content`
+    - `GET /workspace/dashboard/creator/metrics/media`
+    - `GET /workspace/dashboard/creator/metrics/communication`
+    - `GET /workspace/dashboard/creator/metrics/campaigns`
+  - preserved permission protection by continuing to gate creator dashboard access through existing dashboard permissions
+  - updated frontend dashboard/domain contracts and API clients for creator summary, activity, and metric routes
+  - updated the portal dashboard page to render normalized creator metric cards and safe recent activity
+  - added backend unit coverage for normalization and read-model behavior
+  - extended dashboard integration coverage for workspace scoping, safe recent activity, and permission denial
+  - extended portal dashboard tests for loading, empty, safe activity, error, and forbidden states
+  - updated product, architecture, standards, and roadmap docs for analytics normalization and creator dashboard read models
+- **Analytics Taxonomy Implemented**:
+  - categories:
+    - `LEARNING`
+    - `ASSESSMENT`
+    - `CONTENT`
+    - `MEDIA`
+    - `COMMUNICATION`
+    - `CAMPAIGN`
+    - `SYSTEM`
+  - currently normalized/supported event names:
+    - `learning.course.created`
+    - `learning.course.published`
+    - `learning.enrollment.created`
+    - `learning.enrollment.completed`
+    - `learning.progress.completed`
+    - `assessment.published`
+    - `assessment.attempt.started`
+    - `assessment.attempt.submitted`
+    - `assessment.answer.pending_manual_review`
+    - `assessment.grading.run.completed`
+    - `assessment.grading.run.partial`
+    - `assessment.result.released`
+    - `content.document.created`
+    - `content.document.draft_blocks_replaced`
+    - `content.document.published`
+    - `content.document.archived`
+    - `media.upload.completed`
+    - `media.upload.failed`
+    - `media.asset.archived`
+    - `communication.intent.created`
+    - `communication.intent.dispatched`
+    - `communication.intent.failed`
+  - unsupported/deferred:
+    - no campaign outbox/domain event normalization was added because stable persisted campaign event sources were not already present
+    - no external analytics warehouse, cohort, export, or streaming events were added
+- **Worker / Inbox Integration Decision**:
+  - No new worker analytics projector or inbox consumer was needed in 014C.
+  - Recent creator activity is normalized directly from persisted outbox messages already written by product modules.
+  - This keeps projection internal, idempotent by source `eventId`, and free of extra network or worker complexity for this slice.
+- **Prisma / Migration Changes**:
+  - No Prisma schema changes were required.
+  - No migration was added.
+- **Data Safety Confirmation**:
+  - raw outbox payloads are not exposed through creator dashboard APIs
+  - unreleased assessment scores are not exposed through creator dashboard activity or summary
+  - private grading notes are not exposed
+  - raw answer payloads are not exposed
+  - provider config and provider secrets are not exposed to contracts or frontend responses
+  - media `storageKey`, `objectKey`, and private URLs are not exposed through analytics/dashboard responses
+  - scanner raw output is not exposed
+- **014B Compatibility**:
+  - creator learning metrics include safe `linkedAssessmentsCount`
+  - released-result metrics use released attempt results only
+  - no learner-private result detail was added to creator dashboard responses
+- **Exact Files Changed**:
+  - `backend/applications/platform-api/src/modules/analytics/analytics.module.ts`
+  - `backend/applications/platform-api/src/modules/analytics/application/analytics-dashboard-read-model.service.ts`
+  - `backend/applications/platform-api/src/modules/analytics/application/analytics-event-normalizer.service.ts`
+  - `backend/applications/platform-api/src/modules/analytics/tests/analytics-event-normalizer.spec.ts`
+  - `backend/applications/platform-api/src/modules/analytics/tests/creator-dashboard-read-model.spec.ts`
+  - `backend/applications/platform-api/src/modules/app.module.ts`
+  - `backend/applications/platform-api/src/modules/dashboard/application/use-cases/get-dashboard-summary.use-case.ts`
+  - `backend/applications/platform-api/src/modules/dashboard/dashboard.module.ts`
+  - `backend/applications/platform-api/src/modules/dashboard/presentation/http/dashboard.controller.ts`
+  - `backend/applications/platform-api/src/modules/dashboard/tests/dashboard-api.integration.spec.ts`
+  - `backend/packages/contract-catalog/src/analytics/index.ts`
+  - `backend/packages/contract-catalog/src/dashboard/index.ts`
+  - `backend/packages/contract-catalog/src/index.ts`
+  - `frontend/packages/domain-contracts/src/analytics.ts`
+  - `frontend/packages/domain-contracts/src/dashboard.ts`
+  - `frontend/packages/domain-contracts/src/index.ts`
+  - `frontend/apps/portal/src/modules/analytics/api/analytics-api-client.ts`
+  - `frontend/apps/portal/src/modules/dashboard/api/dashboard-api-client.ts`
+  - `frontend/apps/portal/src/modules/dashboard/routes/dashboard-page.tsx`
+  - `frontend/apps/portal/src/modules/dashboard/tests/dashboard-page.spec.tsx`
+  - `frontend/apps/portal/src/test/portal-smoke.spec.tsx`
+  - `docs/product/product-model.md`
+  - `docs/product/learner-creator-model.md`
+  - `docs/product/plan-entitlements.md`
+  - `docs/architecture/backend-architecture.md`
+  - `docs/architecture/data-architecture.md`
+  - `docs/architecture/event-model.md`
+  - `docs/architecture/integration-architecture.md`
+  - `docs/architecture/system-overview.md`
+  - `docs/standards/api-standard.md`
+  - `docs/standards/database-standard.md`
+  - `docs/standards/event-standard.md`
+  - `docs/standards/security-standard.md`
+  - `docs/standards/testing-standard.md`
+  - `docs/roadmap/domain-dependency-map.md`
+  - `docs/roadmap/sprint-plan.md`
+  - `docs/roadmap/backlog-epics.md`
+  - `docs/roadmap/build-ledger.md`
+- **Validation Performed**:
+  - ✅ `git status --short`: **PASS** (pre-existing dirty worktree noted before implementation)
+  - ✅ `pnpm lint`: **PASS** (warnings only)
+  - ✅ `pnpm typecheck`: **PASS**
+  - ✅ `pnpm test`: **PASS**
+  - ✅ `pnpm build`: **PASS**
+  - ✅ `pnpm test:integration`: **PASS**
+  - ✅ `pnpm test:e2e`: **PASS**
+  - ✅ `pnpm --filter @mentrily/platform-api test`: **PASS**
+  - ✅ `pnpm --filter @mentrily/platform-api typecheck`: **PASS**
+  - ✅ `pnpm --filter @mentrily/platform-api test:integration`: **PASS**
+  - ✅ `pnpm --filter @mentrily/platform-worker test`: **PASS**
+  - ✅ `pnpm --filter @mentrily/platform-worker typecheck`: **PASS**
+  - ✅ `pnpm --filter @mentrily/data-platform prisma:validate`: **PASS**
+  - ✅ `pnpm --filter @mentrily/data-platform prisma:generate`: **PASS**
+  - ✅ `pnpm --filter @mentrily/contract-catalog typecheck`: **PASS**
+  - ✅ `pnpm --filter @mentrily/domain-contracts typecheck`: **PASS**
+  - ✅ `pnpm --filter @mentrily/security-toolkit test`: **PASS**
+  - ✅ `pnpm --filter @mentrily/portal test`: **PASS**
+  - ✅ `pnpm --filter @mentrily/portal typecheck`: **PASS**
+  - ✅ `pnpm --filter @mentrily/portal build`: **PASS**
+  - ✅ `node automation/verify-env-examples.mjs`: **PASS**
+  - ✅ `cp .env.test.example .env.test`: **PASS**
+  - ✅ `pnpm db:test:up`: **PASS**
+  - ✅ `pnpm --filter @mentrily/data-platform prisma:migrate:deploy`: **PASS**
+  - ✅ `node --env-file=.env.test automation/run-integration-tests.mjs`: **PASS**
+  - ✅ `pnpm e2e:content`: **PASS**
+  - ✅ `pnpm e2e:learning`: **PASS**
+  - ✅ `pnpm e2e:assessment`: **PASS**
+  - ✅ `pnpm e2e:assessment-attempt`: **PASS**
+  - ✅ `pnpm e2e:assessment-grading`: **PASS**
+  - ✅ `pnpm e2e:assessment-result`: **PASS**
+  - ✅ `pnpm e2e:assessment-reliability`: **PASS**
+  - ✅ `pnpm db:test:down`: **PASS**
+- **Static Safety Scan Result**:
+  - frontend/contracts/dashboard source files contained no provider secret, live-delivery flag, storage key, object key, private URL, scanner output, unreleased score, private grading, `eval`, `new Function`, `as any`, or `Record<string, any>` leaks in shipped analytics/dashboard code
+  - grep hits for `providerConfig`, `storageKey`, `objectKey`, and `graderNotes` were limited to backend/frontend tests asserting that those values are stripped from analytics/dashboard responses
+- **Remaining Gaps**:
+  - advanced cohort analytics remain future work
+  - external warehouse integration remains future work
+  - real-time analytics streaming remains future work
+  - export/reporting remains future work
+  - billing/revenue analytics remain future work
+- **Next Recommended Task**:
+  - Task 014D — Assessment Attempt Reliability and Concurrency Hardening
+
+---
+
 ### Task 014B1 — Course and Assessment Unified Delivery Experience Remediation
 
 - **Task ID**: 014B1

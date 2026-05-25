@@ -2,6 +2,12 @@ import { buildE2ERequestHeaders } from '@/foundation/e2e/e2e-request-context';
 import type {
   DashboardActivityItemContract,
   DashboardSummaryContract,
+  CreatorDashboardAssessmentMetricsContract,
+  CreatorDashboardCampaignMetricsContract,
+  CreatorDashboardCommunicationMetricsContract,
+  CreatorDashboardContentMetricsContract,
+  CreatorDashboardLearningMetricsContract,
+  CreatorDashboardMediaMetricsContract,
   MultiWorkspaceDashboardSummaryContract,
 } from '@mentrily/domain-contracts';
 
@@ -83,6 +89,42 @@ export function createDashboardApiClient({
   return {
     getDashboardSummary(): Promise<DashboardSummaryResponse> {
       return request<DashboardSummaryResponse>('/workspace/dashboard');
+    },
+    getCreatorDashboardSummary(): Promise<DashboardSummaryContract> {
+      return request<DashboardSummaryContract>('/workspace/dashboard/creator/summary');
+    },
+    getCreatorDashboardActivity(): Promise<DashboardActivityItemContract[]> {
+      return request<DashboardActivityItemContract[]>('/workspace/dashboard/creator/activity');
+    },
+    getCreatorLearningMetrics(): Promise<CreatorDashboardLearningMetricsContract> {
+      return request<CreatorDashboardLearningMetricsContract>(
+        '/workspace/dashboard/creator/metrics/learning',
+      );
+    },
+    getCreatorAssessmentMetrics(): Promise<CreatorDashboardAssessmentMetricsContract> {
+      return request<CreatorDashboardAssessmentMetricsContract>(
+        '/workspace/dashboard/creator/metrics/assessment',
+      );
+    },
+    getCreatorContentMetrics(): Promise<CreatorDashboardContentMetricsContract> {
+      return request<CreatorDashboardContentMetricsContract>(
+        '/workspace/dashboard/creator/metrics/content',
+      );
+    },
+    getCreatorMediaMetrics(): Promise<CreatorDashboardMediaMetricsContract> {
+      return request<CreatorDashboardMediaMetricsContract>(
+        '/workspace/dashboard/creator/metrics/media',
+      );
+    },
+    getCreatorCommunicationMetrics(): Promise<CreatorDashboardCommunicationMetricsContract> {
+      return request<CreatorDashboardCommunicationMetricsContract>(
+        '/workspace/dashboard/creator/metrics/communication',
+      );
+    },
+    getCreatorCampaignMetrics(): Promise<CreatorDashboardCampaignMetricsContract> {
+      return request<CreatorDashboardCampaignMetricsContract>(
+        '/workspace/dashboard/creator/metrics/campaigns',
+      );
     },
     getMultiWorkspaceDashboard(): Promise<MultiWorkspaceDashboardSummaryContract> {
       return request<MultiWorkspaceDashboardSummaryContract>('/workspace/dashboard/multi');

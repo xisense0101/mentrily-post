@@ -6,5 +6,6 @@ export * from './assessment-delivery/index.js';
 export * from './media-library/index.js';
 export * from './communication-center/index.js';
 export * from './identity/provider-events.js';
+export * from './analytics/index.js';
 export * from './dashboard/index.js';
 export * from './campaign-management/index.js';

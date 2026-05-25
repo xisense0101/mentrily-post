@@ -3,5 +3,6 @@ export * from './learning-delivery.js';
 export * from './assessment-delivery.js';
 export * from './media-library.js';
 export * from './communication-center.js';
+export * from './analytics.js';
 export * from './dashboard.js';
 export * from './campaign-management.js';

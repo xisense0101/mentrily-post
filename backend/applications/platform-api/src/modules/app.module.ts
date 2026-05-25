@@ -10,6 +10,7 @@ import { MediaLibraryModule } from './media-library/media-library.module.js';
 import { CommunicationCenterModule } from './communication-center/communication-center.module.js';
 import { DashboardModule } from './dashboard/dashboard.module.js';
 import { CampaignManagementModule } from './campaign-management/campaign-management.module.js';
+import { AnalyticsModule } from './analytics/analytics.module.js';
 
 @Module({
   imports: [
@@ -22,6 +23,7 @@ import { CampaignManagementModule } from './campaign-management/campaign-managem
     AssessmentDeliveryModule,
     MediaLibraryModule,
     CommunicationCenterModule,
+    AnalyticsModule,
     DashboardModule,
     CampaignManagementModule,
   ],
