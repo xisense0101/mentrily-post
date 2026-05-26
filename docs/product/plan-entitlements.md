@@ -38,6 +38,10 @@
 ### Pro
 
 - Workspace-backed.
+
+## Task 014D Update
+
+- Assessment attempt reliability hardening in 014D does not add plan-tier differences; retry safety and server-side expiry enforcement apply uniformly to supported learner attempt flows.
 - Workspace-scoped entitlement subject (`{ kind: 'workspace', workspaceId }`).
 - **Seats**:
   - 5 admin seats.

@@ -138,16 +138,36 @@ export class AnalyticsDashboardReadModelService {
       this.prisma.assessment.count({ where: { workspaceId, status: 'PUBLISHED' } }),
       this.prisma.assessmentAttempt.count({ where: { workspaceId } }),
       this.prisma.assessmentAttempt.count({ where: { workspaceId, submittedAt: { not: null } } }),
+      // GRADED = grading run complete but not yet released — NOT pending grading.
+      // Truly pending = NOT_GRADED (auto-grade not run) | AUTO_GRADING_RESERVED | PENDING_MANUAL_REVIEW.
       this.prisma.assessmentAttemptResult.count({
         where: {
           attempt: { workspaceId },
-          gradingStatus: { in: ['NOT_GRADED', 'PENDING_MANUAL_REVIEW', 'GRADED'] },
+          gradingStatus: { in: ['NOT_GRADED', 'AUTO_GRADING_RESERVED', 'PENDING_MANUAL_REVIEW'] },
         },
       }),
       this.prisma.assessmentAttemptResult.count({
         where: { attempt: { workspaceId }, releasedAt: { not: null } },
       }),
     ]);
+
+    // passRateReleased: only computed when there are released results to avoid division by zero.
+    const releasedWithScore =
+      resultsReleased > 0
+        ? await this.prisma.assessmentAttemptResult.count({
+            where: {
+              attempt: { workspaceId },
+              releasedAt: { not: null },
+              // RELEASED = result available to learner with final score.
+              gradingStatus: 'RELEASED',
+            },
+          })
+        : 0;
+
+    const passRateReleased =
+      resultsReleased > 0 && releasedWithScore > 0
+        ? Math.round((releasedWithScore / resultsReleased) * 100)
+        : undefined;
 
     return {
       totalAssessments,
@@ -156,6 +176,7 @@ export class AnalyticsDashboardReadModelService {
       submissions,
       pendingGrading,
       resultsReleased,
+      ...(passRateReleased !== undefined ? { passRateReleased } : {}),
       metrics: [
         metric('assessment.total_assessments', totalAssessments, 'Total Assessments'),
         metric('assessment.published_assessments', publishedAssessments, 'Published Assessments'),

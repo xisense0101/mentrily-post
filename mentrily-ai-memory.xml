@@ -154,6 +154,7 @@ backend/
                 assessment-execution-reservation.service.ts
                 index.ts
               support/
+                assessment-attempt-errors.ts
                 assessment-context.ts
                 assessment-media.ts
                 index.ts
@@ -1985,6 +1986,30 @@ vitest.workspace.ts
 
 <files>
 This section contains the contents of the repository's files.
+
+<file path="backend/applications/platform-api/src/modules/assessment-delivery/application/support/assessment-attempt-errors.ts">
+import { AppError } from '@mentrily/service-core';
+import { AssessmentAttempt } from '../../domain/entities/index.js';
+
+export type AssessmentAttemptConflictReason =
+  | 'ATTEMPT_EXPIRED'
+  | 'ATTEMPT_NOT_EDITABLE'
+  | 'ATTEMPT_NOT_SUBMITTABLE';
+
+export function createAssessmentAttemptConflictError(input: {
+  reason: AssessmentAttemptConflictReason;
+  message: string;
+  attempt: AssessmentAttempt;
+}): AppError {
+  return new AppError('CONFLICT', input.message, 409, {
+    reason: input.reason,
+    attemptId: input.attempt.id,
+    attemptStatus: input.attempt.status,
+    ...(input.attempt.expiresAt ? { expiresAt: input.attempt.expiresAt.toISOString() } : {}),
+    serverNow: new Date().toISOString(),
+  });
+}
+</file>
 
 <file path=".github/CODEOWNERS">
 # Default ownership
@@ -3855,16 +3880,36 @@ export class AnalyticsDashboardReadModelService {
       this.prisma.assessment.count({ where: { workspaceId, status: 'PUBLISHED' } }),
       this.prisma.assessmentAttempt.count({ where: { workspaceId } }),
       this.prisma.assessmentAttempt.count({ where: { workspaceId, submittedAt: { not: null } } }),
+      // GRADED = grading run complete but not yet released — NOT pending grading.
+      // Truly pending = NOT_GRADED (auto-grade not run) | AUTO_GRADING_RESERVED | PENDING_MANUAL_REVIEW.
       this.prisma.assessmentAttemptResult.count({
         where: {
           attempt: { workspaceId },
-          gradingStatus: { in: ['NOT_GRADED', 'PENDING_MANUAL_REVIEW', 'GRADED'] },
+          gradingStatus: { in: ['NOT_GRADED', 'AUTO_GRADING_RESERVED', 'PENDING_MANUAL_REVIEW'] },
         },
       }),
       this.prisma.assessmentAttemptResult.count({
         where: { attempt: { workspaceId }, releasedAt: { not: null } },
       }),
     ]);
+
+    // passRateReleased: only computed when there are released results to avoid division by zero.
+    const releasedWithScore =
+      resultsReleased > 0
+        ? await this.prisma.assessmentAttemptResult.count({
+            where: {
+              attempt: { workspaceId },
+              releasedAt: { not: null },
+              // RELEASED = result available to learner with final score.
+              gradingStatus: 'RELEASED',
+            },
+          })
+        : 0;
+
+    const passRateReleased =
+      resultsReleased > 0 && releasedWithScore > 0
+        ? Math.round((releasedWithScore / resultsReleased) * 100)
+        : undefined;
 
     return {
       totalAssessments,
@@ -3873,6 +3918,7 @@ export class AnalyticsDashboardReadModelService {
       submissions,
       pendingGrading,
       resultsReleased,
+      ...(passRateReleased !== undefined ? { passRateReleased } : {}),
       metrics: [
         metric('assessment.total_assessments', totalAssessments, 'Total Assessments'),
         metric('assessment.published_assessments', publishedAssessments, 'Published Assessments'),
@@ -5565,6 +5611,13 @@ export class GetAssessmentAttemptSnapshotUseCase {
       throw new AppError('NOT_FOUND', 'snapshot not found', 404);
     }
 
+    const now = new Date();
+    if (attempt.isInProgress() && attempt.isSessionExpired(now)) {
+      attempt.expire();
+    }
+    attempt.touchSession(now);
+    await this.attemptRepo.save(attempt);
+
     return mapSnapshotToResponse(snapshot);
   }
 }
@@ -5616,6 +5669,13 @@ export class GetAssessmentAttemptUseCase {
     ) {
       throw new AppError('NOT_FOUND', 'attempt not found', 404);
     }
+
+    const now = new Date();
+    if (attempt.isInProgress() && attempt.isSessionExpired(now)) {
+      attempt.expire();
+    }
+    attempt.touchSession(now);
+    await this.attemptRepo.save(attempt);
 
     return mapAttemptToResponse(attempt);
   }
@@ -7189,7 +7249,10 @@ import {
 import { AssessmentEventPublisherService } from '../services/index.js';
 import { mapAttemptToResponse } from '../mappers/index.js';
 import { AssessmentAttemptResponse } from '../dto/index.js';
-import { requireAssessmentActor } from '../support/index.js';
+import {
+  createAssessmentAttemptConflictError,
+  requireAssessmentActor,
+} from '../support/index.js';
 
 @Injectable()
 export class SubmitAssessmentAttemptUseCase {
@@ -7217,7 +7280,7 @@ export class SubmitAssessmentAttemptUseCase {
     }
 
     const result = await this.transactionRunner.run<
-      AssessmentAttemptResponse | { expired: true; reason: string }
+      AssessmentAttemptResponse | { conflict: AppError }
     >(async (tx) => {
       const client = getPrismaClient(this.prisma, tx);
       await client.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`assessment-attempt-submit:${attemptId}`})::bigint)`;
@@ -7243,17 +7306,26 @@ export class SubmitAssessmentAttemptUseCase {
       if (!policyResult.allowed) {
         if (attempt.isInProgress() && attempt.isSessionExpired(now)) {
           attempt.expire();
+          attempt.touchSession(now);
           await this.attemptRepo.save(attempt, tx);
           return {
-            expired: true,
-            reason: policyResult.reason ?? 'Cannot submit attempt',
+            conflict: createAssessmentAttemptConflictError({
+              reason: 'ATTEMPT_EXPIRED',
+              message: policyResult.reason ?? 'Cannot submit attempt',
+              attempt,
+            }),
           };
         }
-        throw new AppError('VALIDATION_ERROR', policyResult.reason ?? 'Cannot submit attempt', 400);
+        throw createAssessmentAttemptConflictError({
+          reason: 'ATTEMPT_NOT_SUBMITTABLE',
+          message: policyResult.reason ?? 'Cannot submit attempt',
+          attempt,
+        });
       }
 
       const resultId = randomUUID();
       const result = attempt.submit(resultId);
+      attempt.touchSession(now);
 
       const saved = await this.attemptRepo.save(attempt, tx);
 
@@ -7299,8 +7371,8 @@ export class SubmitAssessmentAttemptUseCase {
       return mapAttemptToResponse(saved);
     });
 
-    if ('expired' in result) {
-      throw new AppError('VALIDATION_ERROR', result.reason, 400);
+    if ('conflict' in result) {
+      throw result.conflict;
     }
 
     return result;
@@ -16451,14 +16523,32 @@ describe.sequential('Assessment attempt reliability (integration)', () => {
         answer: { selectedOptionId: optionId },
       },
     });
-    expectHttpStatus(saveRes, 400);
+    expectHttpStatus(saveRes, 409);
+    expect(saveRes.json()).toMatchObject({
+      error: {
+        code: 'CONFLICT',
+        details: {
+          reason: 'ATTEMPT_EXPIRED',
+          attemptStatus: 'EXPIRED',
+        },
+      },
+    });
 
     const submitRes = await app.inject({
       method: 'POST',
       url: `/workspace/assessment-attempts/${attemptId}/submit`,
       headers: learnerHeaders,
     });
-    expectHttpStatus(submitRes, 400);
+    expectHttpStatus(submitRes, 409);
+    expect(submitRes.json()).toMatchObject({
+      error: {
+        code: 'CONFLICT',
+        details: {
+          reason: 'ATTEMPT_NOT_SUBMITTABLE',
+          attemptStatus: 'EXPIRED',
+        },
+      },
+    });
 
     const attempt = await prisma.assessmentAttempt.findUniqueOrThrow({ where: { id: attemptId } });
     expect(attempt.status).toBe('EXPIRED');
@@ -20451,7 +20541,10 @@ describe('GetAssessmentAttemptSnapshotUseCase', () => {
     const snapshot = createSnapshot();
     const attempt = createAttempt(snapshot.id);
     const useCase = new GetAssessmentAttemptSnapshotUseCase(
-      { findById: vi.fn(async () => attempt) } as unknown as AssessmentAttemptRepository,
+      {
+        findById: vi.fn(async () => attempt),
+        save: vi.fn(async (savedAttempt) => savedAttempt),
+      } as unknown as AssessmentAttemptRepository,
       { findById: vi.fn(async () => snapshot) } as unknown as AssessmentSnapshotRepository,
       createPermissionEvaluator(true),
     );
@@ -20479,7 +20572,10 @@ describe('GetAssessmentAttemptSnapshotUseCase', () => {
       metadata: {},
     });
     const useCase = new GetAssessmentAttemptSnapshotUseCase(
-      { findById: vi.fn(async () => attempt) } as unknown as AssessmentAttemptRepository,
+      {
+        findById: vi.fn(async () => attempt),
+        save: vi.fn(async (savedAttempt) => savedAttempt),
+      } as unknown as AssessmentAttemptRepository,
       { findById: vi.fn(async () => snapshot) } as unknown as AssessmentSnapshotRepository,
       createPermissionEvaluator(true),
     );
@@ -20505,7 +20601,10 @@ describe('GetAssessmentAttemptSnapshotUseCase', () => {
       metadata: {},
     });
     const useCase = new GetAssessmentAttemptSnapshotUseCase(
-      { findById: vi.fn(async () => attempt) } as unknown as AssessmentAttemptRepository,
+      {
+        findById: vi.fn(async () => attempt),
+        save: vi.fn(async (savedAttempt) => savedAttempt),
+      } as unknown as AssessmentAttemptRepository,
       { findById: vi.fn(async () => snapshot) } as unknown as AssessmentSnapshotRepository,
       createPermissionEvaluator(true),
     );
@@ -20519,7 +20618,10 @@ describe('GetAssessmentAttemptSnapshotUseCase', () => {
     const snapshot = createSnapshot();
     const attempt = createAttempt(snapshot.id);
     const useCase = new GetAssessmentAttemptSnapshotUseCase(
-      { findById: vi.fn(async () => attempt) } as unknown as AssessmentAttemptRepository,
+      {
+        findById: vi.fn(async () => attempt),
+        save: vi.fn(async (savedAttempt) => savedAttempt),
+      } as unknown as AssessmentAttemptRepository,
       { findById: vi.fn(async () => snapshot) } as unknown as AssessmentSnapshotRepository,
       createPermissionEvaluator(true),
     );
@@ -22212,8 +22314,11 @@ describe('SubmitAssessmentAttemptUseCase', () => {
         new AssessmentEventPublisherService({ publish: vi.fn(async () => undefined) }),
       );
 
-      await expect(useCase.execute(createAssessmentRequestContext(), attempt.id)).rejects.toMatchObject({
-        code: 'VALIDATION_ERROR',
+      await expect(
+        useCase.execute(createAssessmentRequestContext(), attempt.id),
+      ).rejects.toMatchObject({
+        code: 'CONFLICT',
+        details: { reason: 'ATTEMPT_EXPIRED' },
       });
       expect(attempt.status).toBe('EXPIRED');
       expect(vi.mocked(repo.save)).toHaveBeenCalled();
@@ -33117,8 +33222,10 @@ export class GetMultiWorkspaceDashboardUseCase {
     }> = [];
 
     for (const membership of memberships) {
+      // In this product model tenantId = workspaceId (workspace is the tenant boundary).
+      // Derive tenantId from the original request context rather than duplicating workspaceId.
       const workspaceContext = {
-        tenantId: membership.workspaceId,
+        tenantId: context.workspace?.tenantId ?? membership.workspaceId,
         workspaceId: membership.workspaceId,
         actorId,
       };
@@ -35509,28 +35616,32 @@ export class GetMultiWorkspaceDashboardUseCase {
     }[] = [];
 
     for (const membership of memberships) {
-      // Evaluate permission for this specific workspace
+      // In this product model tenantId = workspaceId (workspace is the tenant boundary).
+      // Derive tenantId from the original request context rather than duplicating workspaceId.
+      const workspaceContext = {
+        tenantId: context.workspace?.tenantId ?? membership.workspaceId,
+        workspaceId: membership.workspaceId,
+        actorId,
+      };
+
       const permission = await this.permissionEvaluator.evaluate(
         {
           permission: PermissionCatalog.DASHBOARD_READ,
-          workspace: {
-            tenantId: context.workspace?.tenantId || membership.workspaceId,
-            workspaceId: membership.workspaceId,
-            actorId,
-          },
+          workspace: workspaceContext,
         },
-        context,
+        { ...context, workspace: workspaceContext },
       );
 
-      if (permission.allowed) {
-        const summary = await this.getDashboardSummary.computeSummary(membership.workspaceId);
-        workspaces.push({
-          workspaceId: membership.workspaceId,
-          workspaceName: membership.workspace.name,
-          workspaceSlug: membership.workspace.slug,
-          summary,
-        });
+      if (!permission.allowed) {
+        continue;
       }
+
+      workspaces.push({
+        workspaceId: membership.workspaceId,
+        workspaceName: membership.workspace.name,
+        workspaceSlug: membership.workspace.slug,
+        summary: await this.getDashboardSummary.computeSummary(membership.workspaceId),
+      });
     }
 
     return { workspaces };
@@ -52514,6 +52625,11 @@ Domains:
 - `credentialing`: Badge/credential issuance
 - `communication`: Email, SMS, notifications
 - `integration`: Third-party webhook/sync events
+
+## Task 014D Update
+
+- Assessment attempt submit retries must not duplicate downstream grading or result side effects.
+- Existing outbox idempotency remains the protection boundary for duplicate learner submit paths.
 - `intelligence`: Analytics, data pipeline events
 
 ### Current content domain event names
@@ -57159,13 +57275,21 @@ export class AssessmentAttemptApiError extends Error {
   readonly status: number;
   readonly code?: string | undefined;
   readonly requestId?: string | undefined;
+  readonly details?: Record<string, unknown> | undefined;
 
-  constructor(message: string, status: number, code?: string, requestId?: string) {
+  constructor(
+    message: string,
+    status: number,
+    code?: string,
+    requestId?: string,
+    details?: Record<string, unknown>,
+  ) {
     super(message);
     this.name = 'AssessmentAttemptApiError';
     this.status = status;
     this.code = code;
     this.requestId = requestId;
+    this.details = details;
   }
 }
 </file>
@@ -57853,6 +57977,7 @@ export function AttemptStatusBadge({ status }: { status: AssessmentAttemptStatus
 <file path="frontend/apps/portal/src/modules/assessment-attempts/components/attempt/attempt-submit-panel.tsx">
 interface AttemptSubmitPanelProps {
   editable: boolean;
+  submittable?: boolean | undefined;
   statusLabel: string;
   submitting: boolean;
   cancelling: boolean;
@@ -57865,6 +57990,7 @@ interface AttemptSubmitPanelProps {
 
 export function AttemptSubmitPanel({
   editable,
+  submittable = editable,
   statusLabel,
   submitting,
   cancelling,
@@ -57902,7 +58028,7 @@ export function AttemptSubmitPanel({
         <button
           className="rounded-full bg-portal-text px-5 py-3 text-sm font-semibold text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
           data-testid="attempt-submit-button"
-          disabled={!editable || submitting || isOffline}
+          disabled={!submittable || submitting || isOffline}
           onClick={() => void onSubmit()}
           type="button"
         >
@@ -58149,6 +58275,7 @@ export * from './use-learner-assessment-attempts';
 
 import { useCallback, useEffect, useState } from 'react';
 import { assessmentAttemptApiClient } from '../api';
+import { AssessmentAttemptApiError } from '../api/assessment-attempt-api-errors';
 import { getTimerSeverity, toAnswerPayload } from '../state';
 import type {
   AssessmentAttemptContract,
@@ -58163,6 +58290,7 @@ export function useAssessmentAttempt(attemptId: string) {
   const [savingQuestionId, setSavingQuestionId] = useState<string | null>(null);
   const [saveSuccessQuestionId, setSaveSuccessQuestionId] = useState<string | null>(null);
   const [saveErrorQuestionId, setSaveErrorQuestionId] = useState<string | null>(null);
+  const [saveConflictQuestionId, setSaveConflictQuestionId] = useState<string | null>(null);
   const [saveErrorMessage, setSaveErrorMessage] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [submitErrorMessage, setSubmitErrorMessage] = useState<string | null>(null);
@@ -58241,6 +58369,7 @@ export function useAssessmentAttempt(attemptId: string) {
       setSavingQuestionId(questionId);
       setSaveSuccessQuestionId(null);
       setSaveErrorQuestionId(null);
+      setSaveConflictQuestionId(null);
       setSaveErrorMessage(null);
       setError(null);
 
@@ -58257,7 +58386,16 @@ export function useAssessmentAttempt(attemptId: string) {
         setAttempt(updatedAttempt);
         setSaveSuccessQuestionId(questionId);
       } catch (cause) {
-        const message = cause instanceof Error ? cause.message : 'Failed to save answer.';
+        let message = cause instanceof Error ? cause.message : 'Failed to save answer.';
+        if (cause instanceof AssessmentAttemptApiError && cause.code === 'CONFLICT') {
+          const reason = String(cause.details?.reason ?? '');
+          if (reason === 'ATTEMPT_EXPIRED') {
+            message = 'This attempt expired. Refresh to see the locked state.';
+          } else if (reason === 'ATTEMPT_NOT_EDITABLE') {
+            message = 'This attempt is no longer editable. Refresh to continue safely.';
+          }
+          setSaveConflictQuestionId(questionId);
+        }
         setSaveErrorQuestionId(questionId);
         setSaveErrorMessage(message);
         setError(message);
@@ -58285,7 +58423,15 @@ export function useAssessmentAttempt(attemptId: string) {
       const updatedAttempt = await assessmentAttemptApiClient.submitAssessmentAttempt(attemptId);
       setAttempt(updatedAttempt);
     } catch (cause) {
-      const message = cause instanceof Error ? cause.message : 'Failed to submit attempt.';
+      let message = cause instanceof Error ? cause.message : 'Failed to submit attempt.';
+      if (cause instanceof AssessmentAttemptApiError && cause.code === 'CONFLICT') {
+        const reason = String(cause.details?.reason ?? '');
+        if (reason === 'ATTEMPT_EXPIRED') {
+          message = 'This attempt expired before submission completed.';
+        } else if (reason === 'ATTEMPT_NOT_SUBMITTABLE') {
+          message = 'This attempt can no longer be submitted.';
+        }
+      }
       setSubmitErrorMessage(message);
       setError(message);
       throw cause;
@@ -58317,6 +58463,7 @@ export function useAssessmentAttempt(attemptId: string) {
     savingQuestionId,
     saveSuccessQuestionId,
     saveErrorQuestionId,
+    saveConflictQuestionId,
     saveErrorMessage,
     submitting,
     submitErrorMessage,
@@ -58391,6 +58538,7 @@ export function AssessmentAttemptRunnerPage({ attemptId }: AssessmentAttemptRunn
     savingQuestionId,
     saveSuccessQuestionId,
     saveErrorQuestionId,
+    saveConflictQuestionId,
     saveErrorMessage,
     submitting,
     submitErrorMessage,
@@ -58446,6 +58594,7 @@ export function AssessmentAttemptRunnerPage({ attemptId }: AssessmentAttemptRunn
           savingQuestionId={savingQuestionId}
           saveErrorMessage={saveErrorMessage}
           saveErrorQuestionId={saveErrorQuestionId}
+          saveConflictQuestionId={saveConflictQuestionId}
           saveSuccessQuestionId={saveSuccessQuestionId}
           snapshot={snapshot}
           submitErrorMessage={submitErrorMessage}
@@ -58584,7 +58733,7 @@ export * from './assessment-attempt-state';
 
 <file path="frontend/apps/portal/src/modules/assessment-attempts/tests/assessment-attempt-api-client.spec.ts">
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { AssessmentAttemptApiError, createAssessmentAttemptApiClient } from '../api';
+import { createAssessmentAttemptApiClient } from '../api';
 import { E2E_REQUEST_CONTEXT_STORAGE_KEY } from '@/foundation/e2e/e2e-request-context';
 
 function createJsonResponse(status: number, body: unknown) {
@@ -58607,6 +58756,9 @@ const MOCK_ATTEMPT = {
   snapshotVersionNumber: 1,
   learnerPrincipalId: 'learner-1',
   status: 'IN_PROGRESS',
+  serverNow: '2026-05-17T00:05:00.000Z',
+  canEdit: true,
+  canSubmit: true,
   session: {
     id: 'session-1',
     startedAt: '2026-05-17T00:00:00.000Z',
@@ -58719,14 +58871,18 @@ describe('assessmentAttemptApiClient', () => {
           code: 'ATTEMPT_INVALID',
           message: 'Attempt request failed',
           requestId: 'request-1',
+          details: { reason: 'ATTEMPT_EXPIRED' },
         },
       }),
     );
     const client = createAssessmentAttemptApiClient({ fetchImpl });
 
-    await expect(client.listLearnerAssessmentAttempts()).rejects.toBeInstanceOf(
-      AssessmentAttemptApiError,
-    );
+    await expect(client.listLearnerAssessmentAttempts()).rejects.toMatchObject({
+      name: 'AssessmentAttemptApiError',
+      code: 'ATTEMPT_INVALID',
+      requestId: 'request-1',
+      details: { reason: 'ATTEMPT_EXPIRED' },
+    });
   });
 
   it('sends E2E headers only in test mode', async () => {
@@ -58788,6 +58944,9 @@ describe('AssessmentAttemptRunnerPage', () => {
         snapshotVersionNumber: 1,
         learnerPrincipalId: 'learner-1',
         status: 'SUBMITTED',
+        serverNow: '2026-05-17T00:00:00.000Z',
+        canEdit: false,
+        canSubmit: false,
         session: {
           id: 'session-1',
           startedAt: '2026-05-17T00:00:00.000Z',
@@ -58829,9 +58988,17 @@ describe('AssessmentAttemptRunnerPage', () => {
       },
       loading: false,
       savingQuestionId: null,
+      saveSuccessQuestionId: null,
+      saveErrorQuestionId: null,
+      saveConflictQuestionId: null,
+      saveErrorMessage: null,
       submitting: false,
+      submitErrorMessage: null,
       cancelling: false,
       error: null,
+      isOffline: false,
+      wasOffline: false,
+      timerSeverity: null,
       refresh: vi.fn(),
       saveAnswer: vi.fn(),
       submitAttempt: vi.fn(),
@@ -58854,9 +59021,17 @@ describe('AssessmentAttemptRunnerPage', () => {
       snapshot: null,
       loading: false,
       savingQuestionId: null,
+      saveSuccessQuestionId: null,
+      saveErrorQuestionId: null,
+      saveConflictQuestionId: null,
+      saveErrorMessage: null,
       submitting: false,
+      submitErrorMessage: null,
       cancelling: false,
       error: 'Failed to load attempt.',
+      isOffline: false,
+      wasOffline: false,
+      timerSeverity: null,
       refresh: vi.fn(),
       saveAnswer: vi.fn(),
       submitAttempt: vi.fn(),
@@ -58873,9 +59048,17 @@ describe('AssessmentAttemptRunnerPage', () => {
       snapshot: null,
       loading: true,
       savingQuestionId: null,
+      saveSuccessQuestionId: null,
+      saveErrorQuestionId: null,
+      saveConflictQuestionId: null,
+      saveErrorMessage: null,
       submitting: false,
+      submitErrorMessage: null,
       cancelling: false,
       error: null,
+      isOffline: false,
+      wasOffline: false,
+      timerSeverity: null,
       refresh: vi.fn(),
       saveAnswer: vi.fn(),
       submitAttempt: vi.fn(),
@@ -58897,6 +59080,9 @@ describe('AssessmentAttemptRunnerPage', () => {
         snapshotVersionNumber: 1,
         learnerPrincipalId: 'learner-1',
         status: 'IN_PROGRESS',
+        serverNow: '2026-05-17T00:00:30.000Z',
+        canEdit: false,
+        canSubmit: false,
         expiresAt: '2026-05-17T00:01:00.000Z',
         session: {
           id: 'session-1',
@@ -58924,6 +59110,7 @@ describe('AssessmentAttemptRunnerPage', () => {
       savingQuestionId: null,
       saveSuccessQuestionId: null,
       saveErrorQuestionId: null,
+      saveConflictQuestionId: null,
       saveErrorMessage: null,
       submitting: true,
       submitErrorMessage: 'Retry submit',
@@ -73714,6 +73901,9 @@ export interface AssessmentAttemptResponse {
   snapshotVersionNumber: number;
   learnerPrincipalId: string;
   status: AssessmentAttemptStatusContract;
+  serverNow?: string;
+  canEdit?: boolean;
+  canSubmit?: boolean;
   session: AssessmentAttemptSessionResponse;
   answers: AssessmentAttemptAnswerResponse[];
   result?: AssessmentAttemptResultResponse;
@@ -74089,6 +74279,12 @@ export function mapAttemptResultToResponse(
 }
 
 export function mapAttemptToResponse(attempt: AssessmentAttempt): AssessmentAttemptResponse {
+  const serverNow = new Date();
+  const canEdit =
+    (attempt.status === 'IN_PROGRESS' || attempt.status === 'NOT_STARTED') &&
+    !attempt.isSessionExpired(serverNow);
+  const canSubmit = attempt.status === 'IN_PROGRESS' && !attempt.isSessionExpired(serverNow);
+
   return {
     id: attempt.id,
     assessmentId: attempt.assessmentId,
@@ -74096,6 +74292,9 @@ export function mapAttemptToResponse(attempt: AssessmentAttempt): AssessmentAtte
     snapshotVersionNumber: attempt.snapshotVersionNumber,
     learnerPrincipalId: attempt.learnerPrincipalId,
     status: attempt.status,
+    serverNow: serverNow.toISOString(),
+    canEdit,
+    canSubmit,
     session: mapAttemptSessionToResponse(attempt.session),
     answers: attempt.answers.map(mapAttemptAnswerToResponse),
     ...(attempt.result !== undefined ? { result: mapAttemptResultToResponse(attempt.result) } : {}),
@@ -74660,6 +74859,7 @@ export async function validateFileUploadAnswer(input: {
 
 <file path="backend/applications/platform-api/src/modules/assessment-delivery/application/support/index.ts">
 export * from './assessment-context.js';
+export * from './assessment-attempt-errors.js';
 export * from './assessment-media.js';
 </file>
 
@@ -75371,6 +75571,7 @@ import { AssessmentEventPublisherService } from '../services/index.js';
 import { mapAttemptToResponse } from '../mappers/index.js';
 import { AssessmentAttemptResponse, SaveAssessmentAttemptAnswerInput } from '../dto/index.js';
 import {
+  createAssessmentAttemptConflictError,
   requireAssessmentActor,
   validateFileUploadAnswer,
 } from '../support/index.js';
@@ -75408,7 +75609,7 @@ export class SaveAssessmentAttemptAnswerUseCase {
     }
 
     const result = await this.transactionRunner.run<
-      AssessmentAttemptResponse | { expired: true; reason: string }
+      AssessmentAttemptResponse | { conflict: AppError }
     >(async (tx) => {
       const attempt = await this.attemptRepo.findById(attemptId, tx);
       if (
@@ -75452,13 +75653,21 @@ export class SaveAssessmentAttemptAnswerUseCase {
       if (!policyResult.allowed) {
         if (attempt.isInProgress() && attempt.isSessionExpired(now)) {
           attempt.expire();
+          attempt.touchSession(now);
           await this.attemptRepo.save(attempt, tx);
           return {
-            expired: true,
-            reason: policyResult.reason ?? 'Cannot save answer',
+            conflict: createAssessmentAttemptConflictError({
+              reason: 'ATTEMPT_EXPIRED',
+              message: policyResult.reason ?? 'Cannot save answer',
+              attempt,
+            }),
           };
         }
-        throw new AppError('VALIDATION_ERROR', policyResult.reason ?? 'Cannot save answer', 400);
+        throw createAssessmentAttemptConflictError({
+          reason: 'ATTEMPT_NOT_EDITABLE',
+          message: policyResult.reason ?? 'Cannot save answer',
+          attempt,
+        });
       }
 
       const answerId = randomUUID();
@@ -75469,6 +75678,7 @@ export class SaveAssessmentAttemptAnswerUseCase {
         answer: normalizedAnswer,
         ...(input.metadata !== undefined ? { metadata: input.metadata } : {}),
       });
+      attempt.touchSession(now);
 
       const saved = await this.attemptRepo.save(attempt, tx);
 
@@ -75498,8 +75708,8 @@ export class SaveAssessmentAttemptAnswerUseCase {
       return mapAttemptToResponse(saved);
     });
 
-    if ('expired' in result) {
-      throw new AppError('VALIDATION_ERROR', result.reason, 400);
+    if ('conflict' in result) {
+      throw result.conflict;
     }
 
     return result;
@@ -76434,7 +76644,10 @@ describe('SaveAssessmentAttemptAnswerUseCase', () => {
           questionKind: 'MCQ',
           answer: { selectedOptionId: '50000000-0000-4000-8000-000000000107' },
         }),
-      ).rejects.toMatchObject({ code: 'VALIDATION_ERROR' });
+      ).rejects.toMatchObject({
+        code: 'CONFLICT',
+        details: { reason: 'ATTEMPT_EXPIRED' },
+      });
       expect(attempt.status).toBe('EXPIRED');
       expect(vi.mocked(repo.save)).toHaveBeenCalled();
     } finally {
@@ -87385,6 +87598,11 @@ This map is derived from existing docs only (`docs/product`, `docs/architecture`
 - **Depends on**: identity/workspace context, billing adapter boundary.
 - **Why foundational**: plan logic must be centralized and consumed through entitlement ports.
 
+### `assessment-delivery`
+
+- **Provides**: learner attempt lifecycle, grading entry, result release boundaries, attempt reliability and expiry enforcement.
+- **Depends on**: workspace context, permissions, audit/outbox durability, media-library file-reference validation, learning-delivery only for linked completion reads.
+
 ### `platform-operations`
 
 - **Provides**: operational controls, feature flag policy hooks, privileged platform actions.
@@ -87632,6 +87850,11 @@ Assessment result release depends on assessment attempts, published snapshots, a
 - `actorId` may be null for system-originated actions only
 - `metadata` must be JSON-safe (validated at serialization)
 - Immutable append-only (no updates or deletes)
+
+## Task 014D Update
+
+- Do not add assessment-attempt schema fields for reliability unless the existing model cannot safely represent retry/idempotency behavior.
+- 014D completed without schema drift; reliability hardening remained at use-case, transaction, contract, and UI layers.
 - Indexes required on: `workspaceId`, `actorId`, `action`, `occurredAt`
 
 ## Outbox Messages
@@ -87809,6 +88032,10 @@ Format: `{domain}.{section}.{topic}.v{N}`
 Domains:
 
 - `identity`, `workspace`, `commercial`, `content`, `learning`, `assessment`, `credentialing`, `communication`, `integration`, `intelligence`
+
+## Task 014D Update
+
+- Assessment attempt retries must reuse deterministic lifecycle behavior so repeated save/submit calls do not emit duplicate grading or result events.
 
 Section: Feature area or bounded context within domain.
 
@@ -88236,6 +88463,7 @@ interface ErrorEnvelope {
     code?: string | undefined;
     message?: string | undefined;
     requestId?: string | undefined;
+    details?: Record<string, unknown> | undefined;
   };
 }
 
@@ -88280,6 +88508,7 @@ async function parseResponse<T>(response: Response): Promise<T> {
     response.status,
     envelope?.error?.code,
     envelope?.error?.requestId,
+    envelope?.error?.details,
   );
 }
 
@@ -88428,7 +88657,7 @@ export * from './true-false-answer-input';
 <file path="frontend/apps/portal/src/modules/assessment-attempts/components/attempt/attempt-question-card.tsx">
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   CodePlaceholderAnswer,
   FileUploadAnswer,
@@ -88455,6 +88684,7 @@ interface AttemptQuestionCardProps {
   readOnly: boolean;
   isSaving: boolean;
   saveSucceeded?: boolean | undefined;
+  saveConflict?: boolean | undefined;
   saveError?: string | undefined;
   onSave: (value: unknown) => Promise<void> | void;
 }
@@ -88487,6 +88717,13 @@ function getPromptText(question: AssessmentQuestionContract): string {
   return readStringField(question.prompt, 'text') ?? question.title;
 }
 
+function stringifyAutosaveValue(value: unknown): string {
+  if (value === undefined) {
+    return 'undefined';
+  }
+
+  return JSON.stringify(value);
+}
 
 function getInitialValue(
   question: AssessmentQuestionContract,
@@ -88525,13 +88762,19 @@ export function AttemptQuestionCard({
   readOnly,
   isSaving,
   saveSucceeded = false,
+  saveConflict = false,
   saveError,
   onSave,
 }: AttemptQuestionCardProps) {
-  const [value, setValue] = useState<unknown>(getInitialValue(question, answer));
+  const initialValue = getInitialValue(question, answer);
+  const [value, setValue] = useState<unknown>(initialValue);
+  const autosaveValueRef = useRef<unknown>(value);
+  const lastSavedValueRef = useRef<string>(stringifyAutosaveValue(initialValue));
 
   useEffect(() => {
-    setValue(getInitialValue(question, answer));
+    const nextInitialValue = getInitialValue(question, answer);
+    setValue(nextInitialValue);
+    lastSavedValueRef.current = stringifyAutosaveValue(nextInitialValue);
   }, [answer, question]);
 
   const options = question.options.map(toOptionView);
@@ -88543,6 +88786,28 @@ export function AttemptQuestionCard({
     typeof question.prompt === 'object' && question.prompt !== null
       ? (question.prompt as Record<string, unknown>)
       : {};
+
+  useEffect(() => {
+    autosaveValueRef.current = value;
+  }, [value]);
+
+  useEffect(() => {
+    if (readOnly || placeholder || !answerable) {
+      return undefined;
+    }
+
+    const serializedValue = stringifyAutosaveValue(value);
+    if (serializedValue === lastSavedValueRef.current) {
+      return undefined;
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      lastSavedValueRef.current = serializedValue;
+      void onSave(autosaveValueRef.current);
+    }, 900);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [answerable, onSave, placeholder, readOnly, value]);
 
   return (
     <article
@@ -88673,6 +88938,11 @@ export function AttemptQuestionCard({
               Answer saved.
             </p>
           ) : null}
+          {saveConflict ? (
+            <p className="text-sm text-amber-700" data-testid="attempt-save-conflict">
+              Server state changed. Refresh before continuing.
+            </p>
+          ) : null}
           {saveError ? (
             <p className="text-sm text-rose-700" data-testid="attempt-save-error">
               {saveError}
@@ -88694,6 +88964,7 @@ import {
   getAttemptExpiresAt,
   getRemainingTimeMs,
   isAttemptEditable,
+  isAttemptSubmittable,
   isQuestionAnswerable,
 } from '../../state';
 import type { AssessmentAttemptContract, AssessmentPublishedSnapshotContract } from '../../types';
@@ -88710,6 +88981,7 @@ interface AttemptRunnerShellProps {
   savingQuestionId: string | null;
   saveSuccessQuestionId: string | null;
   saveErrorQuestionId: string | null;
+  saveConflictQuestionId: string | null;
   saveErrorMessage?: string | null;
   submitting: boolean;
   submitErrorMessage?: string | null;
@@ -88734,6 +89006,7 @@ export function AttemptRunnerShell({
   savingQuestionId,
   saveSuccessQuestionId,
   saveErrorQuestionId,
+  saveConflictQuestionId,
   saveErrorMessage,
   submitting,
   submitErrorMessage,
@@ -88747,6 +89020,7 @@ export function AttemptRunnerShell({
 }: AttemptRunnerShellProps) {
   const questions = flattenSnapshotQuestions(snapshot);
   const editable = isAttemptEditable(attempt);
+  const submittable = isAttemptSubmittable(attempt);
   const answerableCount = countAnswerableQuestions(questions);
   const contextCount = questions.length - answerableCount;
   const answeredCount = countAnsweredQuestions({
@@ -88793,6 +89067,7 @@ export function AttemptRunnerShell({
               answer={findAnswerForQuestion({ attempt, questionId: question.id })}
               attemptId={attempt.id}
               isSaving={savingQuestionId === question.id}
+              saveConflict={saveConflictQuestionId === question.id}
               saveError={
                 saveErrorQuestionId === question.id ? (saveErrorMessage ?? undefined) : undefined
               }
@@ -88818,6 +89093,7 @@ export function AttemptRunnerShell({
             onCancel={onCancel}
             onSubmit={onSubmit}
             statusLabel={attempt.status}
+            submittable={submittable}
             submitError={submitErrorMessage ?? undefined}
             submitting={submitting}
             wasOffline={wasOffline}
@@ -88965,11 +89241,23 @@ export function isAttemptExpired(
 }
 
 export function isAttemptEditable(attempt: AssessmentAttemptContract): boolean {
+  if (typeof attempt.canEdit === 'boolean') {
+    return attempt.canEdit;
+  }
+
   if (attempt.status !== 'IN_PROGRESS' && attempt.status !== 'NOT_STARTED') {
     return false;
   }
 
   return !isAttemptExpired(attempt);
+}
+
+export function isAttemptSubmittable(attempt: AssessmentAttemptContract): boolean {
+  if (typeof attempt.canSubmit === 'boolean') {
+    return attempt.canSubmit;
+  }
+
+  return attempt.status === 'IN_PROGRESS' && !isAttemptExpired(attempt);
 }
 
 export function getAttemptExpiresAt(attempt: AssessmentAttemptContract): string | undefined {
@@ -89098,6 +89386,7 @@ import {
   getTimerSeverity,
   isAttemptEditable,
   isAttemptExpired,
+  isAttemptSubmittable,
   isAttemptSubmitted,
   isQuestionAnswerable,
   toAnswerPayload,
@@ -89205,6 +89494,9 @@ describe('assessment-attempt-state', () => {
 
   it('evaluates attempt status helpers', () => {
     expect(isAttemptEditable(attempt)).toBe(true);
+    expect(isAttemptSubmittable(attempt)).toBe(true);
+    expect(isAttemptEditable({ ...attempt, canEdit: false })).toBe(false);
+    expect(isAttemptSubmittable({ ...attempt, canSubmit: false })).toBe(false);
     expect(isAttemptSubmitted({ ...attempt, status: 'SUBMITTED' })).toBe(true);
     expect(
       isAttemptExpired(
@@ -89535,6 +89827,21 @@ describe('AttemptQuestionCard', () => {
     expect(rendered.container.textContent).toContain('Saving...');
     expect(rendered.container.textContent).toContain('Answer saved.');
     expect(rendered.container.textContent).toContain('Retry save');
+  });
+
+  it('renders a safe conflict state', async () => {
+    const rendered = await render(
+      <AttemptQuestionCard
+        {...baseProps}
+        isSaving={false}
+        onSave={vi.fn(async () => undefined)}
+        question={makeQuestion('SHORT_ANSWER')}
+        readOnly={false}
+        saveConflict={true}
+      />,
+    );
+
+    expect(rendered.container.textContent).toContain('Server state changed. Refresh before continuing.');
   });
 });
 </file>
@@ -94948,7 +95255,16 @@ describe.sequential('Assessment attempt API (integration)', () => {
         answer: { selectedOptionId: optionId },
       },
     });
-    expectHttpStatus(saveAfterSubmit, 400);
+    expectHttpStatus(saveAfterSubmit, 409);
+    expect(saveAfterSubmit.json()).toMatchObject({
+      error: {
+        code: 'CONFLICT',
+        details: {
+          reason: 'ATTEMPT_NOT_EDITABLE',
+          attemptStatus: 'SUBMITTED',
+        },
+      },
+    });
 
     const auditCount = await prisma.auditRecord.count({
       where: { targetId: started.id, targetType: 'assessment-attempt' },
@@ -95074,7 +95390,16 @@ describe.sequential('Assessment attempt API (integration)', () => {
       url: `/workspace/assessment-attempts/${started.id}/submit`,
       headers,
     });
-    expectHttpStatus(response, 400);
+    expectHttpStatus(response, 409);
+    expect(response.json()).toMatchObject({
+      error: {
+        code: 'CONFLICT',
+        details: {
+          reason: 'ATTEMPT_EXPIRED',
+          attemptStatus: 'EXPIRED',
+        },
+      },
+    });
 
     const expiredAttempt = await prisma.assessmentAttempt.findUniqueOrThrow({
       where: { id: started.id },
@@ -99130,6 +99455,9 @@ export interface AssessmentAttemptContract {
   snapshotVersionNumber: number;
   learnerPrincipalId: string;
   status: AssessmentAttemptStatusContract;
+  serverNow?: string | undefined;
+  canEdit?: boolean | undefined;
+  canSubmit?: boolean | undefined;
   session: AssessmentAttemptSessionContract;
   answers: AssessmentAttemptAnswerContract[];
   result?: AssessmentAttemptResultContract | undefined;
@@ -100067,6 +100395,11 @@ Indexes:
 
 **Retention**: Audit records are immutable and never deleted. Retention policies (archival/deletion) are organizational concerns, not application concerns.
 
+## Task 014D Update
+
+- Assessment attempt reliability stayed on existing tables; no Prisma migration was required for 014D.
+- Attempt/session expiry is enforced from persisted timestamps already present in the assessment attempt aggregate model.
+
 ### OutboxMessage
 
 Durable event persistence for reliable cross-module and async distribution.
@@ -100369,6 +100702,11 @@ Result release reuses the existing `AssessmentAttemptResult` record with `gradin
 - Start/save/submit retries are handled inside the existing `platform-api` assessment lifecycle with transactional guarantees and DB-backed race coverage.
 - Learning Delivery, Content Studio, Media Library, Communication Center, proctoring, and real execution remain separate future phases.
 
+## Task 014D Update (2026-05-26)
+
+- The active assessment runtime now enforces deterministic server-side expiry on read/save/submit and returns safe conflict responses for non-editable or non-submittable attempts.
+- Portal learner attempt flows now treat autosave and duplicate submit as retry-safe operations over the same backend lifecycle.
+
 ## Task 011I Update (2026-05-20)
 
 - The assessment slice now includes Builder authoring, learner attempt UI/runtime, grading runtime, manual grading UI, result release, learner result views, reliability baseline, and UX hardening for timer/save/offline behavior.
@@ -100438,6 +100776,7 @@ Learner and creator are interaction modes, not permanent identities.
 
 - Creators now author assessments (exams, quizzes, practice assignments) through the Assessment Builder UI. The current creator-side shell covers list/create, editor access, draft content editing, publish, archive, and restore flows.
 - The Assessment Builder frontend authoring shell now exists for creators and has real cross-stack E2E coverage.
+- Learner attempt delivery now hardens autosave, submit retries, expired-state handling, and read-only terminal-state UX without changing creator grading or result-release policy boundaries.
 - Learner assessment attempt backend/runtime foundation and learner-facing attempt UI now both exist.
 - Draft assessments are creator-side-only authoring state, not learner-visible.
 - Published assessment snapshots are what learners will later attempt, grade, and receive results from.
@@ -100547,6 +100886,10 @@ Learners can read only their own released assessment results. Creators, admins, 
 ### Pro
 
 - Workspace-backed.
+
+## Task 014D Update
+
+- Assessment attempt reliability hardening in 014D does not add plan-tier differences; retry safety and server-side expiry enforcement apply uniformly to supported learner attempt flows.
 - Workspace-scoped entitlement subject (`{ kind: 'workspace', workspaceId }`).
 - **Seats**:
   - 5 admin seats.
@@ -100738,6 +101081,12 @@ A person can act as learner and creator at different times. These are product ex
 - **Pro**: Workspace-backed, up to 30 courses and 20 exams/month, 15 seats total (5 admin, 10 creator).
 - **Enterprise**: Contract-governed, custom domains, white-labeling, SSO/SCIM, and expanded governance.
 
+## Task 014D Update
+
+- Assessment attempt runtime is now retry-safe and concurrency-safe for learner start, answer save, and submit flows.
+- Server-side expiry is authoritative; frontend timers are advisory only.
+- Terminal attempts are immutable and do not expose unreleased score, private grading, or storage metadata.
+
 ## Core product capabilities
 
 - Creator dashboard and operational cockpit
@@ -100907,6 +101256,13 @@ Creators and admins can release graded assessment results to learners. Learners 
 - Workspace admins and owners now have a workspace-scoped dashboard foundation for operational counts and recent activity.
 - Campaign management is now a draft, preview, archive, and schedule foundation only.
 - Live mass campaign delivery remains deferred and disabled by default.
+
+## Task 014C Additions
+
+- Creator dashboard analytics now use normalized outbox activity plus workspace-scoped read models over existing product tables.
+- Dashboard summary and metric responses stay safe by excluding unreleased assessment scores, raw outbox payloads, and provider secrets.
+- Assessment pending-grading counts only include truly pending states; graded-but-unreleased results remain separate from grading backlog.
+- Multi-workspace dashboard access continues to respect workspace tenant boundaries through permission checks.
 </file>
 
 <file path="docs/roadmap/backlog-epics.md">
@@ -100935,6 +101291,11 @@ Creators and admins can release graded assessment results to learners. Learners 
 ## Content studio
 
 - Ticket: draft/publish command handlers.
+
+## Assessment delivery
+
+- Ticket complete: assessment attempt reliability and concurrency hardening.
+- Ticket remaining: proctoring gateway and attempt monitoring foundation.
 
 ## Media library
 
@@ -101018,6 +101379,12 @@ Creators and admins can release graded assessment results to learners. Learners 
 
 - Dashboard analytics remains a foundation epic with richer analytics deferred.
 - Campaign management remains a staged epic: draft and preview foundation now, delivery automation later.
+
+## Task 014C Additions
+
+- Analytics epic updated to reflect creator dashboard read models and outbox-based activity normalization.
+- Assessment analytics follow safe released-result semantics instead of exposing unreleased grading output.
+- Multi-workspace dashboard access remains permission-gated and tenant-scoped.
 </file>
 
 <file path="docs/roadmap/sprint-plan.md">
@@ -101061,6 +101428,10 @@ Each ticket includes:
 
 - Code merged with reviews.
 - Tests passing (unit/integration/e2e as applicable).
+
+## Task 014D Update
+
+- Assessment attempt reliability work is complete only when package validation, DB-backed integration validation, root validation, and the explicit sequential E2E regression block all pass.
 - Docs updated.
 - Monitoring and runbook notes updated where needed.
 
@@ -101130,6 +101501,11 @@ Each ticket includes:
 - Content Studio API validation must cover the real HTTP layer directly for create, list, read, update, replace-blocks, publish, archive, restore, and latest-snapshot routes.
 - Content Studio frontend components must call the typed API client or injected hook boundary rather than embedding raw route URLs inside interactive components.
 - Test-only E2E request-context injection may send tenant/workspace headers, but only when an explicit E2E harness mode is enabled. Production request behavior must not depend on browser-stored tenant/workspace IDs.
+
+## Task 014D Update
+
+- Assessment attempt mutation routes must return safe typed conflict envelopes for expired, non-editable, and non-submittable states.
+- Tenant/workspace ownership for assessment attempts must continue to come from request context, never mutation bodies.
 - Content Studio cross-stack E2E uses that test-only request-context path to exercise the real browser, real frontend API client, real backend HTTP controllers, and real test Postgres database without putting `tenantId` or `workspaceId` in request bodies.
 - Frontend contract types must stay aligned with backend API contracts. Temporary mirrored contract files are acceptable only when package sharing is not yet wired and must match the backend contract seed exactly.
 - Assessment Builder authoring payloads must send backend-compatible question answer keys; single-select and multi-select answers use `correctOptionIds`, short answers use `acceptedTextAnswers`, code placeholders use `expectedOutput`, and manual-grading placeholders may use `rubricId` or `metadata` only when needed.
@@ -101244,6 +101620,11 @@ Mentrily uses a dual-testing strategy to balance speed and confidence:
    - **Boundary**: no mocked backend responses. Playwright drives the real UI and the frontend calls the real backend APIs.
 
 - **Command**: `pnpm test:e2e`, `pnpm e2e:learning`, `pnpm e2e:content`, `pnpm e2e:assessment`, or `pnpm e2e:assessment-attempt`
+
+## Task 014D Update
+
+- Assessment attempt reliability changes require coverage at four layers: unit use-case tests, DB-backed integration tests, portal component/state tests, and shared-harness Playwright attempt reliability tests.
+- Expiry behavior may be asserted in backend integration tests when browser-timer E2E would be flaky.
 
 ## Local Integration Workflow
 
@@ -102149,6 +102530,9 @@ export interface AssessmentAttemptContract {
   snapshotVersionNumber: number;
   learnerPrincipalId: string;
   status: AssessmentAttemptStatusContract;
+  serverNow?: string | undefined;
+  canEdit?: boolean | undefined;
+  canSubmit?: boolean | undefined;
   session: AssessmentAttemptSessionContract;
   answers: AssessmentAttemptAnswerContract[];
   result?: AssessmentAttemptResultContract | undefined;
@@ -104369,6 +104753,11 @@ Provider integrations (Clerk, WorkOS, Stripe, email providers, telemetry provide
 - File upload remains a placeholder boundary only. There is still no Media Library integration, object storage adapter, signed URL exchange, webhook, or media-processing dependency.
 - Assessment remains intentionally disconnected from Learning Delivery and Content Studio runtime flows.
 
+## Task 014D Update (2026-05-26)
+
+- Assessment attempt reliability hardening did not add new third-party integrations.
+- Expiry, conflict normalization, autosave safety, and duplicate submit suppression are handled inside the existing portal plus `platform-api` boundaries.
+
 ## Task 012B Update (2026-05-21)
 
 - The Media Library frontend integrates with platform-api only for control-plane actions:
@@ -105569,6 +105958,7 @@ Each domain module uses:
 
 - Commands mutate state and enforce idempotency.
 - Queries are optimized reads and avoid hidden side effects.
+- Assessment attempt start/save/submit commands must remain idempotent or retry-safe and must commit terminal expiry transitions before surfacing safe conflict errors.
 - Privileged admin command use cases must validate authorization preconditions before any mutation or side effect (persistence, audit, outbox).
 - Explicitly modeled onboarding flows may use non-admin authorization sources (for example, verified invitation tokens) when domain contracts define that boundary.
 - Onboarding flows must also validate critical domain preconditions before mutation (for example, invited role existence) to avoid partial writes on terminal validation failures.
@@ -105833,6 +106223,17 @@ The platform API now exposes result release and result read use cases inside the
 - Added a `dashboard` read-model module for workspace summary and multi-workspace overview endpoints.
 - Added a `campaign-management` module that exposes campaign CRUD and preview routes while reusing Communication Center safety services.
 - Campaign execution fanout is not performed from campaign endpoints in this foundation.
+
+## Task 014C Additions
+
+- Added an `analytics` module to `platform-api` providing `AnalyticsEventNormalizerService` and `AnalyticsDashboardReadModelService`.
+- Analytics normalization reads from persisted outbox messages and product tables — no new Prisma schema or migrations were added.
+- Analytics projection is idempotent by `eventId` deduplication in the activity feed.
+- `DashboardController` now exposes eight creator-metric routes: `/creator/summary`, `/creator/activity`, and six `/creator/metrics/*` endpoints (learning, assessment, content, media, communication, campaigns).
+- `GetDashboardSummaryUseCase` delegates entirely to `AnalyticsDashboardReadModelService`.
+- `pendingGrading` counts only `NOT_GRADED | AUTO_GRADING_RESERVED | PENDING_MANUAL_REVIEW` — `GRADED` (grading done, release pending) is excluded.
+- `passRateReleased` is computed only from `RELEASED`-status results to prevent unreleased score exposure.
+- No provider secrets, storage keys, private URLs, or raw event payloads are exposed through analytics or dashboard APIs.
 </file>
 
 <file path="docs/standards/security-standard.md">
@@ -105869,6 +106270,11 @@ The platform API now exposes result release and result read use cases inside the
 - Signed upload URLs and signed read URLs must not be logged or persisted in localStorage/sessionStorage.
 - Private media assets must not be exposed without backend-issued signed access checks.
 - The frontend must not bypass backend permission checks or trust tenant/workspace identifiers from mutation bodies.
+
+## Task 014D Update (2026-05-26)
+
+- Assessment attempt save and submit mutations must reject post-terminal edits and must not leak unreleased scores, private grading notes, raw answer payloads, or storage/object keys in learner-facing conflicts.
+- Cross-workspace attempt access remains blocked and learner ownership remains mandatory for mutation paths.
 
 ## Communication Center
 
@@ -107532,6 +107938,78 @@ import "./.next/dev/types/routes.d.ts";
 # Mentrily Build Ledger
 
 This document serves as a permanent continuity/backtrace system for the Mentrily SaaS codebase. Every task must record its progress here to ensure a reliable audit trail and clear path forward.
+
+### Task 014D — Assessment Attempt Reliability and Concurrency Hardening
+
+- **Task ID**: 014D
+- **Previous Task**: Task 014C — Analytics Event Normalization and Creator Dashboard Read Models
+- **Implementation Status**: Complete, full validation matrix passed
+- **Baseline Validation Discipline**:
+  - Initial continuation surfaced two real 014C analytics regressions before final 014D acceptance:
+    - `analytics-dashboard-read-model.service.ts` returned `requiredAssessmentBlockersCount: undefined`
+    - released pass-rate calculation used an invalid `.then(...)` path on a count result
+  - Both regressions were fixed and then full validation was rerun sequentially.
+  - The shared test PostgreSQL container was brought up via `pnpm db:test:up` when missing.
+- **Reliability / Concurrency Model Decision**:
+  - Keep the existing attempt/session/answer schema.
+  - Enforce expiry server-side on read, snapshot, save, and submit.
+  - Normalize learner-safe terminal/conflict responses through typed `409 CONFLICT` envelopes.
+  - Keep submit idempotent with one terminal path and no duplicate grading/result side effects.
+- **Prisma / Migration Changes**:
+  - No Prisma schema change was needed.
+  - No migration was added.
+- **Work Completed**:
+  - restored learner-safe attempt response fields `serverNow`, `canEdit`, and `canSubmit`
+  - restored server-side expiry enforcement in read and snapshot use cases
+  - fixed the expired-state rollback bug by committing expiry before surfacing the conflict
+  - normalized save-answer and submit paths to safe `409 CONFLICT` responses with typed reasons
+  - restored portal autosave/conflict/expired/submitted handling and read-only terminal-state UX
+  - updated backend integration/unit tests and portal tests to the restored 014D contract
+  - preserved grading/result, linked-assessment, and analytics/dashboard compatibility
+- **Validation Performed**:
+  - ✅ `git status --short`: **PASS**
+  - ✅ `pnpm lint`: **PASS**
+  - ✅ `pnpm typecheck`: **PASS**
+  - ✅ `pnpm test`: **PASS**
+  - ✅ `pnpm build`: **PASS**
+  - ✅ `pnpm test:integration`: **PASS**
+  - ✅ `pnpm test:e2e`: **PASS**
+  - ✅ `pnpm --filter @mentrily/platform-api test`: **PASS**
+  - ✅ `pnpm --filter @mentrily/platform-api typecheck`: **PASS**
+  - ✅ `pnpm --filter @mentrily/platform-api test:integration`: **PASS**
+  - ✅ `pnpm --filter @mentrily/platform-worker test`: **PASS**
+  - ✅ `pnpm --filter @mentrily/platform-worker typecheck`: **PASS**
+  - ✅ `pnpm --filter @mentrily/data-platform prisma:validate`: **PASS**
+  - ✅ `pnpm --filter @mentrily/data-platform prisma:generate`: **PASS**
+  - ✅ `pnpm --filter @mentrily/contract-catalog typecheck`: **PASS**
+  - ✅ `pnpm --filter @mentrily/domain-contracts typecheck`: **PASS**
+  - ✅ `pnpm --filter @mentrily/security-toolkit test`: **PASS**
+  - ✅ `pnpm --filter @mentrily/portal test`: **PASS**
+  - ✅ `pnpm --filter @mentrily/portal typecheck`: **PASS**
+  - ✅ `pnpm --filter @mentrily/portal build`: **PASS**
+  - ✅ `node automation/verify-env-examples.mjs`: **PASS**
+  - ✅ `cp .env.test.example .env.test`: **PASS**
+  - ✅ `pnpm db:test:up`: **PASS**
+  - ✅ `pnpm --filter @mentrily/data-platform prisma:migrate:deploy`: **PASS**
+  - ✅ `node --env-file=.env.test automation/run-integration-tests.mjs`: **PASS**
+  - ✅ `pnpm e2e:content`: **PASS**
+  - ✅ `pnpm e2e:learning`: **PASS**
+  - ✅ `pnpm e2e:assessment`: **PASS**
+  - ✅ `pnpm e2e:assessment-attempt`: **PASS**
+  - ✅ `pnpm e2e:assessment-grading`: **PASS**
+  - ✅ `pnpm e2e:assessment-result`: **PASS**
+  - ✅ `pnpm e2e:assessment-reliability`: **PASS**
+  - ✅ `pnpm db:test:down`: **PASS**
+- **Remaining Gaps**:
+  - proctoring gateway and attempt monitoring remain future work
+  - code execution grading remains future work
+  - notebook execution grading remains future work
+  - AI grading remains future work
+  - advanced anti-cheat and replay analysis remain future work
+- **Next Recommended Task**:
+  - Task 014E — Proctoring Gateway and Attempt Monitoring Foundation
+
+---
 
 ### Task 014C — Analytics Event Normalization and Creator Dashboard Read Models
 

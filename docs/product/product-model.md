@@ -38,6 +38,12 @@ A person can act as learner and creator at different times. These are product ex
 - **Pro**: Workspace-backed, up to 30 courses and 20 exams/month, 15 seats total (5 admin, 10 creator).
 - **Enterprise**: Contract-governed, custom domains, white-labeling, SSO/SCIM, and expanded governance.
 
+## Task 014D Update
+
+- Assessment attempt runtime is now retry-safe and concurrency-safe for learner start, answer save, and submit flows.
+- Server-side expiry is authoritative; frontend timers are advisory only.
+- Terminal attempts are immutable and do not expose unreleased score, private grading, or storage metadata.
+
 ## Core product capabilities
 
 - Creator dashboard and operational cockpit
@@ -207,3 +213,10 @@ Creators and admins can release graded assessment results to learners. Learners 
 - Workspace admins and owners now have a workspace-scoped dashboard foundation for operational counts and recent activity.
 - Campaign management is now a draft, preview, archive, and schedule foundation only.
 - Live mass campaign delivery remains deferred and disabled by default.
+
+## Task 014C Additions
+
+- Creator dashboard analytics now use normalized outbox activity plus workspace-scoped read models over existing product tables.
+- Dashboard summary and metric responses stay safe by excluding unreleased assessment scores, raw outbox payloads, and provider secrets.
+- Assessment pending-grading counts only include truly pending states; graded-but-unreleased results remain separate from grading backlog.
+- Multi-workspace dashboard access continues to respect workspace tenant boundaries through permission checks.

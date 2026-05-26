@@ -16,6 +16,7 @@ export function AssessmentAttemptRunnerPage({ attemptId }: AssessmentAttemptRunn
     savingQuestionId,
     saveSuccessQuestionId,
     saveErrorQuestionId,
+    saveConflictQuestionId,
     saveErrorMessage,
     submitting,
     submitErrorMessage,
@@ -71,6 +72,7 @@ export function AssessmentAttemptRunnerPage({ attemptId }: AssessmentAttemptRunn
           savingQuestionId={savingQuestionId}
           saveErrorMessage={saveErrorMessage}
           saveErrorQuestionId={saveErrorQuestionId}
+          saveConflictQuestionId={saveConflictQuestionId}
           saveSuccessQuestionId={saveSuccessQuestionId}
           snapshot={snapshot}
           submitErrorMessage={submitErrorMessage}

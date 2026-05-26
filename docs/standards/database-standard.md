@@ -38,6 +38,11 @@
 - `actorId` may be null for system-originated actions only
 - `metadata` must be JSON-safe (validated at serialization)
 - Immutable append-only (no updates or deletes)
+
+## Task 014D Update
+
+- Do not add assessment-attempt schema fields for reliability unless the existing model cannot safely represent retry/idempotency behavior.
+- 014D completed without schema drift; reliability hardening remained at use-case, transaction, contract, and UI layers.
 - Indexes required on: `workspaceId`, `actorId`, `action`, `occurredAt`
 
 ## Outbox Messages

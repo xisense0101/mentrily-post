@@ -39,6 +39,10 @@ Domains:
 
 - `identity`, `workspace`, `commercial`, `content`, `learning`, `assessment`, `credentialing`, `communication`, `integration`, `intelligence`
 
+## Task 014D Update
+
+- Assessment attempt retries must reuse deterministic lifecycle behavior so repeated save/submit calls do not emit duplicate grading or result events.
+
 Section: Feature area or bounded context within domain.
 
 Topic: Action or state change (e.g., `granted`, `changed`, `created`).

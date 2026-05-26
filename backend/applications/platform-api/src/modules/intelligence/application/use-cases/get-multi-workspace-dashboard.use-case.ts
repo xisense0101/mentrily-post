@@ -46,28 +46,32 @@ export class GetMultiWorkspaceDashboardUseCase {
     }[] = [];
 
     for (const membership of memberships) {
-      // Evaluate permission for this specific workspace
+      // In this product model tenantId = workspaceId (workspace is the tenant boundary).
+      // Derive tenantId from the original request context rather than duplicating workspaceId.
+      const workspaceContext = {
+        tenantId: context.workspace?.tenantId ?? membership.workspaceId,
+        workspaceId: membership.workspaceId,
+        actorId,
+      };
+
       const permission = await this.permissionEvaluator.evaluate(
         {
           permission: PermissionCatalog.DASHBOARD_READ,
-          workspace: {
-            tenantId: context.workspace?.tenantId || membership.workspaceId,
-            workspaceId: membership.workspaceId,
-            actorId,
-          },
+          workspace: workspaceContext,
         },
-        context,
+        { ...context, workspace: workspaceContext },
       );
 
-      if (permission.allowed) {
-        const summary = await this.getDashboardSummary.computeSummary(membership.workspaceId);
-        workspaces.push({
-          workspaceId: membership.workspaceId,
-          workspaceName: membership.workspace.name,
-          workspaceSlug: membership.workspace.slug,
-          summary,
-        });
+      if (!permission.allowed) {
+        continue;
       }
+
+      workspaces.push({
+        workspaceId: membership.workspaceId,
+        workspaceName: membership.workspace.name,
+        workspaceSlug: membership.workspace.slug,
+        summary: await this.getDashboardSummary.computeSummary(membership.workspaceId),
+      });
     }
 
     return { workspaces };

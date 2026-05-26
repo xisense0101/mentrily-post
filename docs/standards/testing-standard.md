@@ -36,6 +36,11 @@ Mentrily uses a dual-testing strategy to balance speed and confidence:
 
 - **Command**: `pnpm test:e2e`, `pnpm e2e:learning`, `pnpm e2e:content`, `pnpm e2e:assessment`, or `pnpm e2e:assessment-attempt`
 
+## Task 014D Update
+
+- Assessment attempt reliability changes require coverage at four layers: unit use-case tests, DB-backed integration tests, portal component/state tests, and shared-harness Playwright attempt reliability tests.
+- Expiry behavior may be asserted in backend integration tests when browser-timer E2E would be flaky.
+
 ## Local Integration Workflow
 
 To run integration tests locally:

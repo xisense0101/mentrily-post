@@ -93,7 +93,10 @@ describe('GetAssessmentAttemptSnapshotUseCase', () => {
     const snapshot = createSnapshot();
     const attempt = createAttempt(snapshot.id);
     const useCase = new GetAssessmentAttemptSnapshotUseCase(
-      { findById: vi.fn(async () => attempt) } as unknown as AssessmentAttemptRepository,
+      {
+        findById: vi.fn(async () => attempt),
+        save: vi.fn(async (savedAttempt) => savedAttempt),
+      } as unknown as AssessmentAttemptRepository,
       { findById: vi.fn(async () => snapshot) } as unknown as AssessmentSnapshotRepository,
       createPermissionEvaluator(true),
     );
@@ -121,7 +124,10 @@ describe('GetAssessmentAttemptSnapshotUseCase', () => {
       metadata: {},
     });
     const useCase = new GetAssessmentAttemptSnapshotUseCase(
-      { findById: vi.fn(async () => attempt) } as unknown as AssessmentAttemptRepository,
+      {
+        findById: vi.fn(async () => attempt),
+        save: vi.fn(async (savedAttempt) => savedAttempt),
+      } as unknown as AssessmentAttemptRepository,
       { findById: vi.fn(async () => snapshot) } as unknown as AssessmentSnapshotRepository,
       createPermissionEvaluator(true),
     );
@@ -147,7 +153,10 @@ describe('GetAssessmentAttemptSnapshotUseCase', () => {
       metadata: {},
     });
     const useCase = new GetAssessmentAttemptSnapshotUseCase(
-      { findById: vi.fn(async () => attempt) } as unknown as AssessmentAttemptRepository,
+      {
+        findById: vi.fn(async () => attempt),
+        save: vi.fn(async (savedAttempt) => savedAttempt),
+      } as unknown as AssessmentAttemptRepository,
       { findById: vi.fn(async () => snapshot) } as unknown as AssessmentSnapshotRepository,
       createPermissionEvaluator(true),
     );
@@ -161,7 +170,10 @@ describe('GetAssessmentAttemptSnapshotUseCase', () => {
     const snapshot = createSnapshot();
     const attempt = createAttempt(snapshot.id);
     const useCase = new GetAssessmentAttemptSnapshotUseCase(
-      { findById: vi.fn(async () => attempt) } as unknown as AssessmentAttemptRepository,
+      {
+        findById: vi.fn(async () => attempt),
+        save: vi.fn(async (savedAttempt) => savedAttempt),
+      } as unknown as AssessmentAttemptRepository,
       { findById: vi.fn(async () => snapshot) } as unknown as AssessmentSnapshotRepository,
       createPermissionEvaluator(true),
     );

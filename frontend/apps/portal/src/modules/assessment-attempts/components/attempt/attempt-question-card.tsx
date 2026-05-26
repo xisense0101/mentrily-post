@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   CodePlaceholderAnswer,
   FileUploadAnswer,
@@ -27,6 +27,7 @@ interface AttemptQuestionCardProps {
   readOnly: boolean;
   isSaving: boolean;
   saveSucceeded?: boolean | undefined;
+  saveConflict?: boolean | undefined;
   saveError?: string | undefined;
   onSave: (value: unknown) => Promise<void> | void;
 }
@@ -59,6 +60,13 @@ function getPromptText(question: AssessmentQuestionContract): string {
   return readStringField(question.prompt, 'text') ?? question.title;
 }
 
+function stringifyAutosaveValue(value: unknown): string {
+  if (value === undefined) {
+    return 'undefined';
+  }
+
+  return JSON.stringify(value);
+}
 
 function getInitialValue(
   question: AssessmentQuestionContract,
@@ -97,13 +105,19 @@ export function AttemptQuestionCard({
   readOnly,
   isSaving,
   saveSucceeded = false,
+  saveConflict = false,
   saveError,
   onSave,
 }: AttemptQuestionCardProps) {
-  const [value, setValue] = useState<unknown>(getInitialValue(question, answer));
+  const initialValue = getInitialValue(question, answer);
+  const [value, setValue] = useState<unknown>(initialValue);
+  const autosaveValueRef = useRef<unknown>(value);
+  const lastSavedValueRef = useRef<string>(stringifyAutosaveValue(initialValue));
 
   useEffect(() => {
-    setValue(getInitialValue(question, answer));
+    const nextInitialValue = getInitialValue(question, answer);
+    setValue(nextInitialValue);
+    lastSavedValueRef.current = stringifyAutosaveValue(nextInitialValue);
   }, [answer, question]);
 
   const options = question.options.map(toOptionView);
@@ -115,6 +129,28 @@ export function AttemptQuestionCard({
     typeof question.prompt === 'object' && question.prompt !== null
       ? (question.prompt as Record<string, unknown>)
       : {};
+
+  useEffect(() => {
+    autosaveValueRef.current = value;
+  }, [value]);
+
+  useEffect(() => {
+    if (readOnly || placeholder || !answerable) {
+      return undefined;
+    }
+
+    const serializedValue = stringifyAutosaveValue(value);
+    if (serializedValue === lastSavedValueRef.current) {
+      return undefined;
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      lastSavedValueRef.current = serializedValue;
+      void onSave(autosaveValueRef.current);
+    }, 900);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [answerable, onSave, placeholder, readOnly, value]);
 
   return (
     <article
@@ -243,6 +279,11 @@ export function AttemptQuestionCard({
           {saveSucceeded ? (
             <p className="text-sm text-emerald-700" data-testid="attempt-save-success">
               Answer saved.
+            </p>
+          ) : null}
+          {saveConflict ? (
+            <p className="text-sm text-amber-700" data-testid="attempt-save-conflict">
+              Server state changed. Refresh before continuing.
             </p>
           ) : null}
           {saveError ? (

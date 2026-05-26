@@ -7,6 +7,7 @@ import {
   getTimerSeverity,
   isAttemptEditable,
   isAttemptExpired,
+  isAttemptSubmittable,
   isAttemptSubmitted,
   isQuestionAnswerable,
   toAnswerPayload,
@@ -114,6 +115,9 @@ describe('assessment-attempt-state', () => {
 
   it('evaluates attempt status helpers', () => {
     expect(isAttemptEditable(attempt)).toBe(true);
+    expect(isAttemptSubmittable(attempt)).toBe(true);
+    expect(isAttemptEditable({ ...attempt, canEdit: false })).toBe(false);
+    expect(isAttemptSubmittable({ ...attempt, canSubmit: false })).toBe(false);
     expect(isAttemptSubmitted({ ...attempt, status: 'SUBMITTED' })).toBe(true);
     expect(
       isAttemptExpired(

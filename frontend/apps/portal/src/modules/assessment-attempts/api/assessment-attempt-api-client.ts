@@ -18,6 +18,7 @@ interface ErrorEnvelope {
     code?: string | undefined;
     message?: string | undefined;
     requestId?: string | undefined;
+    details?: Record<string, unknown> | undefined;
   };
 }
 
@@ -62,6 +63,7 @@ async function parseResponse<T>(response: Response): Promise<T> {
     response.status,
     envelope?.error?.code,
     envelope?.error?.requestId,
+    envelope?.error?.details,
   );
 }
 

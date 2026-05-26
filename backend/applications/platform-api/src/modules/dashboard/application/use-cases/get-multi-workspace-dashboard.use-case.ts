@@ -49,8 +49,10 @@ export class GetMultiWorkspaceDashboardUseCase {
     }> = [];
 
     for (const membership of memberships) {
+      // In this product model tenantId = workspaceId (workspace is the tenant boundary).
+      // Derive tenantId from the original request context rather than duplicating workspaceId.
       const workspaceContext = {
-        tenantId: membership.workspaceId,
+        tenantId: context.workspace?.tenantId ?? membership.workspaceId,
         workspaceId: membership.workspaceId,
         actorId,
       };

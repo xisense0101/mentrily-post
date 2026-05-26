@@ -26,7 +26,7 @@ import {
 import { AssessmentEventPublisherService } from '../services/index.js';
 import { mapAttemptToResponse } from '../mappers/index.js';
 import { AssessmentAttemptResponse } from '../dto/index.js';
-import { requireAssessmentActor } from '../support/index.js';
+import { createAssessmentAttemptConflictError, requireAssessmentActor } from '../support/index.js';
 
 @Injectable()
 export class SubmitAssessmentAttemptUseCase {
@@ -54,7 +54,7 @@ export class SubmitAssessmentAttemptUseCase {
     }
 
     const result = await this.transactionRunner.run<
-      AssessmentAttemptResponse | { expired: true; reason: string }
+      AssessmentAttemptResponse | { conflict: AppError }
     >(async (tx) => {
       const client = getPrismaClient(this.prisma, tx);
       await client.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`assessment-attempt-submit:${attemptId}`})::bigint)`;
@@ -80,17 +80,26 @@ export class SubmitAssessmentAttemptUseCase {
       if (!policyResult.allowed) {
         if (attempt.isInProgress() && attempt.isSessionExpired(now)) {
           attempt.expire();
+          attempt.touchSession(now);
           await this.attemptRepo.save(attempt, tx);
           return {
-            expired: true,
-            reason: policyResult.reason ?? 'Cannot submit attempt',
+            conflict: createAssessmentAttemptConflictError({
+              reason: 'ATTEMPT_EXPIRED',
+              message: policyResult.reason ?? 'Cannot submit attempt',
+              attempt,
+            }),
           };
         }
-        throw new AppError('VALIDATION_ERROR', policyResult.reason ?? 'Cannot submit attempt', 400);
+        throw createAssessmentAttemptConflictError({
+          reason: 'ATTEMPT_NOT_SUBMITTABLE',
+          message: policyResult.reason ?? 'Cannot submit attempt',
+          attempt,
+        });
       }
 
       const resultId = randomUUID();
       const result = attempt.submit(resultId);
+      attempt.touchSession(now);
 
       const saved = await this.attemptRepo.save(attempt, tx);
 
@@ -136,8 +145,8 @@ export class SubmitAssessmentAttemptUseCase {
       return mapAttemptToResponse(saved);
     });
 
-    if ('expired' in result) {
-      throw new AppError('VALIDATION_ERROR', result.reason, 400);
+    if ('conflict' in result) {
+      throw result.conflict;
     }
 
     return result;

@@ -6,6 +6,7 @@ import {
   getAttemptExpiresAt,
   getRemainingTimeMs,
   isAttemptEditable,
+  isAttemptSubmittable,
   isQuestionAnswerable,
 } from '../../state';
 import type { AssessmentAttemptContract, AssessmentPublishedSnapshotContract } from '../../types';
@@ -22,6 +23,7 @@ interface AttemptRunnerShellProps {
   savingQuestionId: string | null;
   saveSuccessQuestionId: string | null;
   saveErrorQuestionId: string | null;
+  saveConflictQuestionId: string | null;
   saveErrorMessage?: string | null;
   submitting: boolean;
   submitErrorMessage?: string | null;
@@ -46,6 +48,7 @@ export function AttemptRunnerShell({
   savingQuestionId,
   saveSuccessQuestionId,
   saveErrorQuestionId,
+  saveConflictQuestionId,
   saveErrorMessage,
   submitting,
   submitErrorMessage,
@@ -59,6 +62,7 @@ export function AttemptRunnerShell({
 }: AttemptRunnerShellProps) {
   const questions = flattenSnapshotQuestions(snapshot);
   const editable = isAttemptEditable(attempt);
+  const submittable = isAttemptSubmittable(attempt);
   const answerableCount = countAnswerableQuestions(questions);
   const contextCount = questions.length - answerableCount;
   const answeredCount = countAnsweredQuestions({
@@ -105,6 +109,7 @@ export function AttemptRunnerShell({
               answer={findAnswerForQuestion({ attempt, questionId: question.id })}
               attemptId={attempt.id}
               isSaving={savingQuestionId === question.id}
+              saveConflict={saveConflictQuestionId === question.id}
               saveError={
                 saveErrorQuestionId === question.id ? (saveErrorMessage ?? undefined) : undefined
               }
@@ -130,6 +135,7 @@ export function AttemptRunnerShell({
             onCancel={onCancel}
             onSubmit={onSubmit}
             statusLabel={attempt.status}
+            submittable={submittable}
             submitError={submitErrorMessage ?? undefined}
             submitting={submitting}
             wasOffline={wasOffline}

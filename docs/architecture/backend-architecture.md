@@ -34,6 +34,7 @@ Each domain module uses:
 
 - Commands mutate state and enforce idempotency.
 - Queries are optimized reads and avoid hidden side effects.
+- Assessment attempt start/save/submit commands must remain idempotent or retry-safe and must commit terminal expiry transitions before surfacing safe conflict errors.
 - Privileged admin command use cases must validate authorization preconditions before any mutation or side effect (persistence, audit, outbox).
 - Explicitly modeled onboarding flows may use non-admin authorization sources (for example, verified invitation tokens) when domain contracts define that boundary.
 - Onboarding flows must also validate critical domain preconditions before mutation (for example, invited role existence) to avoid partial writes on terminal validation failures.
@@ -298,3 +299,14 @@ The platform API now exposes result release and result read use cases inside the
 - Added a `dashboard` read-model module for workspace summary and multi-workspace overview endpoints.
 - Added a `campaign-management` module that exposes campaign CRUD and preview routes while reusing Communication Center safety services.
 - Campaign execution fanout is not performed from campaign endpoints in this foundation.
+
+## Task 014C Additions
+
+- Added an `analytics` module to `platform-api` providing `AnalyticsEventNormalizerService` and `AnalyticsDashboardReadModelService`.
+- Analytics normalization reads from persisted outbox messages and product tables — no new Prisma schema or migrations were added.
+- Analytics projection is idempotent by `eventId` deduplication in the activity feed.
+- `DashboardController` now exposes eight creator-metric routes: `/creator/summary`, `/creator/activity`, and six `/creator/metrics/*` endpoints (learning, assessment, content, media, communication, campaigns).
+- `GetDashboardSummaryUseCase` delegates entirely to `AnalyticsDashboardReadModelService`.
+- `pendingGrading` counts only `NOT_GRADED | AUTO_GRADING_RESERVED | PENDING_MANUAL_REVIEW` — `GRADED` (grading done, release pending) is excluded.
+- `passRateReleased` is computed only from `RELEASED`-status results to prevent unreleased score exposure.
+- No provider secrets, storage keys, private URLs, or raw event payloads are exposed through analytics or dashboard APIs.

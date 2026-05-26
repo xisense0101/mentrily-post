@@ -44,6 +44,13 @@ export class GetAssessmentAttemptUseCase {
       throw new AppError('NOT_FOUND', 'attempt not found', 404);
     }
 
+    const now = new Date();
+    if (attempt.isInProgress() && attempt.isSessionExpired(now)) {
+      attempt.expire();
+    }
+    attempt.touchSession(now);
+    await this.attemptRepo.save(attempt);
+
     return mapAttemptToResponse(attempt);
   }
 }

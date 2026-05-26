@@ -32,6 +32,11 @@
 - Private media assets must not be exposed without backend-issued signed access checks.
 - The frontend must not bypass backend permission checks or trust tenant/workspace identifiers from mutation bodies.
 
+## Task 014D Update (2026-05-26)
+
+- Assessment attempt save and submit mutations must reject post-terminal edits and must not leak unreleased scores, private grading notes, raw answer payloads, or storage/object keys in learner-facing conflicts.
+- Cross-workspace attempt access remains blocked and learner ownership remains mandatory for mutation paths.
+
 ## Communication Center
 
 - Communication Center must enforce workspace ownership checks after loading templates or intents.

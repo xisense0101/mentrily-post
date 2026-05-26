@@ -47,6 +47,9 @@ export interface AssessmentAttemptResponse {
   snapshotVersionNumber: number;
   learnerPrincipalId: string;
   status: AssessmentAttemptStatusContract;
+  serverNow?: string;
+  canEdit?: boolean;
+  canSubmit?: boolean;
   session: AssessmentAttemptSessionResponse;
   answers: AssessmentAttemptAnswerResponse[];
   result?: AssessmentAttemptResultResponse;

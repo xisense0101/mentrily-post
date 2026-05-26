@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { AssessmentAttemptApiError, createAssessmentAttemptApiClient } from '../api';
+import { createAssessmentAttemptApiClient } from '../api';
 import { E2E_REQUEST_CONTEXT_STORAGE_KEY } from '@/foundation/e2e/e2e-request-context';
 
 function createJsonResponse(status: number, body: unknown) {
@@ -22,6 +22,9 @@ const MOCK_ATTEMPT = {
   snapshotVersionNumber: 1,
   learnerPrincipalId: 'learner-1',
   status: 'IN_PROGRESS',
+  serverNow: '2026-05-17T00:05:00.000Z',
+  canEdit: true,
+  canSubmit: true,
   session: {
     id: 'session-1',
     startedAt: '2026-05-17T00:00:00.000Z',
@@ -134,14 +137,18 @@ describe('assessmentAttemptApiClient', () => {
           code: 'ATTEMPT_INVALID',
           message: 'Attempt request failed',
           requestId: 'request-1',
+          details: { reason: 'ATTEMPT_EXPIRED' },
         },
       }),
     );
     const client = createAssessmentAttemptApiClient({ fetchImpl });
 
-    await expect(client.listLearnerAssessmentAttempts()).rejects.toBeInstanceOf(
-      AssessmentAttemptApiError,
-    );
+    await expect(client.listLearnerAssessmentAttempts()).rejects.toMatchObject({
+      name: 'AssessmentAttemptApiError',
+      code: 'ATTEMPT_INVALID',
+      requestId: 'request-1',
+      details: { reason: 'ATTEMPT_EXPIRED' },
+    });
   });
 
   it('sends E2E headers only in test mode', async () => {

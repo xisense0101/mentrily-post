@@ -170,14 +170,32 @@ describe.sequential('Assessment attempt reliability (integration)', () => {
         answer: { selectedOptionId: optionId },
       },
     });
-    expectHttpStatus(saveRes, 400);
+    expectHttpStatus(saveRes, 409);
+    expect(saveRes.json()).toMatchObject({
+      error: {
+        code: 'CONFLICT',
+        details: {
+          reason: 'ATTEMPT_EXPIRED',
+          attemptStatus: 'EXPIRED',
+        },
+      },
+    });
 
     const submitRes = await app.inject({
       method: 'POST',
       url: `/workspace/assessment-attempts/${attemptId}/submit`,
       headers: learnerHeaders,
     });
-    expectHttpStatus(submitRes, 400);
+    expectHttpStatus(submitRes, 409);
+    expect(submitRes.json()).toMatchObject({
+      error: {
+        code: 'CONFLICT',
+        details: {
+          reason: 'ATTEMPT_NOT_SUBMITTABLE',
+          attemptStatus: 'EXPIRED',
+        },
+      },
+    });
 
     const attempt = await prisma.assessmentAttempt.findUniqueOrThrow({ where: { id: attemptId } });
     expect(attempt.status).toBe('EXPIRED');

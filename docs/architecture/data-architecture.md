@@ -39,6 +39,11 @@ Indexes:
 
 **Retention**: Audit records are immutable and never deleted. Retention policies (archival/deletion) are organizational concerns, not application concerns.
 
+## Task 014D Update
+
+- Assessment attempt reliability stayed on existing tables; no Prisma migration was required for 014D.
+- Attempt/session expiry is enforced from persisted timestamps already present in the assessment attempt aggregate model.
+
 ### OutboxMessage
 
 Durable event persistence for reliable cross-module and async distribution.

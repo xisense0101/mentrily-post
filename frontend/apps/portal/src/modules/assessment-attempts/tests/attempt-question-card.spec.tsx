@@ -227,4 +227,21 @@ describe('AttemptQuestionCard', () => {
     expect(rendered.container.textContent).toContain('Answer saved.');
     expect(rendered.container.textContent).toContain('Retry save');
   });
+
+  it('renders a safe conflict state', async () => {
+    const rendered = await render(
+      <AttemptQuestionCard
+        {...baseProps}
+        isSaving={false}
+        onSave={vi.fn(async () => undefined)}
+        question={makeQuestion('SHORT_ANSWER')}
+        readOnly={false}
+        saveConflict={true}
+      />,
+    );
+
+    expect(rendered.container.textContent).toContain(
+      'Server state changed. Refresh before continuing.',
+    );
+  });
 });

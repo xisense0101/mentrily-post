@@ -2,6 +2,78 @@
 
 This document serves as a permanent continuity/backtrace system for the Mentrily SaaS codebase. Every task must record its progress here to ensure a reliable audit trail and clear path forward.
 
+### Task 014D — Assessment Attempt Reliability and Concurrency Hardening
+
+- **Task ID**: 014D
+- **Previous Task**: Task 014C — Analytics Event Normalization and Creator Dashboard Read Models
+- **Implementation Status**: Complete, full validation matrix passed
+- **Baseline Validation Discipline**:
+  - Initial continuation surfaced two real 014C analytics regressions before final 014D acceptance:
+    - `analytics-dashboard-read-model.service.ts` returned `requiredAssessmentBlockersCount: undefined`
+    - released pass-rate calculation used an invalid `.then(...)` path on a count result
+  - Both regressions were fixed and then full validation was rerun sequentially.
+  - The shared test PostgreSQL container was brought up via `pnpm db:test:up` when missing.
+- **Reliability / Concurrency Model Decision**:
+  - Keep the existing attempt/session/answer schema.
+  - Enforce expiry server-side on read, snapshot, save, and submit.
+  - Normalize learner-safe terminal/conflict responses through typed `409 CONFLICT` envelopes.
+  - Keep submit idempotent with one terminal path and no duplicate grading/result side effects.
+- **Prisma / Migration Changes**:
+  - No Prisma schema change was needed.
+  - No migration was added.
+- **Work Completed**:
+  - restored learner-safe attempt response fields `serverNow`, `canEdit`, and `canSubmit`
+  - restored server-side expiry enforcement in read and snapshot use cases
+  - fixed the expired-state rollback bug by committing expiry before surfacing the conflict
+  - normalized save-answer and submit paths to safe `409 CONFLICT` responses with typed reasons
+  - restored portal autosave/conflict/expired/submitted handling and read-only terminal-state UX
+  - updated backend integration/unit tests and portal tests to the restored 014D contract
+  - preserved grading/result, linked-assessment, and analytics/dashboard compatibility
+- **Validation Performed**:
+  - ✅ `git status --short`: **PASS**
+  - ✅ `pnpm lint`: **PASS**
+  - ✅ `pnpm typecheck`: **PASS**
+  - ✅ `pnpm test`: **PASS**
+  - ✅ `pnpm build`: **PASS**
+  - ✅ `pnpm test:integration`: **PASS**
+  - ✅ `pnpm test:e2e`: **PASS**
+  - ✅ `pnpm --filter @mentrily/platform-api test`: **PASS**
+  - ✅ `pnpm --filter @mentrily/platform-api typecheck`: **PASS**
+  - ✅ `pnpm --filter @mentrily/platform-api test:integration`: **PASS**
+  - ✅ `pnpm --filter @mentrily/platform-worker test`: **PASS**
+  - ✅ `pnpm --filter @mentrily/platform-worker typecheck`: **PASS**
+  - ✅ `pnpm --filter @mentrily/data-platform prisma:validate`: **PASS**
+  - ✅ `pnpm --filter @mentrily/data-platform prisma:generate`: **PASS**
+  - ✅ `pnpm --filter @mentrily/contract-catalog typecheck`: **PASS**
+  - ✅ `pnpm --filter @mentrily/domain-contracts typecheck`: **PASS**
+  - ✅ `pnpm --filter @mentrily/security-toolkit test`: **PASS**
+  - ✅ `pnpm --filter @mentrily/portal test`: **PASS**
+  - ✅ `pnpm --filter @mentrily/portal typecheck`: **PASS**
+  - ✅ `pnpm --filter @mentrily/portal build`: **PASS**
+  - ✅ `node automation/verify-env-examples.mjs`: **PASS**
+  - ✅ `cp .env.test.example .env.test`: **PASS**
+  - ✅ `pnpm db:test:up`: **PASS**
+  - ✅ `pnpm --filter @mentrily/data-platform prisma:migrate:deploy`: **PASS**
+  - ✅ `node --env-file=.env.test automation/run-integration-tests.mjs`: **PASS**
+  - ✅ `pnpm e2e:content`: **PASS**
+  - ✅ `pnpm e2e:learning`: **PASS**
+  - ✅ `pnpm e2e:assessment`: **PASS**
+  - ✅ `pnpm e2e:assessment-attempt`: **PASS**
+  - ✅ `pnpm e2e:assessment-grading`: **PASS**
+  - ✅ `pnpm e2e:assessment-result`: **PASS**
+  - ✅ `pnpm e2e:assessment-reliability`: **PASS**
+  - ✅ `pnpm db:test:down`: **PASS**
+- **Remaining Gaps**:
+  - proctoring gateway and attempt monitoring remain future work
+  - code execution grading remains future work
+  - notebook execution grading remains future work
+  - AI grading remains future work
+  - advanced anti-cheat and replay analysis remain future work
+- **Next Recommended Task**:
+  - Task 014E — Proctoring Gateway and Attempt Monitoring Foundation
+
+---
+
 ### Task 014C — Analytics Event Normalization and Creator Dashboard Read Models
 
 - **Task ID**: 014C

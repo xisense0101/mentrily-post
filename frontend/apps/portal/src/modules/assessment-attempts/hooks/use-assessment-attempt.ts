@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { assessmentAttemptApiClient } from '../api';
+import { AssessmentAttemptApiError } from '../api/assessment-attempt-api-errors';
 import { getTimerSeverity, toAnswerPayload } from '../state';
 import type {
   AssessmentAttemptContract,
@@ -16,6 +17,7 @@ export function useAssessmentAttempt(attemptId: string) {
   const [savingQuestionId, setSavingQuestionId] = useState<string | null>(null);
   const [saveSuccessQuestionId, setSaveSuccessQuestionId] = useState<string | null>(null);
   const [saveErrorQuestionId, setSaveErrorQuestionId] = useState<string | null>(null);
+  const [saveConflictQuestionId, setSaveConflictQuestionId] = useState<string | null>(null);
   const [saveErrorMessage, setSaveErrorMessage] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [submitErrorMessage, setSubmitErrorMessage] = useState<string | null>(null);
@@ -94,6 +96,7 @@ export function useAssessmentAttempt(attemptId: string) {
       setSavingQuestionId(questionId);
       setSaveSuccessQuestionId(null);
       setSaveErrorQuestionId(null);
+      setSaveConflictQuestionId(null);
       setSaveErrorMessage(null);
       setError(null);
 
@@ -110,7 +113,16 @@ export function useAssessmentAttempt(attemptId: string) {
         setAttempt(updatedAttempt);
         setSaveSuccessQuestionId(questionId);
       } catch (cause) {
-        const message = cause instanceof Error ? cause.message : 'Failed to save answer.';
+        let message = cause instanceof Error ? cause.message : 'Failed to save answer.';
+        if (cause instanceof AssessmentAttemptApiError && cause.code === 'CONFLICT') {
+          const reason = String(cause.details?.reason ?? '');
+          if (reason === 'ATTEMPT_EXPIRED') {
+            message = 'This attempt expired. Refresh to see the locked state.';
+          } else if (reason === 'ATTEMPT_NOT_EDITABLE') {
+            message = 'This attempt is no longer editable. Refresh to continue safely.';
+          }
+          setSaveConflictQuestionId(questionId);
+        }
         setSaveErrorQuestionId(questionId);
         setSaveErrorMessage(message);
         setError(message);
@@ -138,7 +150,15 @@ export function useAssessmentAttempt(attemptId: string) {
       const updatedAttempt = await assessmentAttemptApiClient.submitAssessmentAttempt(attemptId);
       setAttempt(updatedAttempt);
     } catch (cause) {
-      const message = cause instanceof Error ? cause.message : 'Failed to submit attempt.';
+      let message = cause instanceof Error ? cause.message : 'Failed to submit attempt.';
+      if (cause instanceof AssessmentAttemptApiError && cause.code === 'CONFLICT') {
+        const reason = String(cause.details?.reason ?? '');
+        if (reason === 'ATTEMPT_EXPIRED') {
+          message = 'This attempt expired before submission completed.';
+        } else if (reason === 'ATTEMPT_NOT_SUBMITTABLE') {
+          message = 'This attempt can no longer be submitted.';
+        }
+      }
       setSubmitErrorMessage(message);
       setError(message);
       throw cause;
@@ -170,6 +190,7 @@ export function useAssessmentAttempt(attemptId: string) {
     savingQuestionId,
     saveSuccessQuestionId,
     saveErrorQuestionId,
+    saveConflictQuestionId,
     saveErrorMessage,
     submitting,
     submitErrorMessage,

@@ -38,6 +38,10 @@ Each ticket includes:
 
 - Code merged with reviews.
 - Tests passing (unit/integration/e2e as applicable).
+
+## Task 014D Update
+
+- Assessment attempt reliability work is complete only when package validation, DB-backed integration validation, root validation, and the explicit sequential E2E regression block all pass.
 - Docs updated.
 - Monitoring and runbook notes updated where needed.
 

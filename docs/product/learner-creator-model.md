@@ -38,6 +38,7 @@ Learner and creator are interaction modes, not permanent identities.
 
 - Creators now author assessments (exams, quizzes, practice assignments) through the Assessment Builder UI. The current creator-side shell covers list/create, editor access, draft content editing, publish, archive, and restore flows.
 - The Assessment Builder frontend authoring shell now exists for creators and has real cross-stack E2E coverage.
+- Learner attempt delivery now hardens autosave, submit retries, expired-state handling, and read-only terminal-state UX without changing creator grading or result-release policy boundaries.
 - Learner assessment attempt backend/runtime foundation and learner-facing attempt UI now both exist.
 - Draft assessments are creator-side-only authoring state, not learner-visible.
 - Published assessment snapshots are what learners will later attempt, grade, and receive results from.

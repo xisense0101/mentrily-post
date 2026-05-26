@@ -59,9 +59,7 @@ function createSnapshot(questionId: string) {
     isCorrect: true,
   });
   const opt2 = QuestionOption.create({
-    id: isQ106
-      ? '50000000-0000-4000-8000-000000000108'
-      : '50000000-0000-4000-8000-000000000008',
+    id: isQ106 ? '50000000-0000-4000-8000-000000000108' : '50000000-0000-4000-8000-000000000008',
     label: 'Option B',
     value: 'B',
     isCorrect: false,
@@ -242,7 +240,10 @@ describe('SaveAssessmentAttemptAnswerUseCase', () => {
           questionKind: 'MCQ',
           answer: { selectedOptionId: '50000000-0000-4000-8000-000000000107' },
         }),
-      ).rejects.toMatchObject({ code: 'VALIDATION_ERROR' });
+      ).rejects.toMatchObject({
+        code: 'CONFLICT',
+        details: { reason: 'ATTEMPT_EXPIRED' },
+      });
       expect(attempt.status).toBe('EXPIRED');
       expect(vi.mocked(repo.save)).toHaveBeenCalled();
     } finally {

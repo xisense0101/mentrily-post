@@ -345,7 +345,16 @@ describe.sequential('Assessment attempt API (integration)', () => {
         answer: { selectedOptionId: optionId },
       },
     });
-    expectHttpStatus(saveAfterSubmit, 400);
+    expectHttpStatus(saveAfterSubmit, 409);
+    expect(saveAfterSubmit.json()).toMatchObject({
+      error: {
+        code: 'CONFLICT',
+        details: {
+          reason: 'ATTEMPT_NOT_EDITABLE',
+          attemptStatus: 'SUBMITTED',
+        },
+      },
+    });
 
     const auditCount = await prisma.auditRecord.count({
       where: { targetId: started.id, targetType: 'assessment-attempt' },
@@ -471,7 +480,16 @@ describe.sequential('Assessment attempt API (integration)', () => {
       url: `/workspace/assessment-attempts/${started.id}/submit`,
       headers,
     });
-    expectHttpStatus(response, 400);
+    expectHttpStatus(response, 409);
+    expect(response.json()).toMatchObject({
+      error: {
+        code: 'CONFLICT',
+        details: {
+          reason: 'ATTEMPT_EXPIRED',
+          attemptStatus: 'EXPIRED',
+        },
+      },
+    });
 
     const expiredAttempt = await prisma.assessmentAttempt.findUniqueOrThrow({
       where: { id: started.id },

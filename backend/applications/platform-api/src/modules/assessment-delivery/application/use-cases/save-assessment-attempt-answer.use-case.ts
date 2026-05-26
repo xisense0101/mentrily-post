@@ -27,6 +27,7 @@ import { AssessmentEventPublisherService } from '../services/index.js';
 import { mapAttemptToResponse } from '../mappers/index.js';
 import { AssessmentAttemptResponse, SaveAssessmentAttemptAnswerInput } from '../dto/index.js';
 import {
+  createAssessmentAttemptConflictError,
   requireAssessmentActor,
   validateFileUploadAnswer,
 } from '../support/index.js';
@@ -64,7 +65,7 @@ export class SaveAssessmentAttemptAnswerUseCase {
     }
 
     const result = await this.transactionRunner.run<
-      AssessmentAttemptResponse | { expired: true; reason: string }
+      AssessmentAttemptResponse | { conflict: AppError }
     >(async (tx) => {
       const attempt = await this.attemptRepo.findById(attemptId, tx);
       if (
@@ -108,13 +109,21 @@ export class SaveAssessmentAttemptAnswerUseCase {
       if (!policyResult.allowed) {
         if (attempt.isInProgress() && attempt.isSessionExpired(now)) {
           attempt.expire();
+          attempt.touchSession(now);
           await this.attemptRepo.save(attempt, tx);
           return {
-            expired: true,
-            reason: policyResult.reason ?? 'Cannot save answer',
+            conflict: createAssessmentAttemptConflictError({
+              reason: 'ATTEMPT_EXPIRED',
+              message: policyResult.reason ?? 'Cannot save answer',
+              attempt,
+            }),
           };
         }
-        throw new AppError('VALIDATION_ERROR', policyResult.reason ?? 'Cannot save answer', 400);
+        throw createAssessmentAttemptConflictError({
+          reason: 'ATTEMPT_NOT_EDITABLE',
+          message: policyResult.reason ?? 'Cannot save answer',
+          attempt,
+        });
       }
 
       const answerId = randomUUID();
@@ -125,6 +134,7 @@ export class SaveAssessmentAttemptAnswerUseCase {
         answer: normalizedAnswer,
         ...(input.metadata !== undefined ? { metadata: input.metadata } : {}),
       });
+      attempt.touchSession(now);
 
       const saved = await this.attemptRepo.save(attempt, tx);
 
@@ -154,8 +164,8 @@ export class SaveAssessmentAttemptAnswerUseCase {
       return mapAttemptToResponse(saved);
     });
 
-    if ('expired' in result) {
-      throw new AppError('VALIDATION_ERROR', result.reason, 400);
+    if ('conflict' in result) {
+      throw result.conflict;
     }
 
     return result;
