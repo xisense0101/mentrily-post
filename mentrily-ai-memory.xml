@@ -1026,6 +1026,7 @@ backend/
               http/
                 proctoring.controller.ts
             tests/
+              proctoring-api.integration.spec.ts
               proctoring-policy.service.spec.ts
             proctoring.module.ts
           workspace-governance/
@@ -42653,703 +42654,6 @@ Manages global platform settings, logs, and system-wide operations.
 - **tests/**: Global configuration and audit log integrity tests.
 </file>
 
-<file path="backend/applications/platform-api/src/modules/proctoring/application/use-cases/proctoring.use-cases.ts">
-import { Inject, Injectable } from '@nestjs/common';
-import type {
-  ProctoringAttemptMonitoringSummaryContract,
-  ProctoringAttemptMonitoringTimelineContract,
-  ProctoringAttemptSummaryContract,
-  ProctoringHeartbeatRequestContract,
-  ProctoringSessionContract,
-  RecordProctoringEventRequestContract,
-  RecordProctoringEventResponseContract,
-  StartProctoringSessionResponseContract,
-} from '@mentrily/contract-catalog';
-import {
-  AppError,
-  PERMISSION_EVALUATOR,
-  PermissionEvaluator,
-  RequestContext,
-  TransactionContext,
-} from '@mentrily/service-core';
-import { PrismaService, getPrismaClient } from '@mentrily/data-platform';
-import { PermissionCatalog } from '@mentrily/security-toolkit';
-import {
-  ProctoringEventRepository,
-  ProctoringSessionRepository,
-} from '../proctoring.repository.js';
-import { ProctoringPolicyService } from '../proctoring-policy.service.js';
-import { ProctoringReadService } from '../proctoring-read.service.js';
-
-function requireWorkspaceActor(context: RequestContext) {
-  const workspace = context.workspace;
-  if (!workspace?.tenantId || !workspace.workspaceId || !workspace.actorId) {
-    throw new AppError('VALIDATION_ERROR', 'missing workspace actor context', 400);
-  }
-  return workspace;
-}
-
-async function loadAttemptForWorkspace(
-  prisma: PrismaService,
-  attemptId: string,
-  workspaceId: string,
-) {
-  const attempt = await getPrismaClient(prisma).assessmentAttempt.findUnique({
-    where: { id: attemptId },
-    select: {
-      id: true,
-      tenantId: true,
-      workspaceId: true,
-      assessmentId: true,
-      learnerPrincipalId: true,
-      status: true,
-      metadata: true,
-    },
-  });
-  if (!attempt || attempt.workspaceId !== workspaceId) {
-    throw new AppError('NOT_FOUND', 'attempt not found', 404);
-  }
-  return attempt;
-}
-
-@Injectable()
-export class StartProctoringSessionUseCase {
-  constructor(
-    @Inject(PrismaService) private readonly prisma: PrismaService,
-    @Inject(ProctoringSessionRepository)
-    private readonly sessions: ProctoringSessionRepository,
-    @Inject(ProctoringPolicyService)
-    private readonly policy: ProctoringPolicyService,
-    @Inject(ProctoringReadService)
-    private readonly reader: ProctoringReadService,
-    @Inject(PERMISSION_EVALUATOR) private readonly permissions: PermissionEvaluator,
-  ) {}
-
-  async execute(
-    context: RequestContext,
-    attemptId: string,
-  ): Promise<StartProctoringSessionResponseContract> {
-    const workspace = requireWorkspaceActor(context);
-    const permission = await this.permissions.evaluate(
-      { permission: PermissionCatalog.ASSESSMENT_ATTEMPT_READ, workspace },
-      context,
-    );
-    if (!permission.allowed) {
-      throw new AppError('FORBIDDEN', 'permission denied', 403);
-    }
-
-    const attempt = await loadAttemptForWorkspace(this.prisma, attemptId, workspace.workspaceId);
-    if (attempt.learnerPrincipalId !== workspace.actorId) {
-      throw new AppError('FORBIDDEN', 'you do not own this attempt', 403);
-    }
-    if (attempt.status !== 'IN_PROGRESS') {
-      throw new AppError('CONFLICT', 'attempt is not active', 409);
-    }
-
-    const mode = this.policy.getModeFromAssessmentMetadata(
-      (attempt.metadata as Record<string, unknown> | null | undefined) ?? undefined,
-    );
-    const existing = await this.sessions.findLatestByAttempt(attemptId);
-    if (existing && (existing.status === 'ACTIVE' || existing.status === 'PENDING')) {
-      return { summary: this.policy.toAttemptSummary(mode, existing) };
-    }
-
-    if (mode === 'OFF') {
-      return { summary: this.policy.toAttemptSummary(mode, null) };
-    }
-
-    const now = new Date();
-    const session = await this.sessions.create({
-      tenantId: attempt.tenantId,
-      workspaceId: attempt.workspaceId,
-      assessmentId: attempt.assessmentId,
-      attemptId: attempt.id,
-      learnerPrincipalId: attempt.learnerPrincipalId,
-      mode,
-      status: 'ACTIVE',
-      startedAt: now,
-      lastHeartbeatAt: now,
-    });
-
-    return { summary: this.policy.toAttemptSummary(mode, session) };
-  }
-}
-
-@Injectable()
-export class RecordProctoringHeartbeatUseCase {
-  constructor(
-    @Inject(PrismaService) private readonly prisma: PrismaService,
-    @Inject(ProctoringSessionRepository)
-    private readonly sessions: ProctoringSessionRepository,
-    @Inject(ProctoringEventRepository)
-    private readonly events: ProctoringEventRepository,
-    @Inject(ProctoringPolicyService)
-    private readonly policy: ProctoringPolicyService,
-    @Inject(PERMISSION_EVALUATOR) private readonly permissions: PermissionEvaluator,
-  ) {}
-
-  async execute(
-    context: RequestContext,
-    sessionId: string,
-    input: ProctoringHeartbeatRequestContract,
-  ): Promise<ProctoringSessionContract> {
-    const workspace = requireWorkspaceActor(context);
-    const permission = await this.permissions.evaluate(
-      { permission: PermissionCatalog.ASSESSMENT_ATTEMPT_READ, workspace },
-      context,
-    );
-    if (!permission.allowed) {
-      throw new AppError('FORBIDDEN', 'permission denied', 403);
-    }
-
-    const session = await this.sessions.findById(sessionId);
-    if (!session || session.workspaceId !== workspace.workspaceId) {
-      throw new AppError('NOT_FOUND', 'proctoring session not found', 404);
-    }
-    if (session.learnerPrincipalId !== workspace.actorId) {
-      throw new AppError('FORBIDDEN', 'you do not own this monitoring session', 403);
-    }
-    if (session.status !== 'ACTIVE' && session.status !== 'PENDING') {
-      throw new AppError('CONFLICT', 'monitoring session is not active', 409);
-    }
-
-    const recentCount = await this.events.countRecentBySession(
-      sessionId,
-      new Date(Date.now() - 60_000),
-    );
-    if (recentCount >= this.policy.maxEventsPerMinute) {
-      throw new AppError('RATE_LIMITED', 'too many monitoring events', 429);
-    }
-
-    const now = new Date();
-    await this.events.create({
-      tenantId: session.tenantId,
-      workspaceId: session.workspaceId,
-      sessionId: session.id,
-      attemptId: session.attemptId,
-      assessmentId: session.assessmentId,
-      learnerPrincipalId: session.learnerPrincipalId,
-      eventType: 'HEARTBEAT',
-      severity: 'INFO',
-      occurredAt: input.occurredAt ? new Date(input.occurredAt) : now,
-      metadata: this.policy.sanitizeMetadata('HEARTBEAT', {
-        clientTime: input.clientTime,
-        sequence: input.sequence,
-      }),
-    });
-    const updated = await this.sessions.update(sessionId, {
-      status: 'ACTIVE',
-      lastHeartbeatAt: now,
-    });
-    return this.policy.toSessionContract(updated);
-  }
-}
-
-@Injectable()
-export class RecordProctoringEventUseCase {
-  constructor(
-    @Inject(ProctoringSessionRepository)
-    private readonly sessions: ProctoringSessionRepository,
-    @Inject(ProctoringEventRepository)
-    private readonly events: ProctoringEventRepository,
-    @Inject(ProctoringPolicyService)
-    private readonly policy: ProctoringPolicyService,
-    @Inject(PERMISSION_EVALUATOR) private readonly permissions: PermissionEvaluator,
-  ) {}
-
-  async execute(
-    context: RequestContext,
-    sessionId: string,
-    input: RecordProctoringEventRequestContract,
-  ): Promise<RecordProctoringEventResponseContract> {
-    const workspace = requireWorkspaceActor(context);
-    const permission = await this.permissions.evaluate(
-      { permission: PermissionCatalog.ASSESSMENT_ATTEMPT_READ, workspace },
-      context,
-    );
-    if (!permission.allowed) {
-      throw new AppError('FORBIDDEN', 'permission denied', 403);
-    }
-
-    const session = await this.sessions.findById(sessionId);
-    if (!session || session.workspaceId !== workspace.workspaceId) {
-      throw new AppError('NOT_FOUND', 'proctoring session not found', 404);
-    }
-    if (session.learnerPrincipalId !== workspace.actorId) {
-      throw new AppError('FORBIDDEN', 'you do not own this monitoring session', 403);
-    }
-    if (session.status !== 'ACTIVE' && session.status !== 'PENDING') {
-      throw new AppError('CONFLICT', 'monitoring session is not active', 409);
-    }
-    if (!this.policy.isEventTypeAllowed(input.eventType)) {
-      throw new AppError('VALIDATION_ERROR', 'unsupported proctoring event type', 400);
-    }
-    const severity = input.severity ?? 'INFO';
-    if (!this.policy.isSeverityAllowed(severity)) {
-      throw new AppError('VALIDATION_ERROR', 'unsupported proctoring event severity', 400);
-    }
-    const occurredAt = input.occurredAt ? new Date(input.occurredAt) : new Date();
-    if (
-      Number.isNaN(occurredAt.getTime()) ||
-      Math.abs(Date.now() - occurredAt.getTime()) > 24 * 60 * 60_000
-    ) {
-      throw new AppError('VALIDATION_ERROR', 'invalid proctoring event timestamp', 400);
-    }
-
-    const recentCount = await this.events.countRecentBySession(
-      sessionId,
-      new Date(Date.now() - 60_000),
-    );
-    if (recentCount >= this.policy.maxEventsPerMinute) {
-      throw new AppError('RATE_LIMITED', 'too many monitoring events', 429);
-    }
-
-    const result = await this.events.create({
-      tenantId: session.tenantId,
-      workspaceId: session.workspaceId,
-      sessionId: session.id,
-      attemptId: session.attemptId,
-      assessmentId: session.assessmentId,
-      learnerPrincipalId: session.learnerPrincipalId,
-      ...(input.eventId ? { eventId: input.eventId } : {}),
-      eventType: input.eventType,
-      severity,
-      occurredAt,
-      metadata: this.policy.sanitizeMetadata(input.eventType, input.metadata),
-    });
-
-    return {
-      event: this.policy.toEventContract(result.event),
-      duplicate: result.duplicate,
-    };
-  }
-}
-
-@Injectable()
-export class EndProctoringSessionUseCase {
-  constructor(
-    @Inject(ProctoringSessionRepository)
-    private readonly sessions: ProctoringSessionRepository,
-    @Inject(ProctoringEventRepository)
-    private readonly events: ProctoringEventRepository,
-    @Inject(ProctoringPolicyService)
-    private readonly policy: ProctoringPolicyService,
-    @Inject(PERMISSION_EVALUATOR) private readonly permissions: PermissionEvaluator,
-  ) {}
-
-  async execute(context: RequestContext, sessionId: string): Promise<ProctoringSessionContract> {
-    const workspace = requireWorkspaceActor(context);
-    const permission = await this.permissions.evaluate(
-      { permission: PermissionCatalog.ASSESSMENT_ATTEMPT_READ, workspace },
-      context,
-    );
-    if (!permission.allowed) {
-      throw new AppError('FORBIDDEN', 'permission denied', 403);
-    }
-
-    const session = await this.sessions.findById(sessionId);
-    if (!session || session.workspaceId !== workspace.workspaceId) {
-      throw new AppError('NOT_FOUND', 'proctoring session not found', 404);
-    }
-    if (session.learnerPrincipalId !== workspace.actorId) {
-      throw new AppError('FORBIDDEN', 'you do not own this monitoring session', 403);
-    }
-    if (
-      session.status === 'ENDED' ||
-      session.status === 'EXPIRED' ||
-      session.status === 'CANCELLED'
-    ) {
-      return this.policy.toSessionContract(session);
-    }
-
-    const now = new Date();
-    await this.events.create({
-      tenantId: session.tenantId,
-      workspaceId: session.workspaceId,
-      sessionId: session.id,
-      attemptId: session.attemptId,
-      assessmentId: session.assessmentId,
-      learnerPrincipalId: session.learnerPrincipalId,
-      eventType: 'SESSION_ENDED',
-      severity: 'INFO',
-      occurredAt: now,
-      metadata: {},
-    });
-    const updated = await this.sessions.update(sessionId, {
-      status: 'ENDED',
-      endedAt: now,
-      lastHeartbeatAt: now,
-    });
-    return this.policy.toSessionContract(updated);
-  }
-}
-
-@Injectable()
-export class GetAttemptMonitoringTimelineUseCase {
-  constructor(
-    @Inject(ProctoringReadService)
-    private readonly reader: ProctoringReadService,
-    @Inject(PERMISSION_EVALUATOR) private readonly permissions: PermissionEvaluator,
-  ) {}
-
-  async execute(
-    context: RequestContext,
-    attemptId: string,
-  ): Promise<ProctoringAttemptMonitoringTimelineContract> {
-    const workspace = requireWorkspaceActor(context);
-    const permission = await this.permissions.evaluate(
-      { permission: PermissionCatalog.ASSESSMENT_MONITOR, workspace },
-      context,
-    );
-    if (!permission.allowed) {
-      throw new AppError('FORBIDDEN', 'permission denied', 403);
-    }
-    return this.reader.getAttemptTimeline(attemptId, workspace.workspaceId);
-  }
-}
-
-@Injectable()
-export class GetActiveAttemptMonitoringUseCase {
-  constructor(
-    @Inject(ProctoringReadService)
-    private readonly reader: ProctoringReadService,
-    @Inject(PERMISSION_EVALUATOR) private readonly permissions: PermissionEvaluator,
-  ) {}
-
-  async execute(
-    context: RequestContext,
-    assessmentId: string,
-  ): Promise<ProctoringAttemptMonitoringSummaryContract> {
-    const workspace = requireWorkspaceActor(context);
-    const permission = await this.permissions.evaluate(
-      { permission: PermissionCatalog.ASSESSMENT_MONITOR, workspace },
-      context,
-    );
-    if (!permission.allowed) {
-      throw new AppError('FORBIDDEN', 'permission denied', 403);
-    }
-    return this.reader.getActiveAssessmentSummary(assessmentId, workspace.workspaceId);
-  }
-}
-
-@Injectable()
-export class GetProctoringSessionUseCase {
-  constructor(
-    @Inject(ProctoringSessionRepository)
-    private readonly sessions: ProctoringSessionRepository,
-    @Inject(ProctoringPolicyService)
-    private readonly policy: ProctoringPolicyService,
-    @Inject(PERMISSION_EVALUATOR) private readonly permissions: PermissionEvaluator,
-  ) {}
-
-  async execute(context: RequestContext, sessionId: string): Promise<ProctoringSessionContract> {
-    const workspace = requireWorkspaceActor(context);
-    const permission = await this.permissions.evaluate(
-      { permission: PermissionCatalog.ASSESSMENT_MONITOR, workspace },
-      context,
-    );
-    if (!permission.allowed) {
-      throw new AppError('FORBIDDEN', 'permission denied', 403);
-    }
-    const session = await this.sessions.findById(sessionId);
-    if (!session || session.workspaceId !== workspace.workspaceId) {
-      throw new AppError('NOT_FOUND', 'proctoring session not found', 404);
-    }
-    return this.policy.toSessionContract(session);
-  }
-}
-
-@Injectable()
-export class GetLearnerAttemptProctoringUseCase {
-  constructor(@Inject(ProctoringReadService) private readonly reader: ProctoringReadService) {}
-
-  async execute(
-    context: RequestContext,
-    attemptId: string,
-    transaction?: TransactionContext,
-  ): Promise<ProctoringAttemptSummaryContract> {
-    const workspace = requireWorkspaceActor(context);
-    return this.reader.getAttemptSummary(attemptId, workspace.workspaceId, transaction);
-  }
-}
-
-@Injectable()
-export class SyncAttemptTerminalProctoringUseCase {
-  constructor(
-    @Inject(PrismaService) private readonly prisma: PrismaService,
-    @Inject(ProctoringSessionRepository)
-    private readonly sessions: ProctoringSessionRepository,
-  ) {}
-
-  async execute(
-    attemptId: string,
-    terminalStatus: 'ENDED' | 'EXPIRED' | 'CANCELLED',
-    transaction?: TransactionContext,
-  ): Promise<void> {
-    const attempt = await getPrismaClient(this.prisma, transaction).assessmentAttempt.findUnique({
-      where: { id: attemptId },
-      select: { id: true },
-    });
-    if (!attempt) {
-      return;
-    }
-
-    const latest = await this.sessions.findLatestByAttempt(attemptId, transaction);
-    if (
-      !latest ||
-      latest.status === 'ENDED' ||
-      latest.status === 'EXPIRED' ||
-      latest.status === 'CANCELLED'
-    ) {
-      return;
-    }
-
-    await this.sessions.update(
-      latest.id,
-      {
-        status: terminalStatus,
-        endedAt: new Date(),
-      },
-      transaction,
-    );
-  }
-}
-</file>
-
-<file path="backend/applications/platform-api/src/modules/proctoring/application/proctoring-policy.service.ts">
-import { Injectable } from '@nestjs/common';
-import type {
-  ProctoringAttemptSummaryContract,
-  ProctoringEventContract,
-  ProctoringLearnerDisclosureContract,
-  ProctoringSessionContract,
-} from '@mentrily/contract-catalog';
-import type {
-  ProctoringEventRecord,
-  ProctoringEventSeverity,
-  ProctoringEventType,
-  ProctoringMode,
-  ProctoringSessionRecord,
-} from './proctoring.types.js';
-
-const ALLOWED_EVENT_TYPES: ReadonlySet<ProctoringEventType> = new Set([
-  'SESSION_STARTED',
-  'SESSION_ENDED',
-  'HEARTBEAT',
-  'WINDOW_BLUR',
-  'WINDOW_FOCUS',
-  'VISIBILITY_HIDDEN',
-  'VISIBILITY_VISIBLE',
-  'FULLSCREEN_EXITED',
-  'FULLSCREEN_ENTERED',
-  'COPY_ATTEMPTED',
-  'PASTE_ATTEMPTED',
-  'NETWORK_OFFLINE',
-  'NETWORK_ONLINE',
-  'SUSPICIOUS_ACTIVITY_REPORTED',
-  'SYSTEM_WARNING',
-]);
-
-const ALLOWED_SEVERITIES: ReadonlySet<ProctoringEventSeverity> = new Set([
-  'INFO',
-  'LOW',
-  'MEDIUM',
-  'HIGH',
-]);
-
-const ALLOWED_METADATA_KEYS: Readonly<Record<ProctoringEventType, ReadonlySet<string>>> = {
-  SESSION_STARTED: new Set(['clientTime', 'sequence']),
-  SESSION_ENDED: new Set(['clientTime', 'sequence']),
-  HEARTBEAT: new Set(['clientTime', 'sequence']),
-  WINDOW_BLUR: new Set(['clientTime', 'sequence']),
-  WINDOW_FOCUS: new Set(['clientTime', 'sequence']),
-  VISIBILITY_HIDDEN: new Set(['clientTime', 'sequence']),
-  VISIBILITY_VISIBLE: new Set(['clientTime', 'sequence']),
-  FULLSCREEN_EXITED: new Set(['clientTime', 'sequence']),
-  FULLSCREEN_ENTERED: new Set(['clientTime', 'sequence']),
-  NETWORK_OFFLINE: new Set(['clientTime', 'sequence']),
-  NETWORK_ONLINE: new Set(['clientTime', 'sequence']),
-  COPY_ATTEMPTED: new Set(['clientTime', 'sequence', 'questionId']),
-  PASTE_ATTEMPTED: new Set(['clientTime', 'sequence', 'questionId']),
-  SUSPICIOUS_ACTIVITY_REPORTED: new Set(['clientTime', 'sequence', 'message']),
-  SYSTEM_WARNING: new Set(['clientTime', 'sequence', 'message']),
-};
-
-@Injectable()
-export class ProctoringPolicyService {
-  readonly maxMetadataBytes = 512;
-  readonly maxEventsPerMinute = 40;
-
-  getModeFromAssessmentMetadata(
-    metadata: Record<string, unknown> | null | undefined,
-  ): ProctoringMode {
-    const raw = metadata?.proctoringMode;
-    if (raw === 'OFF' || raw === 'BASIC_EVENT_MONITORING' || raw === 'RESERVED_LIVE_MONITORING') {
-      return raw;
-    }
-    return 'OFF';
-  }
-
-  buildDisclosure(mode: ProctoringMode): ProctoringLearnerDisclosureContract {
-    return {
-      mode,
-      required: mode !== 'OFF',
-      title: mode === 'OFF' ? 'Monitoring disabled' : 'Monitoring disclosure',
-      message:
-        mode === 'OFF'
-          ? 'This attempt does not use monitoring.'
-          : 'This attempt records limited browser activity metadata during the assessment. Monitoring is visible and never hidden.',
-      visible: true,
-      captures:
-        mode === 'OFF'
-          ? []
-          : [
-              'Window and tab focus changes',
-              'Page visibility changes',
-              'Fullscreen entry and exit',
-              'Online and offline state',
-              'Copy and paste attempt metadata',
-            ],
-      doesNotCapture: [
-        'Clipboard contents',
-        'Raw keystrokes',
-        'Webcam video',
-        'Screen recordings',
-        'Audio recordings',
-        'Biometric identity data',
-      ],
-    };
-  }
-
-  isEventTypeAllowed(eventType: ProctoringEventType): boolean {
-    return ALLOWED_EVENT_TYPES.has(eventType);
-  }
-
-  isSeverityAllowed(severity: ProctoringEventSeverity): boolean {
-    return ALLOWED_SEVERITIES.has(severity);
-  }
-
-  sanitizeMetadata(
-    eventType: ProctoringEventType,
-    metadata: Record<string, unknown> | undefined,
-  ): Record<string, unknown> {
-    const allowedKeys = ALLOWED_METADATA_KEYS[eventType] ?? new Set<string>();
-    const sanitized: Record<string, unknown> = {};
-
-    for (const [key, value] of Object.entries(metadata ?? {})) {
-      if (!allowedKeys.has(key)) {
-        continue;
-      }
-
-      if (key === 'questionId') {
-        if (typeof value === 'string' && value.length <= 128) {
-          sanitized[key] = value;
-        }
-        continue;
-      }
-
-      if (key === 'sequence') {
-        if (typeof value === 'number' && Number.isFinite(value) && value >= 0) {
-          sanitized[key] = Math.floor(value);
-        }
-        continue;
-      }
-
-      if (key === 'clientTime' || key === 'message') {
-        if (typeof value === 'string' && value.length <= 160) {
-          sanitized[key] = value;
-        }
-      }
-    }
-
-    if (JSON.stringify(sanitized).length > this.maxMetadataBytes) {
-      throw new Error('metadata exceeds maximum size');
-    }
-
-    return sanitized;
-  }
-
-  getSafeEventMessage(eventType: ProctoringEventType): string {
-    switch (eventType) {
-      case 'SESSION_STARTED':
-        return 'Monitoring session started';
-      case 'SESSION_ENDED':
-        return 'Monitoring session ended';
-      case 'HEARTBEAT':
-        return 'Heartbeat received';
-      case 'WINDOW_BLUR':
-        return 'Assessment window lost focus';
-      case 'WINDOW_FOCUS':
-        return 'Assessment window regained focus';
-      case 'VISIBILITY_HIDDEN':
-        return 'Assessment tab became hidden';
-      case 'VISIBILITY_VISIBLE':
-        return 'Assessment tab became visible';
-      case 'FULLSCREEN_EXITED':
-        return 'Fullscreen mode exited';
-      case 'FULLSCREEN_ENTERED':
-        return 'Fullscreen mode entered';
-      case 'COPY_ATTEMPTED':
-        return 'Copy attempt recorded';
-      case 'PASTE_ATTEMPTED':
-        return 'Paste attempt recorded';
-      case 'NETWORK_OFFLINE':
-        return 'Device went offline';
-      case 'NETWORK_ONLINE':
-        return 'Device came back online';
-      case 'SUSPICIOUS_ACTIVITY_REPORTED':
-        return 'Suspicious activity was reported';
-      case 'SYSTEM_WARNING':
-        return 'A system warning was recorded';
-    }
-    return 'Monitoring event recorded';
-  }
-
-  toSessionContract(session: ProctoringSessionRecord): ProctoringSessionContract {
-    return {
-      sessionId: session.id,
-      attemptId: session.attemptId,
-      assessmentId: session.assessmentId,
-      status: session.status,
-      mode: session.mode,
-      startedAt: session.startedAt.toISOString(),
-      ...(session.endedAt ? { endedAt: session.endedAt.toISOString() } : {}),
-      ...(session.lastHeartbeatAt
-        ? { lastHeartbeatAt: session.lastHeartbeatAt.toISOString() }
-        : {}),
-    };
-  }
-
-  toEventContract(event: ProctoringEventRecord): ProctoringEventContract {
-    return {
-      id: event.id,
-      sessionId: event.sessionId,
-      attemptId: event.attemptId,
-      assessmentId: event.assessmentId,
-      eventType: event.eventType,
-      severity: event.severity,
-      occurredAt: event.occurredAt.toISOString(),
-      receivedAt: event.receivedAt.toISOString(),
-      message: this.getSafeEventMessage(event.eventType),
-      metadataSummary: { ...event.metadata },
-    };
-  }
-
-  toAttemptSummary(
-    mode: ProctoringMode,
-    session?: ProctoringSessionRecord | null,
-  ): ProctoringAttemptSummaryContract {
-    return {
-      enabled: mode !== 'OFF',
-      mode,
-      required: mode !== 'OFF',
-      disclosure: this.buildDisclosure(mode),
-      ...(session ? { session: this.toSessionContract(session) } : {}),
-    };
-  }
-}
-</file>
-
 <file path="backend/applications/platform-api/src/modules/proctoring/application/proctoring-read.service.ts">
 import { Inject, Injectable } from '@nestjs/common';
 import type {
@@ -43945,6 +43249,501 @@ export class ProctoringController {
     return this.getSession.execute(requestContext(request), sessionId);
   }
 }
+</file>
+
+<file path="backend/applications/platform-api/src/modules/proctoring/tests/proctoring-api.integration.spec.ts">
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { Test } from '@nestjs/testing';
+import { FastifyAdapter, type NestFastifyApplication } from '@nestjs/platform-fastify';
+import {
+  PERMISSION_EVALUATOR,
+  TRANSACTION_RUNNER,
+  type PermissionEvaluator,
+  type TransactionRunner,
+} from '@mentrily/service-core';
+import { PrismaService } from '@mentrily/data-platform';
+import { truncatePublicSchema } from '@mentrily/testing-toolkit';
+import { AppModule } from '../../app.module.js';
+import { registerCorrelationIdHook } from '../../../foundation/correlation-id.hook.js';
+
+describe.sequential('Proctoring API (integration)', () => {
+  let app: NestFastifyApplication;
+  let prisma: PrismaService;
+
+  const allowedPermissions = new Set<string>();
+
+  const creatorHeaders = {
+    'x-request-id': 'c1111111-1111-4111-8111-111111111111',
+    'x-correlation-id': 'c2222222-2222-4222-8222-222222222222',
+    'x-tenant-id': 'c3333333-3333-4333-8333-333333333333',
+    'x-workspace-id': 'c4444444-4444-4444-8444-444444444444',
+    'x-actor-id': 'c5555555-5555-4555-8555-555555555555',
+  } as const;
+
+  const learnerHeaders = {
+    ...creatorHeaders,
+    'x-actor-id': 'c6666666-6666-4666-8666-666666666666',
+  } as const;
+
+  const otherLearnerHeaders = {
+    ...creatorHeaders,
+    'x-actor-id': 'c7777777-7777-4777-8777-777777777777',
+  } as const;
+
+  const otherWorkspaceHeaders = {
+    ...learnerHeaders,
+    'x-workspace-id': 'c8888888-8888-4888-8888-888888888888',
+  } as const;
+
+  beforeAll(async () => {
+    const prismaRef: { current: PrismaService | undefined } = { current: undefined };
+    const permissionEvaluator: PermissionEvaluator = {
+      evaluate: async (req) => ({
+        allowed: allowedPermissions.has(req.permission),
+      }),
+    };
+    const transactionRunner: TransactionRunner = {
+      run: async <T>(operation: Parameters<TransactionRunner['run']>[0]): Promise<T> => {
+        if (!prismaRef.current) {
+          throw new Error('prismaRef not initialized');
+        }
+        return prismaRef.current.$transaction(async (tx) =>
+          operation({ transactionId: 'tx-proctoring-api-test', client: tx }),
+        ) as Promise<T>;
+      },
+    };
+
+    const moduleRef = await Test.createTestingModule({ imports: [AppModule] })
+      .overrideProvider(PERMISSION_EVALUATOR)
+      .useValue(permissionEvaluator)
+      .overrideProvider(TRANSACTION_RUNNER)
+      .useValue(transactionRunner)
+      .compile();
+
+    app = moduleRef.createNestApplication<NestFastifyApplication>(new FastifyAdapter(), {
+      rawBody: true,
+    });
+    registerCorrelationIdHook(app.getHttpAdapter().getInstance());
+    await app.init();
+    await app.getHttpAdapter().getInstance().ready();
+    prisma = app.get(PrismaService);
+    prismaRef.current = prisma;
+  });
+
+  beforeEach(async () => {
+    await truncatePublicSchema(prisma);
+    allowedPermissions.clear();
+    // Default allowed permission to let learners read attempt metadata to start/run assessments
+    allowedPermissions.add('assessment.attempt.read');
+  });
+
+  afterAll(async () => {
+    await app.close();
+  });
+
+  function expectHttpStatus(
+    response: { statusCode: number; body: string },
+    expected: number,
+  ): void {
+    if (response.statusCode !== expected) {
+      throw new Error(
+        `Expected HTTP ${expected} but received ${response.statusCode}. Body: ${response.body}`,
+      );
+    }
+  }
+
+  async function setupAssessmentAndAttempt(proctoringMode: string = 'BASIC_EVENT_MONITORING') {
+    const assessment = await prisma.assessment.create({
+      data: {
+        tenantId: creatorHeaders['x-tenant-id'],
+        workspaceId: creatorHeaders['x-workspace-id'],
+        ownerPrincipalId: creatorHeaders['x-actor-id'],
+        title: 'Proctoring Test Assessment',
+        purpose: 'QUIZ',
+        status: 'PUBLISHED',
+        visibility: 'WORKSPACE',
+        resultReleasePolicy: 'IMMEDIATE',
+        attemptPolicy: {},
+        metadata: { proctoringMode },
+      },
+    });
+
+    const version = await prisma.assessmentVersion.create({
+      data: {
+        assessmentId: assessment.id,
+        versionNumber: 1,
+        status: 'PUBLISHED_SNAPSHOT',
+        createdByPrincipalId: creatorHeaders['x-actor-id'],
+      },
+    });
+
+    const snapshot = await prisma.assessmentPublishedSnapshot.create({
+      data: {
+        assessmentId: assessment.id,
+        versionId: version.id,
+        versionNumber: 1,
+        sections: [],
+        looseQuestions: [],
+        publishedByPrincipalId: creatorHeaders['x-actor-id'],
+        publishedAt: new Date(),
+      },
+    });
+
+    const attempt = await prisma.assessmentAttempt.create({
+      data: {
+        tenantId: learnerHeaders['x-tenant-id'],
+        workspaceId: learnerHeaders['x-workspace-id'],
+        assessmentId: assessment.id,
+        snapshotId: snapshot.id,
+        snapshotVersionId: version.id,
+        snapshotVersionNumber: 1,
+        learnerPrincipalId: learnerHeaders['x-actor-id'],
+        status: 'IN_PROGRESS',
+        startedAt: new Date(),
+        metadata: { proctoringMode },
+      },
+    });
+
+    return { assessment, attempt };
+  }
+
+  describe('Session Lifecycle & Concurrency', () => {
+    it('creates a proctoring session, blocks concurrent double-creation (coalesces to one)', async () => {
+      const { attempt } = await setupAssessmentAndAttempt();
+
+      // Launch multiple concurrent start session requests to test concurrency/race condition safety
+      const startResponses = await Promise.all(
+        Array.from({ length: 5 }, () =>
+          app.inject({
+            method: 'POST',
+            url: `/workspace/proctoring/attempts/${attempt.id}/session/start`,
+            headers: learnerHeaders,
+          }),
+        ),
+      );
+
+      startResponses.forEach((res) => expectHttpStatus(res, 201));
+
+      const sessionIds = startResponses.map((res) => {
+        const payload = res.json<{ summary: { session?: { sessionId: string } } }>();
+        return payload.summary.session?.sessionId;
+      });
+
+      // Verify that exactly one session was created and returned
+      const uniqueSessionIds = new Set(sessionIds.filter(Boolean));
+      expect(uniqueSessionIds.size).toBe(1);
+
+      const dbSessionsCount = await prisma.assessmentProctoringSession.count({
+        where: { attemptId: attempt.id },
+      });
+      expect(dbSessionsCount).toBe(1);
+    });
+
+    it('returns empty session summary if proctoring mode is OFF', async () => {
+      const { attempt } = await setupAssessmentAndAttempt('OFF');
+
+      const startRes = await app.inject({
+        method: 'POST',
+        url: `/workspace/proctoring/attempts/${attempt.id}/session/start`,
+        headers: learnerHeaders,
+      });
+
+      expectHttpStatus(startRes, 201);
+      const data = startRes.json<{ summary: { enabled: boolean; session?: unknown } }>();
+      expect(data.summary.enabled).toBe(false);
+      expect(data.summary.session).toBeUndefined();
+    });
+
+    it('syncs terminal attempt states to end the proctoring session', async () => {
+      const { attempt } = await setupAssessmentAndAttempt();
+
+      const startRes = await app.inject({
+        method: 'POST',
+        url: `/workspace/proctoring/attempts/${attempt.id}/session/start`,
+        headers: learnerHeaders,
+      });
+      expectHttpStatus(startRes, 201);
+      const sessionId = startRes.json<{ summary: { session: { sessionId: string } } }>().summary
+        .session.sessionId;
+
+      // Mock end attempt status triggering sync terminal proctoring
+      // We can invoke the SyncAttemptTerminalProctoringUseCase indirectly by completing/cancelling the attempt
+      // Or we can verify the session end endpoint
+      const endRes = await app.inject({
+        method: 'POST',
+        url: `/workspace/proctoring/sessions/${sessionId}/end`,
+        headers: learnerHeaders,
+      });
+      expectHttpStatus(endRes, 201);
+      const endedSession = endRes.json<{ status: string }>();
+      expect(endedSession.status).toBe('ENDED');
+
+      const dbSession = await prisma.assessmentProctoringSession.findUniqueOrThrow({
+        where: { id: sessionId },
+      });
+      expect(dbSession.status).toBe('ENDED');
+      expect(dbSession.endedAt).not.toBeNull();
+    });
+  });
+
+  describe('Access Control & Validation', () => {
+    it('blocks starting a session if the learner does not own the attempt', async () => {
+      const { attempt } = await setupAssessmentAndAttempt();
+
+      const startRes = await app.inject({
+        method: 'POST',
+        url: `/workspace/proctoring/attempts/${attempt.id}/session/start`,
+        headers: otherLearnerHeaders,
+      });
+      expectHttpStatus(startRes, 403);
+    });
+
+    it('blocks starting a session if attempted from another workspace', async () => {
+      const { attempt } = await setupAssessmentAndAttempt();
+
+      const startRes = await app.inject({
+        method: 'POST',
+        url: `/workspace/proctoring/attempts/${attempt.id}/session/start`,
+        headers: otherWorkspaceHeaders,
+      });
+      // Workspace scoping blocks finding the attempt
+      expectHttpStatus(startRes, 404);
+    });
+
+    it('blocks endpoints if request-context is missing permission assessment.attempt.read', async () => {
+      const { attempt } = await setupAssessmentAndAttempt();
+      allowedPermissions.clear(); // remove assessment.attempt.read
+
+      const startRes = await app.inject({
+        method: 'POST',
+        url: `/workspace/proctoring/attempts/${attempt.id}/session/start`,
+        headers: learnerHeaders,
+      });
+      expectHttpStatus(startRes, 403);
+    });
+  });
+
+  describe('Event Ingestion & Data Constraints', () => {
+    let sessionId: string;
+    let attemptId: string;
+    let assessmentId: string;
+
+    beforeEach(async () => {
+      const { attempt } = await setupAssessmentAndAttempt();
+      attemptId = attempt.id;
+      assessmentId = attempt.assessmentId;
+
+      const startRes = await app.inject({
+        method: 'POST',
+        url: `/workspace/proctoring/attempts/${attempt.id}/session/start`,
+        headers: learnerHeaders,
+      });
+      expectHttpStatus(startRes, 201);
+      sessionId = startRes.json<{ summary: { session: { sessionId: string } } }>().summary.session
+        .sessionId;
+    });
+
+    it('ingests allowed events successfully', async () => {
+      const eventRes = await app.inject({
+        method: 'POST',
+        url: `/workspace/proctoring/sessions/${sessionId}/events`,
+        headers: learnerHeaders,
+        payload: {
+          eventType: 'WINDOW_BLUR',
+          severity: 'LOW',
+          occurredAt: new Date().toISOString(),
+          metadata: { clientTime: '2026-05-26T21:00:00Z', sequence: 1 },
+        },
+      });
+      expectHttpStatus(eventRes, 201);
+      const data = eventRes.json<{ duplicate: boolean; event: { eventType: string } }>();
+      expect(data.duplicate).toBe(false);
+      expect(data.event.eventType).toBe('WINDOW_BLUR');
+    });
+
+    it('blocks event ingestion for unsupported event types', async () => {
+      const eventRes = await app.inject({
+        method: 'POST',
+        url: `/workspace/proctoring/sessions/${sessionId}/events`,
+        headers: learnerHeaders,
+        payload: {
+          eventType: 'UNSUPPORTED_RANDOM_EVENT',
+          severity: 'LOW',
+          occurredAt: new Date().toISOString(),
+          metadata: {},
+        },
+      });
+      expectHttpStatus(eventRes, 400);
+    });
+
+    it('converts oversized metadata errors into a safe 400 validation response', async () => {
+      // Create metadata exceeding 512 bytes limit
+      const longMessage = 'a'.repeat(600);
+      const eventRes = await app.inject({
+        method: 'POST',
+        url: `/workspace/proctoring/sessions/${sessionId}/events`,
+        headers: learnerHeaders,
+        payload: {
+          eventType: 'SUSPICIOUS_ACTIVITY_REPORTED',
+          severity: 'HIGH',
+          occurredAt: new Date().toISOString(),
+          metadata: { message: longMessage },
+        },
+      });
+
+      // Verify that this throws a 400 Bad Request / Validation error instead of an internal 500 error
+      expectHttpStatus(eventRes, 400);
+      expect(eventRes.json().error.code).toBe('VALIDATION_ERROR');
+    });
+
+    it('returns duplicate=true for matching eventIds (idempotency)', async () => {
+      const eventId = 'event-unique-id-123';
+      const payload = {
+        eventId,
+        eventType: 'PASTE_ATTEMPTED',
+        severity: 'MEDIUM',
+        occurredAt: new Date().toISOString(),
+        metadata: { clientTime: '2026-05-26T21:00:00Z', sequence: 2, questionId: 'q-1' },
+      };
+
+      const firstRes = await app.inject({
+        method: 'POST',
+        url: `/workspace/proctoring/sessions/${sessionId}/events`,
+        headers: learnerHeaders,
+        payload,
+      });
+      expectHttpStatus(firstRes, 201);
+      expect(firstRes.json().duplicate).toBe(false);
+
+      const secondRes = await app.inject({
+        method: 'POST',
+        url: `/workspace/proctoring/sessions/${sessionId}/events`,
+        headers: learnerHeaders,
+        payload,
+      });
+      expectHttpStatus(secondRes, 201);
+      expect(secondRes.json().duplicate).toBe(true);
+    });
+
+    it('enforces rate limiting on monitoring events (max 40 events/minute)', async () => {
+      // Generate 40 events first
+      for (let i = 0; i < 40; i++) {
+        await prisma.assessmentProctoringEvent.create({
+          data: {
+            tenantId: learnerHeaders['x-tenant-id'],
+            workspaceId: learnerHeaders['x-workspace-id'],
+            sessionId,
+            attemptId,
+            assessmentId,
+            learnerPrincipalId: learnerHeaders['x-actor-id'],
+            eventType: 'WINDOW_BLUR',
+            occurredAt: new Date(),
+            receivedAt: new Date(),
+            metadata: {},
+          },
+        });
+      }
+
+      // 41st request should be rate-limited
+      const rateLimitedRes = await app.inject({
+        method: 'POST',
+        url: `/workspace/proctoring/sessions/${sessionId}/events`,
+        headers: learnerHeaders,
+        payload: {
+          eventType: 'WINDOW_FOCUS',
+          severity: 'INFO',
+          occurredAt: new Date().toISOString(),
+          metadata: {},
+        },
+      });
+
+      expectHttpStatus(rateLimitedRes, 429);
+      expect(rateLimitedRes.json().error.code).toBe('RATE_LIMITED');
+    });
+
+    it('blocks event ingestion after the session is ended', async () => {
+      // End session first
+      const endRes = await app.inject({
+        method: 'POST',
+        url: `/workspace/proctoring/sessions/${sessionId}/end`,
+        headers: learnerHeaders,
+      });
+      expectHttpStatus(endRes, 201);
+
+      // Try to ingest event
+      const eventRes = await app.inject({
+        method: 'POST',
+        url: `/workspace/proctoring/sessions/${sessionId}/events`,
+        headers: learnerHeaders,
+        payload: {
+          eventType: 'WINDOW_BLUR',
+          severity: 'LOW',
+          occurredAt: new Date().toISOString(),
+          metadata: {},
+        },
+      });
+
+      expectHttpStatus(eventRes, 409);
+      expect(eventRes.json().error.code).toBe('CONFLICT');
+    });
+  });
+
+  describe('Teacher Monitoring & Timeline Read', () => {
+    let attemptId: string;
+    let assessmentId: string;
+
+    beforeEach(async () => {
+      const { attempt, assessment } = await setupAssessmentAndAttempt();
+      attemptId = attempt.id;
+      assessmentId = assessment.id;
+
+      allowedPermissions.add('assessment.monitor');
+    });
+
+    it('allows workspace teachers/admins with assessment.monitor permission to read timelines and summaries', async () => {
+      // 1. Read attempt timeline
+      const timelineRes = await app.inject({
+        method: 'GET',
+        url: `/workspace/proctoring/attempts/${attemptId}/timeline`,
+        headers: creatorHeaders, // teacher/creator headers
+      });
+      expectHttpStatus(timelineRes, 200);
+      expect(timelineRes.json()).toHaveProperty('events');
+
+      // 2. Read active assessments summary
+      const activeRes = await app.inject({
+        method: 'GET',
+        url: `/workspace/proctoring/assessments/${assessmentId}/active`,
+        headers: creatorHeaders,
+      });
+      expectHttpStatus(activeRes, 200);
+      expect(activeRes.json()).toHaveProperty('sessions');
+    });
+
+    it('blocks timeline read and summaries if assessment.monitor permission is missing', async () => {
+      allowedPermissions.delete('assessment.monitor');
+
+      const timelineRes = await app.inject({
+        method: 'GET',
+        url: `/workspace/proctoring/attempts/${attemptId}/timeline`,
+        headers: creatorHeaders,
+      });
+      expectHttpStatus(timelineRes, 403);
+    });
+
+    it('blocks learners from accessing teacher timeline endpoints', async () => {
+      // Learner does not have assessment.monitor permission
+      allowedPermissions.delete('assessment.monitor');
+
+      const timelineRes = await app.inject({
+        method: 'GET',
+        url: `/workspace/proctoring/attempts/${attemptId}/timeline`,
+        headers: learnerHeaders,
+      });
+      expectHttpStatus(timelineRes, 403);
+    });
+  });
+});
 </file>
 
 <file path="backend/applications/platform-api/src/modules/proctoring/tests/proctoring-policy.service.spec.ts">
@@ -81445,6 +81244,723 @@ import { MediaLibraryController } from './presentation/index.js';
   ],
 })
 export class MediaLibraryModule {}
+</file>
+
+<file path="backend/applications/platform-api/src/modules/proctoring/application/use-cases/proctoring.use-cases.ts">
+import { Inject, Injectable } from '@nestjs/common';
+import type {
+  ProctoringAttemptMonitoringSummaryContract,
+  ProctoringAttemptMonitoringTimelineContract,
+  ProctoringAttemptSummaryContract,
+  ProctoringHeartbeatRequestContract,
+  ProctoringSessionContract,
+  RecordProctoringEventRequestContract,
+  RecordProctoringEventResponseContract,
+  StartProctoringSessionResponseContract,
+} from '@mentrily/contract-catalog';
+import {
+  AppError,
+  PERMISSION_EVALUATOR,
+  PermissionEvaluator,
+  RequestContext,
+  TransactionContext,
+  TRANSACTION_RUNNER,
+  TransactionRunner,
+} from '@mentrily/service-core';
+import { PrismaService, getPrismaClient } from '@mentrily/data-platform';
+import { PermissionCatalog } from '@mentrily/security-toolkit';
+import {
+  ProctoringEventRepository,
+  ProctoringSessionRepository,
+} from '../proctoring.repository.js';
+import type { ProctoringSessionRecord } from '../proctoring.types.js';
+import { ProctoringPolicyService } from '../proctoring-policy.service.js';
+import { ProctoringReadService } from '../proctoring-read.service.js';
+
+function requireWorkspaceActor(context: RequestContext) {
+  const workspace = context.workspace;
+  if (!workspace?.tenantId || !workspace.workspaceId || !workspace.actorId) {
+    throw new AppError('VALIDATION_ERROR', 'missing workspace actor context', 400);
+  }
+  return workspace;
+}
+
+async function loadAttemptForWorkspace(
+  prisma: PrismaService,
+  attemptId: string,
+  workspaceId: string,
+) {
+  const attempt = await getPrismaClient(prisma).assessmentAttempt.findUnique({
+    where: { id: attemptId },
+    select: {
+      id: true,
+      tenantId: true,
+      workspaceId: true,
+      assessmentId: true,
+      learnerPrincipalId: true,
+      status: true,
+      metadata: true,
+    },
+  });
+  if (!attempt || attempt.workspaceId !== workspaceId) {
+    throw new AppError('NOT_FOUND', 'attempt not found', 404);
+  }
+  return attempt;
+}
+
+@Injectable()
+export class StartProctoringSessionUseCase {
+  constructor(
+    @Inject(PrismaService) private readonly prisma: PrismaService,
+    @Inject(ProctoringSessionRepository)
+    private readonly sessions: ProctoringSessionRepository,
+    @Inject(ProctoringPolicyService)
+    private readonly policy: ProctoringPolicyService,
+    @Inject(ProctoringReadService)
+    private readonly reader: ProctoringReadService,
+    @Inject(PERMISSION_EVALUATOR) private readonly permissions: PermissionEvaluator,
+    @Inject(TRANSACTION_RUNNER) private readonly transactionRunner: TransactionRunner,
+  ) {}
+
+  async execute(
+    context: RequestContext,
+    attemptId: string,
+  ): Promise<StartProctoringSessionResponseContract> {
+    const workspace = requireWorkspaceActor(context);
+    const permission = await this.permissions.evaluate(
+      { permission: PermissionCatalog.ASSESSMENT_ATTEMPT_READ, workspace },
+      context,
+    );
+    if (!permission.allowed) {
+      throw new AppError('FORBIDDEN', 'permission denied', 403);
+    }
+
+    const attempt = await loadAttemptForWorkspace(this.prisma, attemptId, workspace.workspaceId);
+    if (attempt.learnerPrincipalId !== workspace.actorId) {
+      throw new AppError('FORBIDDEN', 'you do not own this attempt', 403);
+    }
+    if (attempt.status !== 'IN_PROGRESS') {
+      throw new AppError('CONFLICT', 'attempt is not active', 409);
+    }
+
+    const mode = this.policy.getModeFromAssessmentMetadata(
+      (attempt.metadata as Record<string, unknown> | null | undefined) ?? undefined,
+    );
+
+    if (mode === 'OFF') {
+      return { summary: this.policy.toAttemptSummary(mode, null) };
+    }
+
+    const session = await this.transactionRunner.run<ProctoringSessionRecord>(async (tx) => {
+      const client = getPrismaClient(this.prisma, tx);
+      await client.$executeRawUnsafe(
+        'SELECT id FROM "AssessmentAttempt" WHERE id = $1::uuid FOR UPDATE',
+        attemptId,
+      );
+
+      const existing = await this.sessions.findLatestByAttempt(attemptId, tx);
+      if (existing && (existing.status === 'ACTIVE' || existing.status === 'PENDING')) {
+        return existing;
+      }
+
+      const now = new Date();
+      return await this.sessions.create(
+        {
+          tenantId: attempt.tenantId,
+          workspaceId: attempt.workspaceId,
+          assessmentId: attempt.assessmentId,
+          attemptId: attempt.id,
+          learnerPrincipalId: attempt.learnerPrincipalId,
+          mode,
+          status: 'ACTIVE',
+          startedAt: now,
+          lastHeartbeatAt: now,
+        },
+        tx,
+      );
+    });
+
+    return { summary: this.policy.toAttemptSummary(mode, session) };
+  }
+}
+
+@Injectable()
+export class RecordProctoringHeartbeatUseCase {
+  constructor(
+    @Inject(PrismaService) private readonly prisma: PrismaService,
+    @Inject(ProctoringSessionRepository)
+    private readonly sessions: ProctoringSessionRepository,
+    @Inject(ProctoringEventRepository)
+    private readonly events: ProctoringEventRepository,
+    @Inject(ProctoringPolicyService)
+    private readonly policy: ProctoringPolicyService,
+    @Inject(PERMISSION_EVALUATOR) private readonly permissions: PermissionEvaluator,
+  ) {}
+
+  async execute(
+    context: RequestContext,
+    sessionId: string,
+    input: ProctoringHeartbeatRequestContract,
+  ): Promise<ProctoringSessionContract> {
+    const workspace = requireWorkspaceActor(context);
+    const permission = await this.permissions.evaluate(
+      { permission: PermissionCatalog.ASSESSMENT_ATTEMPT_READ, workspace },
+      context,
+    );
+    if (!permission.allowed) {
+      throw new AppError('FORBIDDEN', 'permission denied', 403);
+    }
+
+    const session = await this.sessions.findById(sessionId);
+    if (!session || session.workspaceId !== workspace.workspaceId) {
+      throw new AppError('NOT_FOUND', 'proctoring session not found', 404);
+    }
+    if (session.learnerPrincipalId !== workspace.actorId) {
+      throw new AppError('FORBIDDEN', 'you do not own this monitoring session', 403);
+    }
+    if (session.status !== 'ACTIVE' && session.status !== 'PENDING') {
+      throw new AppError('CONFLICT', 'monitoring session is not active', 409);
+    }
+
+    const recentCount = await this.events.countRecentBySession(
+      sessionId,
+      new Date(Date.now() - 60_000),
+    );
+    if (recentCount >= this.policy.maxEventsPerMinute) {
+      throw new AppError('RATE_LIMITED', 'too many monitoring events', 429);
+    }
+
+    const now = new Date();
+    await this.events.create({
+      tenantId: session.tenantId,
+      workspaceId: session.workspaceId,
+      sessionId: session.id,
+      attemptId: session.attemptId,
+      assessmentId: session.assessmentId,
+      learnerPrincipalId: session.learnerPrincipalId,
+      eventType: 'HEARTBEAT',
+      severity: 'INFO',
+      occurredAt: input.occurredAt ? new Date(input.occurredAt) : now,
+      metadata: this.policy.sanitizeMetadata('HEARTBEAT', {
+        clientTime: input.clientTime,
+        sequence: input.sequence,
+      }),
+    });
+    const updated = await this.sessions.update(sessionId, {
+      status: 'ACTIVE',
+      lastHeartbeatAt: now,
+    });
+    return this.policy.toSessionContract(updated);
+  }
+}
+
+@Injectable()
+export class RecordProctoringEventUseCase {
+  constructor(
+    @Inject(ProctoringSessionRepository)
+    private readonly sessions: ProctoringSessionRepository,
+    @Inject(ProctoringEventRepository)
+    private readonly events: ProctoringEventRepository,
+    @Inject(ProctoringPolicyService)
+    private readonly policy: ProctoringPolicyService,
+    @Inject(PERMISSION_EVALUATOR) private readonly permissions: PermissionEvaluator,
+  ) {}
+
+  async execute(
+    context: RequestContext,
+    sessionId: string,
+    input: RecordProctoringEventRequestContract,
+  ): Promise<RecordProctoringEventResponseContract> {
+    const workspace = requireWorkspaceActor(context);
+    const permission = await this.permissions.evaluate(
+      { permission: PermissionCatalog.ASSESSMENT_ATTEMPT_READ, workspace },
+      context,
+    );
+    if (!permission.allowed) {
+      throw new AppError('FORBIDDEN', 'permission denied', 403);
+    }
+
+    const session = await this.sessions.findById(sessionId);
+    if (!session || session.workspaceId !== workspace.workspaceId) {
+      throw new AppError('NOT_FOUND', 'proctoring session not found', 404);
+    }
+    if (session.learnerPrincipalId !== workspace.actorId) {
+      throw new AppError('FORBIDDEN', 'you do not own this monitoring session', 403);
+    }
+    if (session.status !== 'ACTIVE' && session.status !== 'PENDING') {
+      throw new AppError('CONFLICT', 'monitoring session is not active', 409);
+    }
+    if (!this.policy.isEventTypeAllowed(input.eventType)) {
+      throw new AppError('VALIDATION_ERROR', 'unsupported proctoring event type', 400);
+    }
+    const severity = input.severity ?? 'INFO';
+    if (!this.policy.isSeverityAllowed(severity)) {
+      throw new AppError('VALIDATION_ERROR', 'unsupported proctoring event severity', 400);
+    }
+    const occurredAt = input.occurredAt ? new Date(input.occurredAt) : new Date();
+    if (
+      Number.isNaN(occurredAt.getTime()) ||
+      Math.abs(Date.now() - occurredAt.getTime()) > 24 * 60 * 60_000
+    ) {
+      throw new AppError('VALIDATION_ERROR', 'invalid proctoring event timestamp', 400);
+    }
+
+    const recentCount = await this.events.countRecentBySession(
+      sessionId,
+      new Date(Date.now() - 60_000),
+    );
+    if (recentCount >= this.policy.maxEventsPerMinute) {
+      throw new AppError('RATE_LIMITED', 'too many monitoring events', 429);
+    }
+
+    const result = await this.events.create({
+      tenantId: session.tenantId,
+      workspaceId: session.workspaceId,
+      sessionId: session.id,
+      attemptId: session.attemptId,
+      assessmentId: session.assessmentId,
+      learnerPrincipalId: session.learnerPrincipalId,
+      ...(input.eventId ? { eventId: input.eventId } : {}),
+      eventType: input.eventType,
+      severity,
+      occurredAt,
+      metadata: this.policy.sanitizeMetadata(input.eventType, input.metadata),
+    });
+
+    return {
+      event: this.policy.toEventContract(result.event),
+      duplicate: result.duplicate,
+    };
+  }
+}
+
+@Injectable()
+export class EndProctoringSessionUseCase {
+  constructor(
+    @Inject(ProctoringSessionRepository)
+    private readonly sessions: ProctoringSessionRepository,
+    @Inject(ProctoringEventRepository)
+    private readonly events: ProctoringEventRepository,
+    @Inject(ProctoringPolicyService)
+    private readonly policy: ProctoringPolicyService,
+    @Inject(PERMISSION_EVALUATOR) private readonly permissions: PermissionEvaluator,
+  ) {}
+
+  async execute(context: RequestContext, sessionId: string): Promise<ProctoringSessionContract> {
+    const workspace = requireWorkspaceActor(context);
+    const permission = await this.permissions.evaluate(
+      { permission: PermissionCatalog.ASSESSMENT_ATTEMPT_READ, workspace },
+      context,
+    );
+    if (!permission.allowed) {
+      throw new AppError('FORBIDDEN', 'permission denied', 403);
+    }
+
+    const session = await this.sessions.findById(sessionId);
+    if (!session || session.workspaceId !== workspace.workspaceId) {
+      throw new AppError('NOT_FOUND', 'proctoring session not found', 404);
+    }
+    if (session.learnerPrincipalId !== workspace.actorId) {
+      throw new AppError('FORBIDDEN', 'you do not own this monitoring session', 403);
+    }
+    if (
+      session.status === 'ENDED' ||
+      session.status === 'EXPIRED' ||
+      session.status === 'CANCELLED'
+    ) {
+      return this.policy.toSessionContract(session);
+    }
+
+    const now = new Date();
+    await this.events.create({
+      tenantId: session.tenantId,
+      workspaceId: session.workspaceId,
+      sessionId: session.id,
+      attemptId: session.attemptId,
+      assessmentId: session.assessmentId,
+      learnerPrincipalId: session.learnerPrincipalId,
+      eventType: 'SESSION_ENDED',
+      severity: 'INFO',
+      occurredAt: now,
+      metadata: {},
+    });
+    const updated = await this.sessions.update(sessionId, {
+      status: 'ENDED',
+      endedAt: now,
+      lastHeartbeatAt: now,
+    });
+    return this.policy.toSessionContract(updated);
+  }
+}
+
+@Injectable()
+export class GetAttemptMonitoringTimelineUseCase {
+  constructor(
+    @Inject(ProctoringReadService)
+    private readonly reader: ProctoringReadService,
+    @Inject(PERMISSION_EVALUATOR) private readonly permissions: PermissionEvaluator,
+  ) {}
+
+  async execute(
+    context: RequestContext,
+    attemptId: string,
+  ): Promise<ProctoringAttemptMonitoringTimelineContract> {
+    const workspace = requireWorkspaceActor(context);
+    const permission = await this.permissions.evaluate(
+      { permission: PermissionCatalog.ASSESSMENT_MONITOR, workspace },
+      context,
+    );
+    if (!permission.allowed) {
+      throw new AppError('FORBIDDEN', 'permission denied', 403);
+    }
+    return this.reader.getAttemptTimeline(attemptId, workspace.workspaceId);
+  }
+}
+
+@Injectable()
+export class GetActiveAttemptMonitoringUseCase {
+  constructor(
+    @Inject(ProctoringReadService)
+    private readonly reader: ProctoringReadService,
+    @Inject(PERMISSION_EVALUATOR) private readonly permissions: PermissionEvaluator,
+  ) {}
+
+  async execute(
+    context: RequestContext,
+    assessmentId: string,
+  ): Promise<ProctoringAttemptMonitoringSummaryContract> {
+    const workspace = requireWorkspaceActor(context);
+    const permission = await this.permissions.evaluate(
+      { permission: PermissionCatalog.ASSESSMENT_MONITOR, workspace },
+      context,
+    );
+    if (!permission.allowed) {
+      throw new AppError('FORBIDDEN', 'permission denied', 403);
+    }
+    return this.reader.getActiveAssessmentSummary(assessmentId, workspace.workspaceId);
+  }
+}
+
+@Injectable()
+export class GetProctoringSessionUseCase {
+  constructor(
+    @Inject(ProctoringSessionRepository)
+    private readonly sessions: ProctoringSessionRepository,
+    @Inject(ProctoringPolicyService)
+    private readonly policy: ProctoringPolicyService,
+    @Inject(PERMISSION_EVALUATOR) private readonly permissions: PermissionEvaluator,
+  ) {}
+
+  async execute(context: RequestContext, sessionId: string): Promise<ProctoringSessionContract> {
+    const workspace = requireWorkspaceActor(context);
+    const permission = await this.permissions.evaluate(
+      { permission: PermissionCatalog.ASSESSMENT_MONITOR, workspace },
+      context,
+    );
+    if (!permission.allowed) {
+      throw new AppError('FORBIDDEN', 'permission denied', 403);
+    }
+    const session = await this.sessions.findById(sessionId);
+    if (!session || session.workspaceId !== workspace.workspaceId) {
+      throw new AppError('NOT_FOUND', 'proctoring session not found', 404);
+    }
+    return this.policy.toSessionContract(session);
+  }
+}
+
+@Injectable()
+export class GetLearnerAttemptProctoringUseCase {
+  constructor(@Inject(ProctoringReadService) private readonly reader: ProctoringReadService) {}
+
+  async execute(
+    context: RequestContext,
+    attemptId: string,
+    transaction?: TransactionContext,
+  ): Promise<ProctoringAttemptSummaryContract> {
+    const workspace = requireWorkspaceActor(context);
+    return this.reader.getAttemptSummary(attemptId, workspace.workspaceId, transaction);
+  }
+}
+
+@Injectable()
+export class SyncAttemptTerminalProctoringUseCase {
+  constructor(
+    @Inject(PrismaService) private readonly prisma: PrismaService,
+    @Inject(ProctoringSessionRepository)
+    private readonly sessions: ProctoringSessionRepository,
+  ) {}
+
+  async execute(
+    attemptId: string,
+    terminalStatus: 'ENDED' | 'EXPIRED' | 'CANCELLED',
+    transaction?: TransactionContext,
+  ): Promise<void> {
+    const attempt = await getPrismaClient(this.prisma, transaction).assessmentAttempt.findUnique({
+      where: { id: attemptId },
+      select: { id: true },
+    });
+    if (!attempt) {
+      return;
+    }
+
+    const latest = await this.sessions.findLatestByAttempt(attemptId, transaction);
+    if (
+      !latest ||
+      latest.status === 'ENDED' ||
+      latest.status === 'EXPIRED' ||
+      latest.status === 'CANCELLED'
+    ) {
+      return;
+    }
+
+    await this.sessions.update(
+      latest.id,
+      {
+        status: terminalStatus,
+        endedAt: new Date(),
+      },
+      transaction,
+    );
+  }
+}
+</file>
+
+<file path="backend/applications/platform-api/src/modules/proctoring/application/proctoring-policy.service.ts">
+import { Injectable } from '@nestjs/common';
+import { AppError } from '@mentrily/service-core';
+import type {
+  ProctoringAttemptSummaryContract,
+  ProctoringEventContract,
+  ProctoringLearnerDisclosureContract,
+  ProctoringSessionContract,
+} from '@mentrily/contract-catalog';
+import type {
+  ProctoringEventRecord,
+  ProctoringEventSeverity,
+  ProctoringEventType,
+  ProctoringMode,
+  ProctoringSessionRecord,
+} from './proctoring.types.js';
+
+const ALLOWED_EVENT_TYPES: ReadonlySet<ProctoringEventType> = new Set([
+  'SESSION_STARTED',
+  'SESSION_ENDED',
+  'HEARTBEAT',
+  'WINDOW_BLUR',
+  'WINDOW_FOCUS',
+  'VISIBILITY_HIDDEN',
+  'VISIBILITY_VISIBLE',
+  'FULLSCREEN_EXITED',
+  'FULLSCREEN_ENTERED',
+  'COPY_ATTEMPTED',
+  'PASTE_ATTEMPTED',
+  'NETWORK_OFFLINE',
+  'NETWORK_ONLINE',
+  'SUSPICIOUS_ACTIVITY_REPORTED',
+  'SYSTEM_WARNING',
+]);
+
+const ALLOWED_SEVERITIES: ReadonlySet<ProctoringEventSeverity> = new Set([
+  'INFO',
+  'LOW',
+  'MEDIUM',
+  'HIGH',
+]);
+
+const ALLOWED_METADATA_KEYS: Readonly<Record<ProctoringEventType, ReadonlySet<string>>> = {
+  SESSION_STARTED: new Set(['clientTime', 'sequence']),
+  SESSION_ENDED: new Set(['clientTime', 'sequence']),
+  HEARTBEAT: new Set(['clientTime', 'sequence']),
+  WINDOW_BLUR: new Set(['clientTime', 'sequence']),
+  WINDOW_FOCUS: new Set(['clientTime', 'sequence']),
+  VISIBILITY_HIDDEN: new Set(['clientTime', 'sequence']),
+  VISIBILITY_VISIBLE: new Set(['clientTime', 'sequence']),
+  FULLSCREEN_EXITED: new Set(['clientTime', 'sequence']),
+  FULLSCREEN_ENTERED: new Set(['clientTime', 'sequence']),
+  NETWORK_OFFLINE: new Set(['clientTime', 'sequence']),
+  NETWORK_ONLINE: new Set(['clientTime', 'sequence']),
+  COPY_ATTEMPTED: new Set(['clientTime', 'sequence', 'questionId']),
+  PASTE_ATTEMPTED: new Set(['clientTime', 'sequence', 'questionId']),
+  SUSPICIOUS_ACTIVITY_REPORTED: new Set(['clientTime', 'sequence', 'message']),
+  SYSTEM_WARNING: new Set(['clientTime', 'sequence', 'message']),
+};
+
+@Injectable()
+export class ProctoringPolicyService {
+  readonly maxMetadataBytes = 512;
+  readonly maxEventsPerMinute = 40;
+
+  getModeFromAssessmentMetadata(
+    metadata: Record<string, unknown> | null | undefined,
+  ): ProctoringMode {
+    const raw = metadata?.proctoringMode;
+    if (raw === 'OFF' || raw === 'BASIC_EVENT_MONITORING' || raw === 'RESERVED_LIVE_MONITORING') {
+      return raw;
+    }
+    return 'OFF';
+  }
+
+  buildDisclosure(mode: ProctoringMode): ProctoringLearnerDisclosureContract {
+    return {
+      mode,
+      required: mode !== 'OFF',
+      title: mode === 'OFF' ? 'Monitoring disabled' : 'Monitoring disclosure',
+      message:
+        mode === 'OFF'
+          ? 'This attempt does not use monitoring.'
+          : 'This attempt records limited browser activity metadata during the assessment. Monitoring is visible and never hidden.',
+      visible: true,
+      captures:
+        mode === 'OFF'
+          ? []
+          : [
+              'Window and tab focus changes',
+              'Page visibility changes',
+              'Fullscreen entry and exit',
+              'Online and offline state',
+              'Copy and paste attempt metadata',
+            ],
+      doesNotCapture: [
+        'Clipboard contents',
+        'Raw keystrokes',
+        'Webcam video',
+        'Screen recordings',
+        'Audio recordings',
+        'Biometric identity data',
+      ],
+    };
+  }
+
+  isEventTypeAllowed(eventType: ProctoringEventType): boolean {
+    return ALLOWED_EVENT_TYPES.has(eventType);
+  }
+
+  isSeverityAllowed(severity: ProctoringEventSeverity): boolean {
+    return ALLOWED_SEVERITIES.has(severity);
+  }
+
+  sanitizeMetadata(
+    eventType: ProctoringEventType,
+    metadata: Record<string, unknown> | undefined,
+  ): Record<string, unknown> {
+    const allowedKeys = ALLOWED_METADATA_KEYS[eventType] ?? new Set<string>();
+    const sanitized: Record<string, unknown> = {};
+
+    for (const [key, value] of Object.entries(metadata ?? {})) {
+      if (!allowedKeys.has(key)) {
+        continue;
+      }
+
+      if (key === 'questionId') {
+        if (typeof value !== 'string' || value.length > 128) {
+          throw new AppError('VALIDATION_ERROR', 'invalid questionId', 400);
+        }
+        sanitized[key] = value;
+        continue;
+      }
+
+      if (key === 'sequence') {
+        if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) {
+          throw new AppError('VALIDATION_ERROR', 'invalid sequence', 400);
+        }
+        sanitized[key] = Math.floor(value);
+        continue;
+      }
+
+      if (key === 'clientTime' || key === 'message') {
+        if (typeof value !== 'string' || value.length > 160) {
+          throw new AppError('VALIDATION_ERROR', `invalid ${key}`, 400);
+        }
+        sanitized[key] = value;
+      }
+    }
+
+    if (JSON.stringify(sanitized).length > this.maxMetadataBytes) {
+      throw new AppError('VALIDATION_ERROR', 'metadata exceeds maximum size', 400);
+    }
+
+    return sanitized;
+  }
+
+  getSafeEventMessage(eventType: ProctoringEventType): string {
+    switch (eventType) {
+      case 'SESSION_STARTED':
+        return 'Monitoring session started';
+      case 'SESSION_ENDED':
+        return 'Monitoring session ended';
+      case 'HEARTBEAT':
+        return 'Heartbeat received';
+      case 'WINDOW_BLUR':
+        return 'Assessment window lost focus';
+      case 'WINDOW_FOCUS':
+        return 'Assessment window regained focus';
+      case 'VISIBILITY_HIDDEN':
+        return 'Assessment tab became hidden';
+      case 'VISIBILITY_VISIBLE':
+        return 'Assessment tab became visible';
+      case 'FULLSCREEN_EXITED':
+        return 'Fullscreen mode exited';
+      case 'FULLSCREEN_ENTERED':
+        return 'Fullscreen mode entered';
+      case 'COPY_ATTEMPTED':
+        return 'Copy attempt recorded';
+      case 'PASTE_ATTEMPTED':
+        return 'Paste attempt recorded';
+      case 'NETWORK_OFFLINE':
+        return 'Device went offline';
+      case 'NETWORK_ONLINE':
+        return 'Device came back online';
+      case 'SUSPICIOUS_ACTIVITY_REPORTED':
+        return 'Suspicious activity was reported';
+      case 'SYSTEM_WARNING':
+        return 'A system warning was recorded';
+    }
+    return 'Monitoring event recorded';
+  }
+
+  toSessionContract(session: ProctoringSessionRecord): ProctoringSessionContract {
+    return {
+      sessionId: session.id,
+      attemptId: session.attemptId,
+      assessmentId: session.assessmentId,
+      status: session.status,
+      mode: session.mode,
+      startedAt: session.startedAt.toISOString(),
+      ...(session.endedAt ? { endedAt: session.endedAt.toISOString() } : {}),
+      ...(session.lastHeartbeatAt
+        ? { lastHeartbeatAt: session.lastHeartbeatAt.toISOString() }
+        : {}),
+    };
+  }
+
+  toEventContract(event: ProctoringEventRecord): ProctoringEventContract {
+    return {
+      id: event.id,
+      sessionId: event.sessionId,
+      attemptId: event.attemptId,
+      assessmentId: event.assessmentId,
+      eventType: event.eventType,
+      severity: event.severity,
+      occurredAt: event.occurredAt.toISOString(),
+      receivedAt: event.receivedAt.toISOString(),
+      message: this.getSafeEventMessage(event.eventType),
+      metadataSummary: { ...event.metadata },
+    };
+  }
+
+  toAttemptSummary(
+    mode: ProctoringMode,
+    session?: ProctoringSessionRecord | null,
+  ): ProctoringAttemptSummaryContract {
+    return {
+      enabled: mode !== 'OFF',
+      mode,
+      required: mode !== 'OFF',
+      disclosure: this.buildDisclosure(mode),
+      ...(session ? { session: this.toSessionContract(session) } : {}),
+    };
+  }
+}
 </file>
 
 <file path="backend/applications/platform-api/src/modules/workspace-governance/tests/workspace-permission-evaluator.spec.ts">
