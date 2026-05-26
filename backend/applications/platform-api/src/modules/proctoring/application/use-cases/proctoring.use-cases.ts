@@ -15,6 +15,8 @@ import {
   PermissionEvaluator,
   RequestContext,
   TransactionContext,
+  TRANSACTION_RUNNER,
+  TransactionRunner,
 } from '@mentrily/service-core';
 import { PrismaService, getPrismaClient } from '@mentrily/data-platform';
 import { PermissionCatalog } from '@mentrily/security-toolkit';
@@ -22,6 +24,7 @@ import {
   ProctoringEventRepository,
   ProctoringSessionRepository,
 } from '../proctoring.repository.js';
+import type { ProctoringSessionRecord } from '../proctoring.types.js';
 import { ProctoringPolicyService } from '../proctoring-policy.service.js';
 import { ProctoringReadService } from '../proctoring-read.service.js';
 
@@ -67,6 +70,7 @@ export class StartProctoringSessionUseCase {
     @Inject(ProctoringReadService)
     private readonly reader: ProctoringReadService,
     @Inject(PERMISSION_EVALUATOR) private readonly permissions: PermissionEvaluator,
+    @Inject(TRANSACTION_RUNNER) private readonly transactionRunner: TransactionRunner,
   ) {}
 
   async execute(
@@ -93,26 +97,38 @@ export class StartProctoringSessionUseCase {
     const mode = this.policy.getModeFromAssessmentMetadata(
       (attempt.metadata as Record<string, unknown> | null | undefined) ?? undefined,
     );
-    const existing = await this.sessions.findLatestByAttempt(attemptId);
-    if (existing && (existing.status === 'ACTIVE' || existing.status === 'PENDING')) {
-      return { summary: this.policy.toAttemptSummary(mode, existing) };
-    }
 
     if (mode === 'OFF') {
       return { summary: this.policy.toAttemptSummary(mode, null) };
     }
 
-    const now = new Date();
-    const session = await this.sessions.create({
-      tenantId: attempt.tenantId,
-      workspaceId: attempt.workspaceId,
-      assessmentId: attempt.assessmentId,
-      attemptId: attempt.id,
-      learnerPrincipalId: attempt.learnerPrincipalId,
-      mode,
-      status: 'ACTIVE',
-      startedAt: now,
-      lastHeartbeatAt: now,
+    const session = await this.transactionRunner.run<ProctoringSessionRecord>(async (tx) => {
+      const client = getPrismaClient(this.prisma, tx);
+      await client.$executeRawUnsafe(
+        'SELECT id FROM "AssessmentAttempt" WHERE id = $1::uuid FOR UPDATE',
+        attemptId,
+      );
+
+      const existing = await this.sessions.findLatestByAttempt(attemptId, tx);
+      if (existing && (existing.status === 'ACTIVE' || existing.status === 'PENDING')) {
+        return existing;
+      }
+
+      const now = new Date();
+      return await this.sessions.create(
+        {
+          tenantId: attempt.tenantId,
+          workspaceId: attempt.workspaceId,
+          assessmentId: attempt.assessmentId,
+          attemptId: attempt.id,
+          learnerPrincipalId: attempt.learnerPrincipalId,
+          mode,
+          status: 'ACTIVE',
+          startedAt: now,
+          lastHeartbeatAt: now,
+        },
+        tx,
+      );
     });
 
     return { summary: this.policy.toAttemptSummary(mode, session) };

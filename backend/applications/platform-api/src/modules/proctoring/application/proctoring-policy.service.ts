@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { AppError } from '@mentrily/service-core';
 import type {
   ProctoringAttemptSummaryContract,
   ProctoringEventContract,
@@ -123,28 +124,31 @@ export class ProctoringPolicyService {
       }
 
       if (key === 'questionId') {
-        if (typeof value === 'string' && value.length <= 128) {
-          sanitized[key] = value;
+        if (typeof value !== 'string' || value.length > 128) {
+          throw new AppError('VALIDATION_ERROR', 'invalid questionId', 400);
         }
+        sanitized[key] = value;
         continue;
       }
 
       if (key === 'sequence') {
-        if (typeof value === 'number' && Number.isFinite(value) && value >= 0) {
-          sanitized[key] = Math.floor(value);
+        if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) {
+          throw new AppError('VALIDATION_ERROR', 'invalid sequence', 400);
         }
+        sanitized[key] = Math.floor(value);
         continue;
       }
 
       if (key === 'clientTime' || key === 'message') {
-        if (typeof value === 'string' && value.length <= 160) {
-          sanitized[key] = value;
+        if (typeof value !== 'string' || value.length > 160) {
+          throw new AppError('VALIDATION_ERROR', `invalid ${key}`, 400);
         }
+        sanitized[key] = value;
       }
     }
 
     if (JSON.stringify(sanitized).length > this.maxMetadataBytes) {
-      throw new Error('metadata exceeds maximum size');
+      throw new AppError('VALIDATION_ERROR', 'metadata exceeds maximum size', 400);
     }
 
     return sanitized;
