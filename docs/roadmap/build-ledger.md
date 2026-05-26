@@ -29,11 +29,29 @@ This document serves as a permanent continuity/backtrace system for the Mentrily
   - Wired automatic incident generation into `RecordProctoringEventUseCase`.
   - Added comprehensive integration tests in `proctoring-incident-api.integration.spec.ts` covering immediate vs window-grouped incidents, status transitions, review notes, manual incident creation, permission enforcement, and workspace isolation.
 - **Validation Performed**:
+  - ✅ `git status --short`: **PASS** (clean status locally after committing documentation changes)
   - ✅ `pnpm lint`: **PASS**
   - ✅ `pnpm typecheck`: **PASS**
+  - ✅ `pnpm test`: **PASS**
   - ✅ `pnpm build`: **PASS**
-  - ✅ `pnpm --filter platform-api test:integration` (all proctoring tests): **PASS** (23 tests: 15 for sessions/events, 8 for incidents)
-  - ✅ `pnpm --filter @mentrily/domain-contracts build`: **PASS**
+  - ✅ `pnpm test:integration`: **PASS**
+  - ✅ `pnpm test:e2e`: **PASS** (all suites: content, learning, assessment, assessment-attempt, assessment-grading, assessment-result)
+  - ✅ `pnpm --filter @mentrily/platform-api test`: **PASS**
+  - ✅ `pnpm --filter @mentrily/platform-api typecheck`: **PASS**
+  - ✅ `pnpm --filter @mentrily/platform-api test:integration`: **PASS** (30 test files, 103 tests)
+  - ✅ `pnpm --filter @mentrily/platform-worker test`: **PASS**
+  - ✅ `pnpm --filter @mentrily/platform-worker typecheck`: **PASS**
+  - ✅ `pnpm --filter @mentrily/data-platform prisma:validate`: **PASS**
+  - ✅ `pnpm --filter @mentrily/data-platform prisma:generate`: **PASS**
+  - ✅ `pnpm --filter @mentrily/contract-catalog typecheck`: **PASS**
+  - ✅ `pnpm --filter @mentrily/domain-contracts typecheck`: **PASS**
+  - ✅ `pnpm --filter @mentrily/security-toolkit test`: **PASS**
+  - ✅ `pnpm --filter @mentrily/portal test`: **PASS**
+  - ✅ `pnpm --filter @mentrily/portal typecheck`: **PASS**
+  - ✅ `pnpm --filter @mentrily/portal build`: **PASS**
+  - ✅ `node automation/verify-env-examples.mjs`: **PASS**
+  - ✅ `pnpm --filter @mentrily/data-platform prisma:migrate:deploy`: **PASS** (21 migrations, none pending)
+  - ✅ `pnpm db:test:down`: **PASS**
 - **Remaining Gaps**:
   - Real-time notification socket push for active incident alerts remains future work.
 - **Next Recommended Task**:
