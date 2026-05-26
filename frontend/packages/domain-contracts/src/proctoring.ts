@@ -117,3 +117,112 @@ export interface ProctoringAttemptMonitoringSummaryContract {
     warningEvents: number;
   }>;
 }
+
+export type ProctoringIncidentTypeContract =
+  | 'FOCUS_LOSS'
+  | 'FULLSCREEN_EXIT'
+  | 'COPY_PASTE_ACTIVITY'
+  | 'CONNECTIVITY_INTERRUPTION'
+  | 'SESSION_INTERRUPTION'
+  | 'MULTIPLE_WARNINGS'
+  | 'HIGH_SEVERITY_EVENT'
+  | 'SYSTEM_FLAG'
+  | 'MANUAL_REVIEW_FLAG';
+
+export type ProctoringIncidentStatusContract =
+  | 'OPEN'
+  | 'IN_REVIEW'
+  | 'RESOLVED'
+  | 'DISMISSED'
+  | 'ESCALATED';
+
+export type ProctoringIncidentSeverityContract = 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
+
+export type ProctoringIncidentReviewActionTypeContract =
+  | 'OPENED'
+  | 'MARKED_IN_REVIEW'
+  | 'RESOLVED'
+  | 'DISMISSED'
+  | 'ESCALATED'
+  | 'REOPENED'
+  | 'NOTE_ADDED';
+
+export interface ProctoringIncidentContract {
+  id: string;
+  sessionId: string;
+  attemptId: string;
+  assessmentId: string;
+  learnerPrincipalId: string;
+  learnerDisplayName?: string | undefined;
+  incidentType: ProctoringIncidentTypeContract;
+  severity: ProctoringIncidentSeverityContract;
+  status: ProctoringIncidentStatusContract;
+  title: string;
+  summary: string;
+  firstEventAt: string;
+  lastEventAt: string;
+  eventCount: number;
+  createdAt: string;
+  updatedAt: string;
+  reviewedAt?: string | undefined;
+  reviewedByPrincipalId?: string | undefined;
+  reviewedByDisplayName?: string | undefined;
+  resolvedAt?: string | undefined;
+  resolution?: string | undefined;
+}
+
+export interface ProctoringIncidentReviewActionContract {
+  id: string;
+  incidentId: string;
+  actionType: ProctoringIncidentReviewActionTypeContract;
+  actorPrincipalId: string;
+  actorDisplayName?: string | undefined;
+  note?: string | undefined;
+  createdAt: string;
+}
+
+export interface ProctoringIncidentDetailContract {
+  incident: ProctoringIncidentContract;
+  events: ProctoringEventContract[];
+  reviewActions: ProctoringIncidentReviewActionContract[];
+}
+
+export interface ProctoringIncidentSummaryContract {
+  openCount: number;
+  highSeverityCount: number;
+  inReviewCount: number;
+  resolvedDismissedCount: number;
+  attemptsWithIncidentsCount: number;
+}
+
+export interface ProctoringIncidentListQueryContract {
+  assessmentId?: string | undefined;
+  attemptId?: string | undefined;
+  status?: ProctoringIncidentStatusContract | undefined;
+  severity?: ProctoringIncidentSeverityContract | undefined;
+}
+
+export interface ProctoringIncidentListResponseContract {
+  incidents: ProctoringIncidentContract[];
+}
+
+export interface UpdateProctoringIncidentStatusRequestContract {
+  status: ProctoringIncidentStatusContract;
+  note?: string | undefined;
+}
+
+export interface AddProctoringIncidentNoteRequestContract {
+  note: string;
+}
+
+export interface CreateManualProctoringIncidentRequestContract {
+  sessionId: string;
+  attemptId: string;
+  assessmentId: string;
+  learnerPrincipalId: string;
+  incidentType: ProctoringIncidentTypeContract;
+  severity: ProctoringIncidentSeverityContract;
+  title: string;
+  summary: string;
+  note?: string | undefined;
+}

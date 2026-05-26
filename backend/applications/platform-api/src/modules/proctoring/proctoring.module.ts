@@ -19,6 +19,14 @@ import {
   SyncAttemptTerminalProctoringUseCase,
 } from './application/use-cases/proctoring.use-cases.js';
 import {
+  GetProctoringIncidentUseCase,
+  ListProctoringIncidentsUseCase,
+  GetProctoringIncidentSummaryUseCase,
+  UpdateProctoringIncidentStatusUseCase,
+  AddProctoringIncidentNoteUseCase,
+  CreateManualProctoringIncidentUseCase,
+} from './application/use-cases/proctoring-incident.use-cases.js';
+import {
   PrismaProctoringEventRepository,
   PrismaProctoringSessionRepository,
 } from './infrastructure/persistence/prisma/prisma-proctoring.repository.js';
@@ -47,6 +55,12 @@ import { ProctoringController } from './presentation/http/proctoring.controller.
     GetProctoringSessionUseCase,
     GetLearnerAttemptProctoringUseCase,
     SyncAttemptTerminalProctoringUseCase,
+    GetProctoringIncidentUseCase,
+    ListProctoringIncidentsUseCase,
+    GetProctoringIncidentSummaryUseCase,
+    UpdateProctoringIncidentStatusUseCase,
+    AddProctoringIncidentNoteUseCase,
+    CreateManualProctoringIncidentUseCase,
   ],
   exports: [
     ProctoringPolicyService,

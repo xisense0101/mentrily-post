@@ -1,9 +1,13 @@
-import { Body, Controller, Get, Inject, Param, Post, Req } from '@nestjs/common';
+import { Body, Controller, Get, Inject, Param, Post, Query, Req } from '@nestjs/common';
 import type { FastifyRequest } from 'fastify';
 import { AppError, RequestContext } from '@mentrily/service-core';
 import type {
   ProctoringHeartbeatRequestContract,
   RecordProctoringEventRequestContract,
+  ProctoringIncidentListQueryContract,
+  UpdateProctoringIncidentStatusRequestContract,
+  AddProctoringIncidentNoteRequestContract,
+  CreateManualProctoringIncidentRequestContract,
 } from '@mentrily/contract-catalog';
 import {
   EndProctoringSessionUseCase,
@@ -14,6 +18,14 @@ import {
   RecordProctoringHeartbeatUseCase,
   StartProctoringSessionUseCase,
 } from '../../application/use-cases/proctoring.use-cases.js';
+import {
+  GetProctoringIncidentUseCase,
+  ListProctoringIncidentsUseCase,
+  GetProctoringIncidentSummaryUseCase,
+  UpdateProctoringIncidentStatusUseCase,
+  AddProctoringIncidentNoteUseCase,
+  CreateManualProctoringIncidentUseCase,
+} from '../../application/use-cases/proctoring-incident.use-cases.js';
 
 function requestContext(request: FastifyRequest): RequestContext {
   const context = request.requestContext as RequestContext | undefined;
@@ -40,6 +52,18 @@ export class ProctoringController {
     private readonly activeSummary: GetActiveAttemptMonitoringUseCase,
     @Inject(GetProctoringSessionUseCase)
     private readonly getSession: GetProctoringSessionUseCase,
+    @Inject(GetProctoringIncidentUseCase)
+    private readonly getIncident: GetProctoringIncidentUseCase,
+    @Inject(ListProctoringIncidentsUseCase)
+    private readonly listIncidents: ListProctoringIncidentsUseCase,
+    @Inject(GetProctoringIncidentSummaryUseCase)
+    private readonly summaryIncidents: GetProctoringIncidentSummaryUseCase,
+    @Inject(UpdateProctoringIncidentStatusUseCase)
+    private readonly updateIncidentStatus: UpdateProctoringIncidentStatusUseCase,
+    @Inject(AddProctoringIncidentNoteUseCase)
+    private readonly addIncidentNote: AddProctoringIncidentNoteUseCase,
+    @Inject(CreateManualProctoringIncidentUseCase)
+    private readonly createManualIncident: CreateManualProctoringIncidentUseCase,
   ) {}
 
   @Post('/attempts/:attemptId/session/start')
@@ -83,5 +107,46 @@ export class ProctoringController {
   @Get('/sessions/:sessionId')
   async getOne(@Req() request: FastifyRequest, @Param('sessionId') sessionId: string) {
     return this.getSession.execute(requestContext(request), sessionId);
+  }
+
+  @Get('/incidents')
+  async list(@Req() request: FastifyRequest, @Query() query: ProctoringIncidentListQueryContract) {
+    return this.listIncidents.execute(requestContext(request), query);
+  }
+
+  @Get('/incidents/summary')
+  async getSummary(@Req() request: FastifyRequest) {
+    return this.summaryIncidents.execute(requestContext(request));
+  }
+
+  @Get('/incidents/:incidentId')
+  async getOneIncident(@Req() request: FastifyRequest, @Param('incidentId') incidentId: string) {
+    return this.getIncident.execute(requestContext(request), incidentId);
+  }
+
+  @Post('/incidents/:incidentId/status')
+  async updateStatus(
+    @Req() request: FastifyRequest,
+    @Param('incidentId') incidentId: string,
+    @Body() body: UpdateProctoringIncidentStatusRequestContract,
+  ) {
+    return this.updateIncidentStatus.execute(requestContext(request), incidentId, body);
+  }
+
+  @Post('/incidents/:incidentId/notes')
+  async addNote(
+    @Req() request: FastifyRequest,
+    @Param('incidentId') incidentId: string,
+    @Body() body: AddProctoringIncidentNoteRequestContract,
+  ) {
+    return this.addIncidentNote.execute(requestContext(request), incidentId, body);
+  }
+
+  @Post('/incidents/manual')
+  async createManual(
+    @Req() request: FastifyRequest,
+    @Body() body: CreateManualProctoringIncidentRequestContract,
+  ) {
+    return this.createManualIncident.execute(requestContext(request), body);
   }
 }

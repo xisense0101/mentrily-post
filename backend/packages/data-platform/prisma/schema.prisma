@@ -990,6 +990,44 @@ enum AssessmentProctoringEventSeverity {
   HIGH
 }
 
+enum AssessmentProctoringIncidentType {
+  FOCUS_LOSS
+  FULLSCREEN_EXIT
+  COPY_PASTE_ACTIVITY
+  CONNECTIVITY_INTERRUPTION
+  SESSION_INTERRUPTION
+  MULTIPLE_WARNINGS
+  HIGH_SEVERITY_EVENT
+  SYSTEM_FLAG
+  MANUAL_REVIEW_FLAG
+}
+
+enum AssessmentProctoringIncidentStatus {
+  OPEN
+  IN_REVIEW
+  RESOLVED
+  DISMISSED
+  ESCALATED
+}
+
+enum AssessmentProctoringIncidentSeverity {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum AssessmentProctoringIncidentReviewActionType {
+  OPENED
+  MARKED_IN_REVIEW
+  RESOLVED
+  DISMISSED
+  ESCALATED
+  REOPENED
+  NOTE_ADDED
+}
+
+
 enum AssessmentAttemptAnswerStatus {
   DRAFT
   SUBMITTED
@@ -1050,6 +1088,7 @@ model AssessmentAttempt {
   answers      AssessmentAttemptAnswer[]
   session      AssessmentAttemptSession?
   proctoringSessions AssessmentProctoringSession[]
+  proctoringIncidents AssessmentProctoringIncident[]
   result       AssessmentAttemptResult?
   gradingRuns  AssessmentGradingRun[]
   answerGrades AssessmentAnswerGrade[]
@@ -1119,6 +1158,7 @@ model AssessmentProctoringSession {
 
   attempt AssessmentAttempt @relation(fields: [attemptId], references: [id], onDelete: Cascade)
   events  AssessmentProctoringEvent[]
+  incidents AssessmentProctoringIncident[]
 
   @@index([tenantId])
   @@index([workspaceId])
@@ -1147,6 +1187,7 @@ model AssessmentProctoringEvent {
   metadata           Json
 
   session AssessmentProctoringSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  incidentEvents AssessmentProctoringIncidentEvent[]
 
   @@index([tenantId])
   @@index([workspaceId])
@@ -1160,6 +1201,88 @@ model AssessmentProctoringEvent {
   @@index([workspaceId, sessionId, occurredAt])
   @@index([workspaceId, eventType, occurredAt])
   @@unique([workspaceId, sessionId, eventId])
+}
+
+model AssessmentProctoringIncident {
+  id                    String                                 @id @default(uuid()) @db.Uuid
+  tenantId              String                                 @db.Uuid
+  workspaceId           String                                 @db.Uuid
+  sessionId             String                                 @db.Uuid
+  attemptId             String                                 @db.Uuid
+  assessmentId          String                                 @db.Uuid
+  learnerPrincipalId    String                                 @db.Uuid
+  incidentType          AssessmentProctoringIncidentType
+  severity              AssessmentProctoringIncidentSeverity
+  status                AssessmentProctoringIncidentStatus     @default(OPEN)
+  title                 String
+  summary               String
+  firstEventAt          DateTime
+  lastEventAt           DateTime
+  eventCount            Int
+  createdAt             DateTime                               @default(now())
+  updatedAt             DateTime                               @updatedAt
+  reviewedAt            DateTime?
+  reviewedByPrincipalId String?                                @db.Uuid
+  resolvedAt            DateTime?
+  resolution            String?
+
+  session            AssessmentProctoringSession        @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  attempt            AssessmentAttempt                  @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+  events             AssessmentProctoringIncidentEvent[]
+  reviewActions      AssessmentProctoringIncidentReviewAction[]
+
+  @@index([tenantId])
+  @@index([workspaceId])
+  @@index([sessionId])
+  @@index([attemptId])
+  @@index([assessmentId])
+  @@index([learnerPrincipalId])
+  @@index([status])
+  @@index([severity])
+  @@index([lastEventAt])
+  @@index([workspaceId, attemptId])
+  @@index([workspaceId, assessmentId])
+  @@index([workspaceId, sessionId])
+  @@index([workspaceId, status])
+  @@index([workspaceId, severity])
+  @@index([workspaceId, assessmentId, status])
+  @@index([workspaceId, attemptId, status])
+  @@unique([workspaceId, sessionId, incidentType, status])
+}
+
+model AssessmentProctoringIncidentEvent {
+  id                 String                       @id @default(uuid()) @db.Uuid
+  tenantId           String                       @db.Uuid
+  workspaceId        String                       @db.Uuid
+  incidentId         String                       @db.Uuid
+  proctoringEventId  String                       @db.Uuid
+  createdAt          DateTime                     @default(now())
+
+  incident           AssessmentProctoringIncident @relation(fields: [incidentId], references: [id], onDelete: Cascade)
+  proctoringEvent    AssessmentProctoringEvent    @relation(fields: [proctoringEventId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@index([workspaceId])
+  @@index([incidentId])
+  @@index([proctoringEventId])
+  @@unique([workspaceId, incidentId, proctoringEventId])
+}
+
+model AssessmentProctoringIncidentReviewAction {
+  id               String                                       @id @default(uuid()) @db.Uuid
+  tenantId         String                                       @db.Uuid
+  workspaceId      String                                       @db.Uuid
+  incidentId       String                                       @db.Uuid
+  actionType       AssessmentProctoringIncidentReviewActionType
+  actorPrincipalId String                                       @db.Uuid
+  note             String?
+  createdAt        DateTime                                     @default(now())
+
+  incident         AssessmentProctoringIncident                 @relation(fields: [incidentId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@index([workspaceId])
+  @@index([incidentId])
 }
 
 model AssessmentAttemptResult {

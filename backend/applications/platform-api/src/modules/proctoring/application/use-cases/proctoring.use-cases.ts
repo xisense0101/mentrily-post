@@ -27,6 +27,7 @@ import {
 import type { ProctoringSessionRecord } from '../proctoring.types.js';
 import { ProctoringPolicyService } from '../proctoring-policy.service.js';
 import { ProctoringReadService } from '../proctoring-read.service.js';
+import { processIncidentPolicyForEvent } from './proctoring-incident.use-cases.js';
 
 function requireWorkspaceActor(context: RequestContext) {
   const workspace = context.workspace;
@@ -208,6 +209,7 @@ export class RecordProctoringHeartbeatUseCase {
 @Injectable()
 export class RecordProctoringEventUseCase {
   constructor(
+    @Inject(PrismaService) private readonly prisma: PrismaService,
     @Inject(ProctoringSessionRepository)
     private readonly sessions: ProctoringSessionRepository,
     @Inject(ProctoringEventRepository)
@@ -277,6 +279,10 @@ export class RecordProctoringEventUseCase {
       occurredAt,
       metadata: this.policy.sanitizeMetadata(input.eventType, input.metadata),
     });
+
+    if (!result.duplicate) {
+      await processIncidentPolicyForEvent(this.prisma, result.event);
+    }
 
     return {
       event: this.policy.toEventContract(result.event),
