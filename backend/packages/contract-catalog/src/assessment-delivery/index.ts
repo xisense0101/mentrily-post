@@ -1,3 +1,5 @@
+import type { ProctoringAttemptSummaryContract } from '../proctoring/index.js';
+
 export type AssessmentPurposeContract =
   | 'QUIZ'
   | 'EXAM'
@@ -8,16 +10,9 @@ export type AssessmentPurposeContract =
 
 export type AssessmentStatusContract = 'DRAFT' | 'PUBLISHED' | 'ARCHIVED';
 
-export type AssessmentVersionStatusContract =
-  | 'DRAFT'
-  | 'PUBLISHED_SNAPSHOT'
-  | 'SUPERSEDED';
+export type AssessmentVersionStatusContract = 'DRAFT' | 'PUBLISHED_SNAPSHOT' | 'SUPERSEDED';
 
-export type AssessmentVisibilityContract =
-  | 'PRIVATE'
-  | 'WORKSPACE'
-  | 'PUBLIC_LINK'
-  | 'INVITE_ONLY';
+export type AssessmentVisibilityContract = 'PRIVATE' | 'WORKSPACE' | 'PUBLIC_LINK' | 'INVITE_ONLY';
 
 export type AssessmentQuestionKindContract =
   | 'MCQ'
@@ -49,7 +44,18 @@ export interface AssessmentMediaAttachmentContract {
   contentType: string;
   fileCategory: 'DOCUMENT' | 'IMAGE' | 'VIDEO' | 'AUDIO' | 'ARCHIVE' | 'OTHER';
   sizeBytes?: number | undefined;
-  status: 'PENDING_UPLOAD' | 'UPLOADED' | 'PROCESSING_QUEUED' | 'PROCESSING' | 'AVAILABLE' | 'PROCESSING_FAILED' | 'ARCHIVED' | 'FAILED' | 'ABANDONED' | 'DELETE_QUEUED' | 'DELETED';
+  status:
+    | 'PENDING_UPLOAD'
+    | 'UPLOADED'
+    | 'PROCESSING_QUEUED'
+    | 'PROCESSING'
+    | 'AVAILABLE'
+    | 'PROCESSING_FAILED'
+    | 'ARCHIVED'
+    | 'FAILED'
+    | 'ABANDONED'
+    | 'DELETE_QUEUED'
+    | 'DELETED';
   unavailable?: boolean | undefined;
 }
 
@@ -139,8 +145,7 @@ export interface AssessmentPublishedSnapshotContract {
   createdAt: string;
 }
 
-export type GetAssessmentAttemptSnapshotResponse =
-  AssessmentPublishedSnapshotContract;
+export type GetAssessmentAttemptSnapshotResponse = AssessmentPublishedSnapshotContract;
 
 export interface AssessmentContract {
   id: string;
@@ -254,10 +259,7 @@ export type AssessmentExecutionStatusContract =
   | 'PROVIDER_UNAVAILABLE'
   | 'RESERVED';
 
-export type AssessmentExecutionProviderStatusContract =
-  | 'READY'
-  | 'FIXTURE_ONLY'
-  | 'UNAVAILABLE';
+export type AssessmentExecutionProviderStatusContract = 'READY' | 'FIXTURE_ONLY' | 'UNAVAILABLE';
 
 export type AssessmentExecutionLanguageContract =
   | 'javascript'
@@ -365,6 +367,19 @@ export interface AssessmentAttemptResultContract {
   updatedAt: string;
 }
 
+export type AssessmentAttemptConflictReasonContract =
+  | 'ATTEMPT_EXPIRED'
+  | 'ATTEMPT_NOT_EDITABLE'
+  | 'ATTEMPT_NOT_SUBMITTABLE';
+
+export interface AssessmentAttemptConflictContract {
+  reason: AssessmentAttemptConflictReasonContract;
+  attemptId: string;
+  attemptStatus: AssessmentAttemptStatusContract;
+  expiresAt?: string | undefined;
+  serverNow: string;
+}
+
 export interface AssessmentAttemptContract {
   id: string;
   assessmentId: string;
@@ -372,6 +387,10 @@ export interface AssessmentAttemptContract {
   snapshotVersionNumber: number;
   learnerPrincipalId: string;
   status: AssessmentAttemptStatusContract;
+  serverNow?: string | undefined;
+  canEdit?: boolean | undefined;
+  canSubmit?: boolean | undefined;
+  proctoring?: ProctoringAttemptSummaryContract | undefined;
   session: AssessmentAttemptSessionContract;
   answers: AssessmentAttemptAnswerContract[];
   result?: AssessmentAttemptResultContract | undefined;
@@ -468,7 +487,6 @@ export interface SaveAssessmentAttemptAnswerRequest {
 export type SubmitAssessmentAttemptRequest = Record<string, never>;
 
 export type CancelAssessmentAttemptRequest = Record<string, never>;
-
 
 export interface AssessmentResultSummaryContract {
   attemptId: string;

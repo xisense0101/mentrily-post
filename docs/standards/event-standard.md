@@ -39,6 +39,10 @@ Domains:
 
 - `identity`, `workspace`, `commercial`, `content`, `learning`, `assessment`, `credentialing`, `communication`, `integration`, `intelligence`
 
+## Task 014D Update
+
+- Assessment attempt retries must reuse deterministic lifecycle behavior so repeated save/submit calls do not emit duplicate grading or result events.
+
 Section: Feature area or bounded context within domain.
 
 Topic: Action or state change (e.g., `granted`, `changed`, `created`).
@@ -181,3 +185,8 @@ When payload structure changes:
 
 - Task 014A does not add a public bulk-send event or uncontrolled campaign fanout path.
 - Campaign preview and scheduling foundation do not emit provider delivery events by default.
+
+## Task 014E Additions
+
+- Proctoring event ingestion must be idempotent when an `eventId` key is supplied and defensively bounded even when it is not.
+- Proctoring event payloads must stay metadata-only and must not include clipboard contents, raw key data, media frames, provider secrets, or private URLs.

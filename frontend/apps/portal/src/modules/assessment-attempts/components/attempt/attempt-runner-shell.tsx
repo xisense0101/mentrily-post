@@ -6,6 +6,7 @@ import {
   getAttemptExpiresAt,
   getRemainingTimeMs,
   isAttemptEditable,
+  isAttemptSubmittable,
   isQuestionAnswerable,
 } from '../../state';
 import type { AssessmentAttemptContract, AssessmentPublishedSnapshotContract } from '../../types';
@@ -15,6 +16,8 @@ import { AttemptResultPlaceholder } from './attempt-result-placeholder';
 import { AttemptStatusBadge } from './attempt-status-badge';
 import { AttemptSubmitPanel } from './attempt-submit-panel';
 import { AttemptTimerBanner } from './attempt-timer-banner';
+import { ProctoringDisclosureCard } from '@/modules/proctoring/components/proctoring-disclosure-card';
+import { ProctoringStatusBadge } from '@/modules/proctoring/components/proctoring-status-badge';
 
 interface AttemptRunnerShellProps {
   attempt: AssessmentAttemptContract;
@@ -22,12 +25,14 @@ interface AttemptRunnerShellProps {
   savingQuestionId: string | null;
   saveSuccessQuestionId: string | null;
   saveErrorQuestionId: string | null;
+  saveConflictQuestionId: string | null;
   saveErrorMessage?: string | null;
   submitting: boolean;
   submitErrorMessage?: string | null;
   cancelling: boolean;
   isOffline: boolean;
   wasOffline: boolean;
+  proctoringSessionStatus?: 'idle' | 'starting' | 'active' | 'error';
   timerSeverity?: 'normal' | 'warning' | 'urgent' | 'expired' | null | undefined;
   onSaveAnswer: (
     questionId: string,
@@ -46,12 +51,14 @@ export function AttemptRunnerShell({
   savingQuestionId,
   saveSuccessQuestionId,
   saveErrorQuestionId,
+  saveConflictQuestionId,
   saveErrorMessage,
   submitting,
   submitErrorMessage,
   cancelling,
   isOffline,
   wasOffline,
+  proctoringSessionStatus,
   timerSeverity,
   onSaveAnswer,
   onSubmit,
@@ -59,6 +66,7 @@ export function AttemptRunnerShell({
 }: AttemptRunnerShellProps) {
   const questions = flattenSnapshotQuestions(snapshot);
   const editable = isAttemptEditable(attempt);
+  const submittable = isAttemptSubmittable(attempt);
   const answerableCount = countAnswerableQuestions(questions);
   const contextCount = questions.length - answerableCount;
   const answeredCount = countAnsweredQuestions({
@@ -87,9 +95,19 @@ export function AttemptRunnerShell({
               published snapshot only.
             </p>
           </div>
-          <AttemptStatusBadge status={attempt.status} />
+          <div className="flex flex-col items-start gap-2">
+            <AttemptStatusBadge status={attempt.status} />
+            {attempt.proctoring ? (
+              <ProctoringStatusBadge
+                summary={attempt.proctoring}
+                {...(proctoringSessionStatus ? { status: proctoringSessionStatus } : {})}
+              />
+            ) : null}
+          </div>
         </div>
       </section>
+
+      {attempt.proctoring ? <ProctoringDisclosureCard summary={attempt.proctoring} /> : null}
 
       <AttemptTimerBanner
         expiresAt={getAttemptExpiresAt(attempt)}
@@ -105,6 +123,7 @@ export function AttemptRunnerShell({
               answer={findAnswerForQuestion({ attempt, questionId: question.id })}
               attemptId={attempt.id}
               isSaving={savingQuestionId === question.id}
+              saveConflict={saveConflictQuestionId === question.id}
               saveError={
                 saveErrorQuestionId === question.id ? (saveErrorMessage ?? undefined) : undefined
               }
@@ -130,6 +149,7 @@ export function AttemptRunnerShell({
             onCancel={onCancel}
             onSubmit={onSubmit}
             statusLabel={attempt.status}
+            submittable={submittable}
             submitError={submitErrorMessage ?? undefined}
             submitting={submitting}
             wasOffline={wasOffline}

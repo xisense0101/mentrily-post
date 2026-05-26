@@ -38,6 +38,10 @@
 ### Pro
 
 - Workspace-backed.
+
+## Task 014D Update
+
+- Assessment attempt reliability hardening in 014D does not add plan-tier differences; retry safety and server-side expiry enforcement apply uniformly to supported learner attempt flows.
 - Workspace-scoped entitlement subject (`{ kind: 'workspace', workspaceId }`).
 - **Seats**:
   - 5 admin seats.
@@ -186,3 +190,8 @@ Assessment result release depends on workspace-scoped assessment permissions. Th
 - Multi-workspace dashboard reads are permission-gated.
 - Campaign management currently covers workspace-scoped drafting, preview, and scheduling metadata only.
 - Campaign automation, analytics, and live blast delivery remain future-plan items.
+
+## Task 014E Additions
+
+- Proctoring gateway foundation currently enables metadata-only monitoring only.
+- Live monitoring review workflows, realtime supervision, media capture, and external vendor integrations remain future-plan items.

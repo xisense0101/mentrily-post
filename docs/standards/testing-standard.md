@@ -36,6 +36,11 @@ Mentrily uses a dual-testing strategy to balance speed and confidence:
 
 - **Command**: `pnpm test:e2e`, `pnpm e2e:learning`, `pnpm e2e:content`, `pnpm e2e:assessment`, or `pnpm e2e:assessment-attempt`
 
+## Task 014D Update
+
+- Assessment attempt reliability changes require coverage at four layers: unit use-case tests, DB-backed integration tests, portal component/state tests, and shared-harness Playwright attempt reliability tests.
+- Expiry behavior may be asserted in backend integration tests when browser-timer E2E would be flaky.
+
 ## Local Integration Workflow
 
 To run integration tests locally:
@@ -222,3 +227,8 @@ Assessment result release requires backend unit/integration coverage, frontend u
 
 - Dashboard and campaign changes require route-level validation plus portal coverage for loading, empty, and success states.
 - Campaign preview tests must verify safe rendering without provider execution side effects.
+
+## Task 014E Additions
+
+- Proctoring changes require backend tests for metadata sanitization, idempotent ingestion, and workspace/ownership checks.
+- Portal tests must cover learner disclosure rendering, visible monitoring status, safe event timeline rendering, and the absence of raw private fields.

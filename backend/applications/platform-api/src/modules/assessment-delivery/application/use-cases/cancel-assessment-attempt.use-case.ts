@@ -21,6 +21,10 @@ import { AssessmentEventPublisherService } from '../services/index.js';
 import { mapAttemptToResponse } from '../mappers/index.js';
 import { AssessmentAttemptResponse } from '../dto/index.js';
 import { requireAssessmentActor } from '../support/index.js';
+import {
+  GetLearnerAttemptProctoringUseCase,
+  SyncAttemptTerminalProctoringUseCase,
+} from '../../../proctoring/application/use-cases/proctoring.use-cases.js';
 
 @Injectable()
 export class CancelAssessmentAttemptUseCase {
@@ -31,6 +35,10 @@ export class CancelAssessmentAttemptUseCase {
     @Inject(AUDIT_RECORDER) private readonly auditRecorder: AuditRecorder,
     @Inject(AssessmentEventPublisherService)
     private readonly eventPublisher: AssessmentEventPublisherService,
+    @Inject(GetLearnerAttemptProctoringUseCase)
+    private readonly getAttemptProctoring?: GetLearnerAttemptProctoringUseCase,
+    @Inject(SyncAttemptTerminalProctoringUseCase)
+    private readonly syncTerminalProctoring?: SyncAttemptTerminalProctoringUseCase,
   ) {}
 
   async execute(context: RequestContext, attemptId: string): Promise<AssessmentAttemptResponse> {
@@ -82,7 +90,11 @@ export class CancelAssessmentAttemptUseCase {
         tx,
       );
 
-      return mapAttemptToResponse(saved);
+      await this.syncTerminalProctoring?.execute(saved.id, 'CANCELLED', tx);
+      const proctoring = this.getAttemptProctoring
+        ? await this.getAttemptProctoring.execute(context, saved.id, tx)
+        : undefined;
+      return mapAttemptToResponse(saved, proctoring);
     });
   }
 }

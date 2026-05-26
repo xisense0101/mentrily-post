@@ -39,6 +39,11 @@ Indexes:
 
 **Retention**: Audit records are immutable and never deleted. Retention policies (archival/deletion) are organizational concerns, not application concerns.
 
+## Task 014D Update
+
+- Assessment attempt reliability stayed on existing tables; no Prisma migration was required for 014D.
+- Attempt/session expiry is enforced from persisted timestamps already present in the assessment attempt aggregate model.
+
 ### OutboxMessage
 
 Durable event persistence for reliable cross-module and async distribution.
@@ -298,3 +303,9 @@ Result release reuses the existing `AssessmentAttemptResult` record with `gradin
 - Introduced a workspace-scoped `Campaign` persistence model with narrow status and scheduling metadata.
 - Dashboard reads remain aggregate queries over existing learning, assessment, content, media, audit, and campaign tables.
 - No provider credentials, storage keys, or scanner payloads are persisted in dashboard or campaign contracts.
+
+## Task 014E Additions
+
+- Added `AssessmentProctoringSession` and `AssessmentProctoringEvent` as explicit workspace-scoped persistence models.
+- Proctoring events store only sanitized metadata summaries and indexed identifiers for workspace, attempt, assessment, learner, session, type, and time.
+- Duplicate event ingestion is bounded by a `(workspaceId, sessionId, eventId)` uniqueness rule when an idempotency key is provided.

@@ -38,6 +38,11 @@ Provider integrations (Clerk, WorkOS, Stripe, email providers, telemetry provide
 - File upload remains a placeholder boundary only. There is still no Media Library integration, object storage adapter, signed URL exchange, webhook, or media-processing dependency.
 - Assessment remains intentionally disconnected from Learning Delivery and Content Studio runtime flows.
 
+## Task 014D Update (2026-05-26)
+
+- Assessment attempt reliability hardening did not add new third-party integrations.
+- Expiry, conflict normalization, autosave safety, and duplicate submit suppression are handled inside the existing portal plus `platform-api` boundaries.
+
 ## Task 012B Update (2026-05-21)
 
 - The Media Library frontend integrates with platform-api only for control-plane actions:
@@ -76,3 +81,8 @@ Provider integrations (Clerk, WorkOS, Stripe, email providers, telemetry provide
 - Campaign message preview reuses the existing Communication Center safe template renderer.
 - Campaign audience preview is resolved from existing workspace-scoped internal relations only.
 - Provider execution remains gated behind existing communication delivery controls and is not triggered by dashboard or campaign preview endpoints.
+
+## Task 014E Additions
+
+- Portal attempt runtime now integrates with backend proctoring routes for explicit session start, heartbeat, and safe metadata-only event recording.
+- Teacher monitoring views reuse authenticated workspace APIs and do not introduce any direct browser media integrations or external vendor dependencies.

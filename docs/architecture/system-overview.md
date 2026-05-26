@@ -38,6 +38,11 @@
 - Start/save/submit retries are handled inside the existing `platform-api` assessment lifecycle with transactional guarantees and DB-backed race coverage.
 - Learning Delivery, Content Studio, Media Library, Communication Center, proctoring, and real execution remain separate future phases.
 
+## Task 014D Update (2026-05-26)
+
+- The active assessment runtime now enforces deterministic server-side expiry on read/save/submit and returns safe conflict responses for non-editable or non-submittable attempts.
+- Portal learner attempt flows now treat autosave and duplicate submit as retry-safe operations over the same backend lifecycle.
+
 ## Task 011I Update (2026-05-20)
 
 - The assessment slice now includes Builder authoring, learner attempt UI/runtime, grading runtime, manual grading UI, result release, learner result views, reliability baseline, and UX hardening for timer/save/offline behavior.
@@ -64,3 +69,8 @@
 - The portal now includes dashboard and campaign management foundations for authenticated workspace users with the required permissions.
 - Dashboard and campaign APIs remain backend-owned and workspace-scoped.
 - Communication Center continues to own template safety and provider boundaries.
+
+## Task 014E Additions
+
+- The system now includes a proctoring gateway foundation for assessment attempts with explicit learner disclosure and safe monitoring summaries.
+- The current system overview still excludes webcam capture, screen capture, audio capture, biometric recognition, hidden monitoring, and vendor integrations.

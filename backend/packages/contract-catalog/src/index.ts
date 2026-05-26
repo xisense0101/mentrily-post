@@ -9,3 +9,4 @@ export * from './identity/provider-events.js';
 export * from './analytics/index.js';
 export * from './dashboard/index.js';
 export * from './campaign-management/index.js';
+export * from './proctoring/index.js';

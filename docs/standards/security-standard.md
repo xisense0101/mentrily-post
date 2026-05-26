@@ -32,6 +32,11 @@
 - Private media assets must not be exposed without backend-issued signed access checks.
 - The frontend must not bypass backend permission checks or trust tenant/workspace identifiers from mutation bodies.
 
+## Task 014D Update (2026-05-26)
+
+- Assessment attempt save and submit mutations must reject post-terminal edits and must not leak unreleased scores, private grading notes, raw answer payloads, or storage/object keys in learner-facing conflicts.
+- Cross-workspace attempt access remains blocked and learner ownership remains mandatory for mutation paths.
+
 ## Communication Center
 
 - Communication Center must enforce workspace ownership checks after loading templates or intents.
@@ -66,3 +71,9 @@
 - Dashboard and campaign reads must remain workspace-scoped and permission-enforced.
 - Audience preview must never accept arbitrary raw email or phone inputs for this foundation.
 - Live provider delivery remains disabled by default for campaign flows.
+
+## Task 014E Additions
+
+- Monitoring must never be hidden from learners and must never bypass browser permission prompts.
+- The 014E foundation must not capture webcam, screen, audio, clipboard contents, raw keystrokes, biometric data, or face recognition signals.
+- Monitoring reads and writes must remain cross-workspace safe and must not expose unreleased scores, private grading notes, storage keys, object keys, or private URLs.

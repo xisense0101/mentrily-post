@@ -30,6 +30,7 @@ import { AssessmentEventPublisherService } from '../services/index.js';
 import { mapAttemptToResponse } from '../mappers/index.js';
 import { AssessmentAttemptResponse, StartAssessmentAttemptInput } from '../dto/index.js';
 import { requireAssessmentActor } from '../support/index.js';
+import { GetLearnerAttemptProctoringUseCase } from '../../../proctoring/application/use-cases/proctoring.use-cases.js';
 
 @Injectable()
 export class StartAssessmentAttemptUseCase {
@@ -46,6 +47,8 @@ export class StartAssessmentAttemptUseCase {
     @Inject(AUDIT_RECORDER) private readonly auditRecorder: AuditRecorder,
     @Inject(AssessmentEventPublisherService)
     private readonly eventPublisher: AssessmentEventPublisherService,
+    @Inject(GetLearnerAttemptProctoringUseCase)
+    private readonly getAttemptProctoring?: GetLearnerAttemptProctoringUseCase,
   ) {}
 
   async execute(
@@ -109,7 +112,10 @@ export class StartAssessmentAttemptUseCase {
         tx,
       );
       if (activeAttempt) {
-        return mapAttemptToResponse(activeAttempt);
+        const proctoring = this.getAttemptProctoring
+          ? await this.getAttemptProctoring.execute(context, activeAttempt.id, tx)
+          : undefined;
+        return mapAttemptToResponse(activeAttempt, proctoring);
       }
 
       const policyResult = this.attemptPolicy.canStartAttempt({
@@ -159,7 +165,12 @@ export class StartAssessmentAttemptUseCase {
         sessionId,
         startedAt,
         ...(expiresAt !== undefined ? { expiresAt } : {}),
-        ...(input?.metadata !== undefined ? { metadata: input.metadata } : {}),
+        metadata: {
+          ...(input?.metadata ?? {}),
+          ...(typeof assessment.metadata?.proctoringMode === 'string'
+            ? { proctoringMode: assessment.metadata.proctoringMode }
+            : {}),
+        },
       });
 
       let saved: AssessmentAttempt;
@@ -175,7 +186,10 @@ export class StartAssessmentAttemptUseCase {
             tx,
           );
           if (concurrentAttempt) {
-            return mapAttemptToResponse(concurrentAttempt);
+            const proctoring = this.getAttemptProctoring
+              ? await this.getAttemptProctoring.execute(context, concurrentAttempt.id, tx)
+              : undefined;
+            return mapAttemptToResponse(concurrentAttempt, proctoring);
           }
         }
         throw error;
@@ -203,7 +217,10 @@ export class StartAssessmentAttemptUseCase {
         tx,
       );
 
-      return mapAttemptToResponse(saved);
+      const proctoring = this.getAttemptProctoring
+        ? await this.getAttemptProctoring.execute(context, saved.id, tx)
+        : undefined;
+      return mapAttemptToResponse(saved, proctoring);
     });
   }
 }

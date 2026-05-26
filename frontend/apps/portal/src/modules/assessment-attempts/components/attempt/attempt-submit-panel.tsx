@@ -1,5 +1,6 @@
 interface AttemptSubmitPanelProps {
   editable: boolean;
+  submittable?: boolean | undefined;
   statusLabel: string;
   submitting: boolean;
   cancelling: boolean;
@@ -12,6 +13,7 @@ interface AttemptSubmitPanelProps {
 
 export function AttemptSubmitPanel({
   editable,
+  submittable = editable,
   statusLabel,
   submitting,
   cancelling,
@@ -49,7 +51,7 @@ export function AttemptSubmitPanel({
         <button
           className="rounded-full bg-portal-text px-5 py-3 text-sm font-semibold text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
           data-testid="attempt-submit-button"
-          disabled={!editable || submitting || isOffline}
+          disabled={!submittable || submitting || isOffline}
           onClick={() => void onSubmit()}
           type="button"
         >

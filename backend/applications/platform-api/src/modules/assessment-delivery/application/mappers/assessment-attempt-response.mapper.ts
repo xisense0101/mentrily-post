@@ -15,6 +15,7 @@ import {
   AssessmentAttemptSessionResponse,
   AssessmentAttemptResultResponse,
 } from '../dto/index.js';
+import type { ProctoringAttemptSummaryContract } from '@mentrily/contract-catalog';
 import { readFileUploadAnswerMediaAssetIds, readSubmittedFiles } from '../support/index.js';
 
 export function mapAttemptSessionToResponse(
@@ -65,7 +66,16 @@ export function mapAttemptResultToResponse(
   };
 }
 
-export function mapAttemptToResponse(attempt: AssessmentAttempt): AssessmentAttemptResponse {
+export function mapAttemptToResponse(
+  attempt: AssessmentAttempt,
+  proctoring?: ProctoringAttemptSummaryContract,
+): AssessmentAttemptResponse {
+  const serverNow = new Date();
+  const canEdit =
+    (attempt.status === 'IN_PROGRESS' || attempt.status === 'NOT_STARTED') &&
+    !attempt.isSessionExpired(serverNow);
+  const canSubmit = attempt.status === 'IN_PROGRESS' && !attempt.isSessionExpired(serverNow);
+
   return {
     id: attempt.id,
     assessmentId: attempt.assessmentId,
@@ -73,6 +83,10 @@ export function mapAttemptToResponse(attempt: AssessmentAttempt): AssessmentAtte
     snapshotVersionNumber: attempt.snapshotVersionNumber,
     learnerPrincipalId: attempt.learnerPrincipalId,
     status: attempt.status,
+    serverNow: serverNow.toISOString(),
+    canEdit,
+    canSubmit,
+    ...(proctoring ? { proctoring } : {}),
     session: mapAttemptSessionToResponse(attempt.session),
     answers: attempt.answers.map(mapAttemptAnswerToResponse),
     ...(attempt.result !== undefined ? { result: mapAttemptResultToResponse(attempt.result) } : {}),

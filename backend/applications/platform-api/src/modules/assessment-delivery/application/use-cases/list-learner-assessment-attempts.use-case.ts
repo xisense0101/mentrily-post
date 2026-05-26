@@ -15,12 +15,15 @@ import { AssessmentAttemptRepository } from '../../domain/repositories/index.js'
 import { mapAttemptToResponse } from '../mappers/index.js';
 import { AssessmentAttemptResponse } from '../dto/index.js';
 import { requireAssessmentActor } from '../support/index.js';
+import { GetLearnerAttemptProctoringUseCase } from '../../../proctoring/application/use-cases/proctoring.use-cases.js';
 
 @Injectable()
 export class ListLearnerAssessmentAttemptsUseCase {
   constructor(
     @Inject(AssessmentAttemptRepository) private readonly attemptRepo: AssessmentAttemptRepository,
     @Inject(PERMISSION_EVALUATOR) private readonly permissionEvaluator: PermissionEvaluator,
+    @Inject(GetLearnerAttemptProctoringUseCase)
+    private readonly getAttemptProctoring?: GetLearnerAttemptProctoringUseCase,
   ) {}
 
   async execute(context: RequestContext): Promise<AssessmentAttemptResponse[]> {
@@ -39,6 +42,11 @@ export class ListLearnerAssessmentAttemptsUseCase {
       learnerPrincipalId: workspace.actorId,
     });
 
-    return attempts.map(mapAttemptToResponse);
+    const proctoring = this.getAttemptProctoring
+      ? await Promise.all(
+          attempts.map(async (attempt) => this.getAttemptProctoring?.execute(context, attempt.id)),
+        )
+      : [];
+    return attempts.map((attempt, index) => mapAttemptToResponse(attempt, proctoring[index]));
   }
 }

@@ -38,6 +38,11 @@
 - `actorId` may be null for system-originated actions only
 - `metadata` must be JSON-safe (validated at serialization)
 - Immutable append-only (no updates or deletes)
+
+## Task 014D Update
+
+- Do not add assessment-attempt schema fields for reliability unless the existing model cannot safely represent retry/idempotency behavior.
+- 014D completed without schema drift; reliability hardening remained at use-case, transaction, contract, and UI layers.
 - Indexes required on: `workspaceId`, `actorId`, `action`, `occurredAt`
 
 ## Outbox Messages
@@ -172,3 +177,8 @@ Deduplication rule:
 
 - Campaign persistence is limited to workspace-scoped draft/schedule metadata and typed audience configuration JSON.
 - Campaign indexes must stay narrow: workspace plus status, created time, and scheduled time.
+
+## Task 014E Additions
+
+- Proctoring persistence must remain narrow and proctoring-specific: session lifecycle plus sanitized event metadata only.
+- Proctoring indexes must optimize workspace/attempt/assessment/session time-ordered monitoring reads without storing raw surveillance payloads.

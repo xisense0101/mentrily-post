@@ -2,6 +2,7 @@ import { buildE2ERequestHeaders } from '@/foundation/e2e/e2e-request-context';
 import type { MediaReadUrlContract } from '@/contracts/media-library';
 import type {
   AssessmentAttemptContract,
+  AssessmentAttemptConflictContract,
   AssessmentPublishedSnapshotContract,
   CancelAssessmentAttemptRequest,
   SaveAssessmentAttemptAnswerRequest,
@@ -18,6 +19,7 @@ interface ErrorEnvelope {
     code?: string | undefined;
     message?: string | undefined;
     requestId?: string | undefined;
+    details?: AssessmentAttemptConflictContract | undefined;
   };
 }
 
@@ -62,6 +64,7 @@ async function parseResponse<T>(response: Response): Promise<T> {
     response.status,
     envelope?.error?.code,
     envelope?.error?.requestId,
+    envelope?.error?.details,
   );
 }
 

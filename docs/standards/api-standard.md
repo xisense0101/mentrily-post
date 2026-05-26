@@ -38,6 +38,11 @@
 - Content Studio API validation must cover the real HTTP layer directly for create, list, read, update, replace-blocks, publish, archive, restore, and latest-snapshot routes.
 - Content Studio frontend components must call the typed API client or injected hook boundary rather than embedding raw route URLs inside interactive components.
 - Test-only E2E request-context injection may send tenant/workspace headers, but only when an explicit E2E harness mode is enabled. Production request behavior must not depend on browser-stored tenant/workspace IDs.
+
+## Task 014D Update
+
+- Assessment attempt mutation routes must return safe typed conflict envelopes for expired, non-editable, and non-submittable states.
+- Tenant/workspace ownership for assessment attempts must continue to come from request context, never mutation bodies.
 - Content Studio cross-stack E2E uses that test-only request-context path to exercise the real browser, real frontend API client, real backend HTTP controllers, and real test Postgres database without putting `tenantId` or `workspaceId` in request bodies.
 - Frontend contract types must stay aligned with backend API contracts. Temporary mirrored contract files are acceptable only when package sharing is not yet wired and must match the backend contract seed exactly.
 - Assessment Builder authoring payloads must send backend-compatible question answer keys; single-select and multi-select answers use `correctOptionIds`, short answers use `acceptedTextAnswers`, code placeholders use `expectedOutput`, and manual-grading placeholders may use `rubricId` or `metadata` only when needed.
@@ -112,3 +117,9 @@ Learner result endpoints must never expose unreleased scores, correct answer key
 
 - Dashboard and campaign endpoints must resolve workspace context server-side and never trust `tenantId` or `workspaceId` from request bodies.
 - Campaign preview responses must remain frontend-safe and exclude provider configuration, private URLs, storage keys, and scanner output.
+
+## Task 014E Additions
+
+- Proctoring ingestion and monitoring routes must be authenticated, workspace-scoped, and attempt/session-scoped by server-side lookup only.
+- Proctoring request bodies must never accept trusted `tenantId` or `workspaceId` fields.
+- Proctoring responses must expose only learner-safe disclosure, session status, event type, severity, timestamps, and sanitized metadata summaries.

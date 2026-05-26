@@ -8,6 +8,7 @@ import type {
   AssessmentAttemptAnswerStatusContract,
   AssessmentAttemptGradingStatusContract,
   AssessmentQuestionKindContract,
+  ProctoringAttemptSummaryContract,
 } from '@mentrily/contract-catalog';
 
 export interface AssessmentAttemptSessionResponse {
@@ -47,6 +48,10 @@ export interface AssessmentAttemptResponse {
   snapshotVersionNumber: number;
   learnerPrincipalId: string;
   status: AssessmentAttemptStatusContract;
+  serverNow?: string;
+  canEdit?: boolean;
+  canSubmit?: boolean;
+  proctoring?: ProctoringAttemptSummaryContract;
   session: AssessmentAttemptSessionResponse;
   answers: AssessmentAttemptAnswerResponse[];
   result?: AssessmentAttemptResultResponse;

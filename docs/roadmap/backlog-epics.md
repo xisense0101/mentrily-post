@@ -24,6 +24,11 @@
 
 - Ticket: draft/publish command handlers.
 
+## Assessment delivery
+
+- Ticket complete: assessment attempt reliability and concurrency hardening.
+- Ticket remaining: proctoring gateway and attempt monitoring foundation.
+
 ## Media library
 
 - Ticket: backend media metadata and upload intent foundation.
@@ -106,3 +111,14 @@
 
 - Dashboard analytics remains a foundation epic with richer analytics deferred.
 - Campaign management remains a staged epic: draft and preview foundation now, delivery automation later.
+
+## Task 014C Additions
+
+- Analytics epic updated to reflect creator dashboard read models and outbox-based activity normalization.
+- Assessment analytics follow safe released-result semantics instead of exposing unreleased grading output.
+- Multi-workspace dashboard access remains permission-gated and tenant-scoped.
+
+## Task 014E Additions
+
+- Added a proctoring foundation epic covering safe session lifecycle, metadata-only monitoring ingestion, learner disclosure, and teacher timeline review.
+- Live monitoring incident triage remains the next follow-up epic slice rather than part of this foundation task.

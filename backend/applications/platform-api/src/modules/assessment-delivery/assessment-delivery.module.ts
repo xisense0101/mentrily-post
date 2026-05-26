@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { DataPlatformModule } from '@mentrily/data-platform';
 import { FoundationModule } from '../../foundation/foundation.module.js';
 import { MediaLibraryModule } from '../media-library/media-library.module.js';
+import { ProctoringModule } from '../proctoring/proctoring.module.js';
 import {
   AssessmentPublishPolicyService,
   AssessmentVersioningPolicyService,
@@ -68,7 +69,7 @@ import {
 } from './presentation/index.js';
 
 @Module({
-  imports: [FoundationModule, DataPlatformModule, MediaLibraryModule],
+  imports: [FoundationModule, DataPlatformModule, MediaLibraryModule, ProctoringModule],
   controllers: [
     AssessmentDeliveryController,
     AssessmentAttemptController,

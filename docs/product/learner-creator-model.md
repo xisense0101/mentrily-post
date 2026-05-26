@@ -38,6 +38,7 @@ Learner and creator are interaction modes, not permanent identities.
 
 - Creators now author assessments (exams, quizzes, practice assignments) through the Assessment Builder UI. The current creator-side shell covers list/create, editor access, draft content editing, publish, archive, and restore flows.
 - The Assessment Builder frontend authoring shell now exists for creators and has real cross-stack E2E coverage.
+- Learner attempt delivery now hardens autosave, submit retries, expired-state handling, and read-only terminal-state UX without changing creator grading or result-release policy boundaries.
 - Learner assessment attempt backend/runtime foundation and learner-facing attempt UI now both exist.
 - Draft assessments are creator-side-only authoring state, not learner-visible.
 - Published assessment snapshots are what learners will later attempt, grade, and receive results from.
@@ -104,3 +105,9 @@ Learners can read only their own released assessment results. Creators, admins, 
 - Learners remain excluded from workspace campaign management.
 - Creators can still interact with existing learning/content workflows, while campaign write access remains policy-controlled.
 - Dashboard data is read-only and scoped to the active workspace context.
+
+## Task 014E Additions
+
+- Learners can see a visible monitoring disclosure and status badge before and during monitored attempts.
+- Creators, teachers, admins, and workspace owners can view a safe monitoring timeline for workspace-scoped attempts they are allowed to monitor.
+- Monitoring never bypasses normal assessment ownership or workspace boundaries.

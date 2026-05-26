@@ -951,6 +951,45 @@ enum AssessmentAttemptStatus {
   CANCELLED
 }
 
+enum AssessmentProctoringMode {
+  OFF
+  BASIC_EVENT_MONITORING
+  RESERVED_LIVE_MONITORING
+}
+
+enum AssessmentProctoringSessionStatus {
+  PENDING
+  ACTIVE
+  ENDED
+  EXPIRED
+  CANCELLED
+}
+
+enum AssessmentProctoringEventType {
+  SESSION_STARTED
+  SESSION_ENDED
+  HEARTBEAT
+  WINDOW_BLUR
+  WINDOW_FOCUS
+  VISIBILITY_HIDDEN
+  VISIBILITY_VISIBLE
+  FULLSCREEN_EXITED
+  FULLSCREEN_ENTERED
+  COPY_ATTEMPTED
+  PASTE_ATTEMPTED
+  NETWORK_OFFLINE
+  NETWORK_ONLINE
+  SUSPICIOUS_ACTIVITY_REPORTED
+  SYSTEM_WARNING
+}
+
+enum AssessmentProctoringEventSeverity {
+  INFO
+  LOW
+  MEDIUM
+  HIGH
+}
+
 enum AssessmentAttemptAnswerStatus {
   DRAFT
   SUBMITTED
@@ -1010,6 +1049,7 @@ model AssessmentAttempt {
   snapshot     AssessmentPublishedSnapshot @relation(fields: [snapshotId], references: [id], onDelete: Cascade)
   answers      AssessmentAttemptAnswer[]
   session      AssessmentAttemptSession?
+  proctoringSessions AssessmentProctoringSession[]
   result       AssessmentAttemptResult?
   gradingRuns  AssessmentGradingRun[]
   answerGrades AssessmentAnswerGrade[]
@@ -1060,6 +1100,66 @@ model AssessmentAttemptSession {
 
   @@index([expiresAt])
   @@index([lastSeenAt])
+}
+
+model AssessmentProctoringSession {
+  id                 String                            @id @default(uuid()) @db.Uuid
+  tenantId           String                            @db.Uuid
+  workspaceId        String                            @db.Uuid
+  assessmentId       String                            @db.Uuid
+  attemptId          String                            @db.Uuid
+  learnerPrincipalId String                            @db.Uuid
+  mode               AssessmentProctoringMode
+  status             AssessmentProctoringSessionStatus @default(PENDING)
+  startedAt          DateTime
+  endedAt            DateTime?
+  lastHeartbeatAt    DateTime?
+  createdAt          DateTime                          @default(now())
+  updatedAt          DateTime                          @updatedAt
+
+  attempt AssessmentAttempt @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+  events  AssessmentProctoringEvent[]
+
+  @@index([tenantId])
+  @@index([workspaceId])
+  @@index([attemptId])
+  @@index([assessmentId])
+  @@index([learnerPrincipalId])
+  @@index([workspaceId, attemptId])
+  @@index([workspaceId, assessmentId])
+  @@index([workspaceId, learnerPrincipalId])
+  @@index([status])
+}
+
+model AssessmentProctoringEvent {
+  id                 String                             @id @default(uuid()) @db.Uuid
+  tenantId           String                             @db.Uuid
+  workspaceId        String                             @db.Uuid
+  sessionId          String                             @db.Uuid
+  attemptId          String                             @db.Uuid
+  assessmentId       String                             @db.Uuid
+  learnerPrincipalId String                             @db.Uuid
+  eventId            String?
+  eventType          AssessmentProctoringEventType
+  severity           AssessmentProctoringEventSeverity  @default(INFO)
+  occurredAt         DateTime
+  receivedAt         DateTime                           @default(now())
+  metadata           Json
+
+  session AssessmentProctoringSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@index([workspaceId])
+  @@index([sessionId])
+  @@index([attemptId])
+  @@index([assessmentId])
+  @@index([learnerPrincipalId])
+  @@index([eventType])
+  @@index([occurredAt])
+  @@index([receivedAt])
+  @@index([workspaceId, sessionId, occurredAt])
+  @@index([workspaceId, eventType, occurredAt])
+  @@unique([workspaceId, sessionId, eventId])
 }
 
 model AssessmentAttemptResult {
@@ -1608,4 +1708,3 @@ model Campaign {
   @@index([workspaceId, createdAt])
   @@index([workspaceId, scheduledFor])
 }
-

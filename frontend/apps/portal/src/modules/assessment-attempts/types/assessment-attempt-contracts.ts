@@ -1,6 +1,8 @@
 export type {
   AssessmentAttemptAnswerContract,
   AssessmentAttemptAnswerStatusContract,
+  AssessmentAttemptConflictContract,
+  AssessmentAttemptConflictReasonContract,
   AssessmentAttemptContract,
   AssessmentAttemptGradingStatusContract,
   AssessmentAttemptResultContract,

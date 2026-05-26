@@ -7,10 +7,7 @@ import {
   TransactionRunner,
 } from '@mentrily/service-core';
 import { AssessmentAttemptRepository } from '../domain/repositories/index.js';
-import {
-  AssessmentAttempt,
-  AssessmentAttemptSubmissionPolicyService,
-} from '../domain/index.js';
+import { AssessmentAttempt, AssessmentAttemptSubmissionPolicyService } from '../domain/index.js';
 import { AssessmentEventPublisherService } from '../application/services/index.js';
 import { SubmitAssessmentAttemptUseCase } from '../application/use-cases/index.js';
 import {
@@ -54,7 +51,8 @@ function createTransactionRunner(tx: TransactionContext): TransactionRunner {
           $executeRaw: vi.fn(async () => 1),
           ...(typeof tx.client === 'object' && tx.client !== null ? tx.client : {}),
         },
-      })),
+      }),
+    ),
   };
 }
 
@@ -182,8 +180,11 @@ describe('SubmitAssessmentAttemptUseCase', () => {
         new AssessmentEventPublisherService({ publish: vi.fn(async () => undefined) }),
       );
 
-      await expect(useCase.execute(createAssessmentRequestContext(), attempt.id)).rejects.toMatchObject({
-        code: 'VALIDATION_ERROR',
+      await expect(
+        useCase.execute(createAssessmentRequestContext(), attempt.id),
+      ).rejects.toMatchObject({
+        code: 'CONFLICT',
+        details: { reason: 'ATTEMPT_EXPIRED' },
       });
       expect(attempt.status).toBe('EXPIRED');
       expect(vi.mocked(repo.save)).toHaveBeenCalled();

@@ -6,21 +6,22 @@ All domain events follow a standardized envelope structure for reliable, idempot
 
 ```typescript
 interface DomainEventEnvelope {
-  eventId: string;              // Globally unique event ID (UUID)
-  eventName: string;            // Versioned name (e.g., 'identity.membership.granted.v1')
-  eventVersion: number;         // Payload schema version
-  occurredAt: string;           // ISO 8601 timestamp of business event
-  correlationId: string;        // Distributed trace correlation ID
-  tenantId?: string;            // Workspace context (may be null for principal-scoped)
-  workspaceId?: string;         // Workspace context (may be null for principal-scoped)
-  idempotencyKey?: string;      // Deterministic dedup key (not random)
-  payload: TPayload;            // Event-specific data (JSON-safe)
+  eventId: string; // Globally unique event ID (UUID)
+  eventName: string; // Versioned name (e.g., 'identity.membership.granted.v1')
+  eventVersion: number; // Payload schema version
+  occurredAt: string; // ISO 8601 timestamp of business event
+  correlationId: string; // Distributed trace correlation ID
+  tenantId?: string; // Workspace context (may be null for principal-scoped)
+  workspaceId?: string; // Workspace context (may be null for principal-scoped)
+  idempotencyKey?: string; // Deterministic dedup key (not random)
+  payload: TPayload; // Event-specific data (JSON-safe)
 }
 ```
 
 ### Event Naming
 
 Versioned semantic names:
+
 - Format: `{domain}.{section}.{topic}.v{N}`
 - Examples:
   - `identity.membership.granted.v1`
@@ -29,6 +30,7 @@ Versioned semantic names:
   - `workspace.provisioned.v1`
 
 Domains:
+
 - `identity`: Principal/user identity and session events
 - `workspace`: Workspace lifecycle and governance
 - `commercial`: Plans, entitlements, billing
@@ -38,6 +40,11 @@ Domains:
 - `credentialing`: Badge/credential issuance
 - `communication`: Email, SMS, notifications
 - `integration`: Third-party webhook/sync events
+
+## Task 014D Update
+
+- Assessment attempt submit retries must not duplicate downstream grading or result side effects.
+- Existing outbox idempotency remains the protection boundary for duplicate learner submit paths.
 - `intelligence`: Analytics, data pipeline events
 
 ### Current content domain event names
@@ -101,11 +108,13 @@ Note: In 010A these are domain event factories only. Outbox persistence and asyn
 `idempotencyKey` is set by the producer and must be **deterministic**, not random.
 
 Format recommendation:
+
 ```
 {workspaceId}:{entityType}:{entityId}:{action}:{occurredAtTimestamp}
 ```
 
 Example:
+
 ```
 ws-001:workspace_member:member-123:added:2026-05-11T10:30:00Z
 ```
@@ -121,6 +130,7 @@ Producer writes the event to the `OutboxMessage` table **in the same transaction
 Duplicate `eventId` inserts are idempotent: if a producer retry hits the unique constraint, the repository returns the existing outbox record instead of creating a second row.
 
 Lifecycle:
+
 1. **PENDING**: Awaiting relay to subscribers
 2. **PROCESSING**: Currently being relayed by worker
 3. **PUBLISHED**: Successfully delivered to all subscribers
@@ -164,6 +174,7 @@ Idempotency rule: Deduplicate by `(source + externalEventId)` tuple.
 Prisma duplicate errors for the inbox are handled by re-reading the existing `(source, externalEventId)` record, regardless of whether the ORM reports the compound unique target as `['source_externalEventId_key']` or `['source', 'externalEventId']`.
 
 Lifecycle:
+
 1. **RECEIVED**: Inbound event received and stored
 2. **PROCESSING**: Currently being processed
 3. **PROCESSED**: Successfully processed and committed
@@ -194,6 +205,7 @@ updatedAt (timestamp)
 ## Eventual Consistency
 
 Cross-module read models may lag briefly behind writes:
+
 - Event latency: typically < 100ms in normal conditions
 - Design UX and APIs for **bounded eventual consistency**
 - Queries that must reflect immediate writes should query the domain module directly
@@ -202,6 +214,7 @@ Cross-module read models may lag briefly behind writes:
 ## External Publication (Worker Relay)
 
 External publication is **deferred to worker relay processes**, not inline in request paths:
+
 1. Request writes state + persists event to outbox (**transactional**)
 2. Response returned to client (synchronous path complete)
 3. Worker relay polls outbox PENDING messages (**async**)
@@ -209,6 +222,7 @@ External publication is **deferred to worker relay processes**, not inline in re
 5. Consumer persists to inbox and processes idempotently
 
 Content Studio 009B1 uses this same rule for:
+
 - `content.document.created`
 - `content.document.draft_blocks_replaced`
 - `content.document.published`
@@ -221,6 +235,7 @@ Worker claim methods must defensively hard-cap returned records to the requested
 The worker relay remains intentionally deferred to Task 007B.
 
 This maintains:
+
 - Request/response synchronicity
 - Domain transaction boundaries
 - Decoupling from external system availability
@@ -236,6 +251,7 @@ This maintains:
 ## Event Versioning
 
 When payload structure changes:
+
 1. Increment `eventVersion`
 2. Publish new event name with higher version (e.g., v2)
 3. Subscribers can handle multiple versions or migrate gracefully
@@ -244,6 +260,7 @@ When payload structure changes:
 - 2026-05-18: Task 011C1 validation confirmed grading runtime and outbox/inbox/audit Prisma enum/status alignment remains stable; root lint/typecheck/test/build passed.
 
 ## Task 011D Update (2026-05-18)
+
 - Manual grading UI now exists for creator/admin review.
 - Creator/admin can view pending manual-review answers, open grading runs, and submit manual score + feedback.
 - Learner result page is not implemented yet.
@@ -252,7 +269,6 @@ When payload structure changes:
 - Learning Delivery is not connected to Assessment grading.
 - Content Studio is not connected to Assessment grading.
 - Grading E2E uses real frontend + real backend + test Postgres.
-
 
 ## Assessment Result Events
 
@@ -273,3 +289,8 @@ The assessment delivery domain now emits `assessment.result.released`. A `assess
 - Duplicate outbox appends resolve to the existing row by `eventId`, so communication lifecycle event persistence is deterministic under retries and simple concurrency.
 - Task 012E does not add any new public provider events.
 - Communication events may continue to carry provider mode identifiers, but must not expose provider secrets, raw transport payloads, or credential material.
+
+## Task 014E Additions
+
+- Proctoring monitoring events are persisted as product data rather than emitted as raw public outbox payloads in this foundation task.
+- Monitoring event metadata is allowlisted per event type and excludes clipboard contents, raw keystrokes, media payloads, and device-fingerprinting detail.

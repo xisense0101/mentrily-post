@@ -38,6 +38,10 @@ Each ticket includes:
 
 - Code merged with reviews.
 - Tests passing (unit/integration/e2e as applicable).
+
+## Task 014D Update
+
+- Assessment attempt reliability work is complete only when package validation, DB-backed integration validation, root validation, and the explicit sequential E2E regression block all pass.
 - Docs updated.
 - Monitoring and runbook notes updated where needed.
 
@@ -64,3 +68,8 @@ Each ticket includes:
 
 - Added multi-workspace dashboard foundation and campaign management foundation as a bounded admin experience.
 - Deferred campaign automation, analytics, and live bulk fanout to later tasks.
+
+## Task 014E Additions
+
+- Added proctoring gateway and metadata-only attempt monitoring foundation after 014D attempt reliability hardening.
+- Deferred live monitoring triage, realtime supervision, media capture, and vendor integrations to the follow-up task stream.

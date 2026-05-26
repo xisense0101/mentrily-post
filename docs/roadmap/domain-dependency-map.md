@@ -32,6 +32,11 @@ This map is derived from existing docs only (`docs/product`, `docs/architecture`
 - **Depends on**: identity/workspace context, billing adapter boundary.
 - **Why foundational**: plan logic must be centralized and consumed through entitlement ports.
 
+### `assessment-delivery`
+
+- **Provides**: learner attempt lifecycle, grading entry, result release boundaries, attempt reliability and expiry enforcement.
+- **Depends on**: workspace context, permissions, audit/outbox durability, media-library file-reference validation, learning-delivery only for linked completion reads.
+
 ### `platform-operations`
 
 - **Provides**: operational controls, feature flag policy hooks, privileged platform actions.
@@ -236,3 +241,8 @@ Assessment result release depends on assessment attempts, published snapshots, a
 
 - Dashboard depends on workspace governance, learning delivery, assessment delivery, content studio, media library, audit data, and campaign persistence.
 - Campaign management depends on workspace governance, communication center template safety, and existing workspace member/course/assessment/content/media relations.
+
+## Task 014E Additions
+
+- Proctoring depends directly on workspace governance context, assessment delivery attempts, portal attempt runtime hooks, and safe monitoring read APIs.
+- Dashboard and grading consume only safe proctoring summaries or timelines; they do not depend on media-processing or communication provider stacks.

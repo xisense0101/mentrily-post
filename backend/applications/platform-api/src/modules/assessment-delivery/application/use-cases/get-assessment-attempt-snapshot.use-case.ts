@@ -56,6 +56,13 @@ export class GetAssessmentAttemptSnapshotUseCase {
       throw new AppError('NOT_FOUND', 'snapshot not found', 404);
     }
 
+    const now = new Date();
+    if (attempt.isInProgress() && attempt.isSessionExpired(now)) {
+      attempt.expire();
+    }
+    attempt.touchSession(now);
+    await this.attemptRepo.save(attempt);
+
     return mapSnapshotToResponse(snapshot);
   }
 }

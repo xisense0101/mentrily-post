@@ -5,14 +5,30 @@ import { ResultErrorState, ResultPageHeader } from '../components/shared';
 import { useInstructorAssessmentResult } from '../hooks';
 
 export function InstructorResultPage({ attemptId }: { attemptId: string }) {
-  const { result, loading, releasing, error, refresh, releaseResult } = useInstructorAssessmentResult(attemptId);
+  const { result, loading, releasing, error, refresh, releaseResult } =
+    useInstructorAssessmentResult(attemptId);
 
   return (
     <div className="portal-page space-y-6" data-testid="instructor-result-page">
-      <ResultPageHeader title="Result release" description="Release graded assessment results and let learners review their scores." />
+      <ResultPageHeader
+        title="Result release"
+        description="Release graded assessment results and let learners review their scores."
+      />
+      <div>
+        <a
+          className="text-sm font-medium text-slate-700 underline"
+          href={`/grading/results/${attemptId}/monitoring${result ? `?assessmentId=${result.assessmentId}` : ''}`}
+        >
+          View monitoring timeline
+        </a>
+      </div>
       {loading ? <div>Loading result...</div> : null}
-      {!loading && error ? <ResultErrorState message={error} onRetry={() => void refresh()} /> : null}
-      {!loading && !error && result ? <InstructorResultPanel result={result} releasing={releasing} onRelease={releaseResult} /> : null}
+      {!loading && error ? (
+        <ResultErrorState message={error} onRetry={() => void refresh()} />
+      ) : null}
+      {!loading && !error && result ? (
+        <InstructorResultPanel result={result} releasing={releasing} onRelease={releaseResult} />
+      ) : null}
     </div>
   );
 }

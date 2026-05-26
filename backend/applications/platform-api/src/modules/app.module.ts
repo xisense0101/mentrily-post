@@ -11,6 +11,7 @@ import { CommunicationCenterModule } from './communication-center/communication-
 import { DashboardModule } from './dashboard/dashboard.module.js';
 import { CampaignManagementModule } from './campaign-management/campaign-management.module.js';
 import { AnalyticsModule } from './analytics/analytics.module.js';
+import { ProctoringModule } from './proctoring/proctoring.module.js';
 
 @Module({
   imports: [
@@ -24,6 +25,7 @@ import { AnalyticsModule } from './analytics/analytics.module.js';
     MediaLibraryModule,
     CommunicationCenterModule,
     AnalyticsModule,
+    ProctoringModule,
     DashboardModule,
     CampaignManagementModule,
   ],

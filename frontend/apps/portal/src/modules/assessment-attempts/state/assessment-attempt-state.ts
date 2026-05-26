@@ -130,11 +130,23 @@ export function isAttemptExpired(
 }
 
 export function isAttemptEditable(attempt: AssessmentAttemptContract): boolean {
+  if (typeof attempt.canEdit === 'boolean') {
+    return attempt.canEdit;
+  }
+
   if (attempt.status !== 'IN_PROGRESS' && attempt.status !== 'NOT_STARTED') {
     return false;
   }
 
   return !isAttemptExpired(attempt);
+}
+
+export function isAttemptSubmittable(attempt: AssessmentAttemptContract): boolean {
+  if (typeof attempt.canSubmit === 'boolean') {
+    return attempt.canSubmit;
+  }
+
+  return attempt.status === 'IN_PROGRESS' && !isAttemptExpired(attempt);
 }
 
 export function getAttemptExpiresAt(attempt: AssessmentAttemptContract): string | undefined {
