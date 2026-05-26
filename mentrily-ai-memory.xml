@@ -1013,6 +1013,7 @@ backend/
           proctoring/
             application/
               use-cases/
+                proctoring-incident.use-cases.ts
                 proctoring.use-cases.ts
               proctoring-policy.service.ts
               proctoring-read.service.ts
@@ -1027,6 +1028,7 @@ backend/
                 proctoring.controller.ts
             tests/
               proctoring-api.integration.spec.ts
+              proctoring-incident-api.integration.spec.ts
               proctoring-policy.service.spec.ts
             proctoring.module.ts
           workspace-governance/
@@ -1226,6 +1228,8 @@ backend/
           20260524120632_add_campaigns/
             migration.sql
           20260524180000_add_learning_assessment_links/
+            migration.sql
+          20260526162044_add_proctoring_incidents/
             migration.sql
           20260526193000_add_proctoring_sessions_and_events/
             migration.sql
@@ -42654,6 +42658,885 @@ Manages global platform settings, logs, and system-wide operations.
 - **tests/**: Global configuration and audit log integrity tests.
 </file>
 
+<file path="backend/applications/platform-api/src/modules/proctoring/application/use-cases/proctoring-incident.use-cases.ts">
+import { Inject, Injectable } from '@nestjs/common';
+import {
+  AssessmentProctoringIncidentSeverity,
+  AssessmentProctoringIncidentType,
+  AssessmentProctoringIncidentReviewActionType,
+  AssessmentProctoringEventType,
+} from '@prisma/client';
+import type {
+  ProctoringIncidentContract,
+  ProctoringIncidentDetailContract,
+  ProctoringIncidentReviewActionContract,
+  ProctoringIncidentSummaryContract,
+  ProctoringIncidentListQueryContract,
+  UpdateProctoringIncidentStatusRequestContract,
+  AddProctoringIncidentNoteRequestContract,
+  CreateManualProctoringIncidentRequestContract,
+} from '@mentrily/contract-catalog';
+import {
+  AppError,
+  PERMISSION_EVALUATOR,
+  PermissionEvaluator,
+  RequestContext,
+  TransactionContext,
+} from '@mentrily/service-core';
+import { PrismaService, getPrismaClient } from '@mentrily/data-platform';
+import { PermissionCatalog } from '@mentrily/security-toolkit';
+import { ProctoringPolicyService } from '../proctoring-policy.service.js';
+
+function requireWorkspaceActor(context: RequestContext) {
+  const workspace = context.workspace;
+  if (!workspace?.tenantId || !workspace.workspaceId || !workspace.actorId) {
+    throw new AppError('VALIDATION_ERROR', 'missing workspace actor context', 400);
+  }
+  return workspace;
+}
+
+function severityRank(severity: AssessmentProctoringIncidentSeverity): number {
+  switch (severity) {
+    case 'LOW':
+      return 0;
+    case 'MEDIUM':
+      return 1;
+    case 'HIGH':
+      return 2;
+    case 'CRITICAL':
+      return 3;
+  }
+  return 0;
+}
+
+function getIncidentTitle(type: AssessmentProctoringIncidentType): string {
+  switch (type) {
+    case 'FOCUS_LOSS':
+      return 'Focus Loss Detected';
+    case 'FULLSCREEN_EXIT':
+      return 'Fullscreen Exited';
+    case 'COPY_PASTE_ACTIVITY':
+      return 'Copy/Paste Activity';
+    case 'CONNECTIVITY_INTERRUPTION':
+      return 'Connectivity Lost';
+    case 'SESSION_INTERRUPTION':
+      return 'Session Interruption';
+    case 'MULTIPLE_WARNINGS':
+      return 'Multiple Warnings';
+    case 'HIGH_SEVERITY_EVENT':
+      return 'High Severity Event Flagged';
+    case 'SYSTEM_FLAG':
+      return 'System Warning Flagged';
+    case 'MANUAL_REVIEW_FLAG':
+      return 'Suspicious Activity Reported';
+  }
+}
+
+function getIncidentSummary(type: AssessmentProctoringIncidentType): string {
+  switch (type) {
+    case 'FOCUS_LOSS':
+      return 'Learner lost window/tab focus multiple times during the assessment.';
+    case 'FULLSCREEN_EXIT':
+      return 'Learner exited fullscreen mode during the assessment.';
+    case 'COPY_PASTE_ACTIVITY':
+      return 'Copy or paste actions were detected during the assessment.';
+    case 'CONNECTIVITY_INTERRUPTION':
+      return 'Learner device went offline.';
+    case 'SESSION_INTERRUPTION':
+      return 'Session was interrupted.';
+    case 'MULTIPLE_WARNINGS':
+      return 'Multiple warnings were triggered by the learner.';
+    case 'HIGH_SEVERITY_EVENT':
+      return 'A high-severity monitoring event was detected.';
+    case 'SYSTEM_FLAG':
+      return 'A system level warning was recorded.';
+    case 'MANUAL_REVIEW_FLAG':
+      return 'Suspicious activity was flagged by the system or Proctoring gateway.';
+  }
+}
+
+function getEventTypesForIncidentType(
+  type: AssessmentProctoringIncidentType,
+): AssessmentProctoringEventType[] {
+  switch (type) {
+    case 'FOCUS_LOSS':
+      return ['WINDOW_BLUR', 'VISIBILITY_HIDDEN'];
+    case 'FULLSCREEN_EXIT':
+      return ['FULLSCREEN_EXITED'];
+    case 'COPY_PASTE_ACTIVITY':
+      return ['COPY_ATTEMPTED', 'PASTE_ATTEMPTED'];
+    case 'CONNECTIVITY_INTERRUPTION':
+      return ['NETWORK_OFFLINE'];
+    case 'MANUAL_REVIEW_FLAG':
+      return ['SUSPICIOUS_ACTIVITY_REPORTED'];
+    case 'SYSTEM_FLAG':
+      return ['SYSTEM_WARNING'];
+    default:
+      return [];
+  }
+}
+
+async function mapIncidentsToContracts(
+  prisma: PrismaService,
+  incidents: any[],
+  transaction?: TransactionContext,
+): Promise<ProctoringIncidentContract[]> {
+  const principalIds = new Set<string>();
+  for (const incident of incidents) {
+    if (incident.learnerPrincipalId) principalIds.add(incident.learnerPrincipalId);
+    if (incident.reviewedByPrincipalId) principalIds.add(incident.reviewedByPrincipalId);
+  }
+
+  const client = getPrismaClient(prisma, transaction);
+  const principals = await client.principal.findMany({
+    where: { id: { in: Array.from(principalIds) } },
+    select: { id: true, displayName: true },
+  });
+
+  const principalMap = new Map<string, string>();
+  for (const p of principals) {
+    principalMap.set(p.id, p.displayName ?? 'Unknown');
+  }
+
+  return incidents.map((incident) => ({
+    id: incident.id,
+    sessionId: incident.sessionId,
+    attemptId: incident.attemptId,
+    assessmentId: incident.assessmentId,
+    learnerPrincipalId: incident.learnerPrincipalId,
+    learnerDisplayName: principalMap.get(incident.learnerPrincipalId) ?? 'Unknown',
+    incidentType: incident.incidentType,
+    severity: incident.severity as any,
+    status: incident.status as any,
+    title: incident.title,
+    summary: incident.summary,
+    firstEventAt: incident.firstEventAt.toISOString(),
+    lastEventAt: incident.lastEventAt.toISOString(),
+    eventCount: incident.eventCount,
+    createdAt: incident.createdAt.toISOString(),
+    updatedAt: incident.updatedAt.toISOString(),
+    ...(incident.reviewedAt ? { reviewedAt: incident.reviewedAt.toISOString() } : {}),
+    ...(incident.reviewedByPrincipalId
+      ? { reviewedByPrincipalId: incident.reviewedByPrincipalId }
+      : {}),
+    reviewedByDisplayName: incident.reviewedByPrincipalId
+      ? (principalMap.get(incident.reviewedByPrincipalId) ?? 'Unknown')
+      : undefined,
+    ...(incident.resolvedAt ? { resolvedAt: incident.resolvedAt.toISOString() } : {}),
+    ...(incident.resolution ? { resolution: incident.resolution } : {}),
+  }));
+}
+
+async function mapIncidentDetailToContract(
+  prisma: PrismaService,
+  incident: any,
+  events: any[],
+  reviewActions: any[],
+  policy: ProctoringPolicyService,
+  transaction?: TransactionContext,
+): Promise<ProctoringIncidentDetailContract> {
+  const mappedIncidents = await mapIncidentsToContracts(prisma, [incident], transaction);
+  const mappedIncident = mappedIncidents[0]!;
+
+  const principalIds = new Set<string>();
+  for (const action of reviewActions) {
+    if (action.actorPrincipalId) principalIds.add(action.actorPrincipalId);
+  }
+
+  const client = getPrismaClient(prisma, transaction);
+  const principals = await client.principal.findMany({
+    where: { id: { in: Array.from(principalIds) } },
+    select: { id: true, displayName: true },
+  });
+
+  const principalMap = new Map<string, string>();
+  for (const p of principals) {
+    principalMap.set(p.id, p.displayName ?? 'Unknown');
+  }
+
+  const mappedActions: ProctoringIncidentReviewActionContract[] = reviewActions.map((action) => ({
+    id: action.id,
+    incidentId: action.incidentId,
+    actionType: action.actionType as any,
+    actorPrincipalId: action.actorPrincipalId,
+    actorDisplayName: principalMap.get(action.actorPrincipalId) ?? 'Unknown',
+    note: action.note ?? undefined,
+    createdAt: action.createdAt.toISOString(),
+  }));
+
+  const mappedEvents = events.map((event) =>
+    policy.toEventContract({
+      ...event,
+      metadata:
+        typeof event.metadata === 'object' &&
+        event.metadata !== null &&
+        !Array.isArray(event.metadata)
+          ? (event.metadata as Record<string, unknown>)
+          : {},
+    }),
+  );
+
+  return {
+    incident: mappedIncident,
+    events: mappedEvents,
+    reviewActions: mappedActions,
+  };
+}
+
+export async function processIncidentPolicyForEvent(
+  prisma: PrismaService,
+  event: any,
+  transaction?: TransactionContext,
+): Promise<void> {
+  const client = getPrismaClient(prisma, transaction);
+  const severity = event.severity;
+  const eventType = event.eventType;
+  const occurredAt = event.occurredAt;
+  const sessionId = event.sessionId;
+  const workspaceId = event.workspaceId;
+  const tenantId = event.tenantId;
+  const attemptId = event.attemptId;
+  const assessmentId = event.assessmentId;
+  const learnerPrincipalId = event.learnerPrincipalId;
+
+  let incidentType: AssessmentProctoringIncidentType;
+  let defaultIncidentSeverity: AssessmentProctoringIncidentSeverity = 'LOW';
+
+  switch (eventType) {
+    case 'WINDOW_BLUR':
+    case 'VISIBILITY_HIDDEN':
+      incidentType = 'FOCUS_LOSS';
+      defaultIncidentSeverity = 'LOW';
+      break;
+    case 'FULLSCREEN_EXITED':
+      incidentType = 'FULLSCREEN_EXIT';
+      defaultIncidentSeverity = 'HIGH';
+      break;
+    case 'COPY_ATTEMPTED':
+    case 'PASTE_ATTEMPTED':
+      incidentType = 'COPY_PASTE_ACTIVITY';
+      defaultIncidentSeverity = 'MEDIUM';
+      break;
+    case 'NETWORK_OFFLINE':
+      incidentType = 'CONNECTIVITY_INTERRUPTION';
+      defaultIncidentSeverity = 'LOW';
+      break;
+    case 'SUSPICIOUS_ACTIVITY_REPORTED':
+      incidentType = 'MANUAL_REVIEW_FLAG';
+      defaultIncidentSeverity = 'HIGH';
+      break;
+    case 'SYSTEM_WARNING':
+      incidentType = 'SYSTEM_FLAG';
+      defaultIncidentSeverity = 'MEDIUM';
+      break;
+    default:
+      if (severity === 'HIGH') {
+        incidentType = 'HIGH_SEVERITY_EVENT';
+        defaultIncidentSeverity = 'HIGH';
+      } else {
+        return;
+      }
+  }
+
+  let finalSeverity: AssessmentProctoringIncidentSeverity = defaultIncidentSeverity;
+  if (severity === 'HIGH') {
+    finalSeverity = 'HIGH';
+  }
+
+  const isImmediate =
+    severity === 'HIGH' ||
+    incidentType === 'FULLSCREEN_EXIT' ||
+    incidentType === 'MANUAL_REVIEW_FLAG';
+
+  if (isImmediate) {
+    const openIncident = await client.assessmentProctoringIncident.findFirst({
+      where: {
+        workspaceId,
+        sessionId,
+        incidentType,
+        status: 'OPEN',
+      },
+    });
+
+    if (openIncident) {
+      await client.assessmentProctoringIncidentEvent.create({
+        data: {
+          tenantId,
+          workspaceId,
+          incidentId: openIncident.id,
+          proctoringEventId: event.id,
+        },
+      });
+
+      const eventCount = openIncident.eventCount + 1;
+      const lastEventAt =
+        occurredAt > openIncident.lastEventAt ? occurredAt : openIncident.lastEventAt;
+      const firstEventAt =
+        occurredAt < openIncident.firstEventAt ? occurredAt : openIncident.firstEventAt;
+
+      let newSeverity = openIncident.severity;
+      if (severityRank(finalSeverity) > severityRank(openIncident.severity)) {
+        newSeverity = finalSeverity;
+      }
+
+      await client.assessmentProctoringIncident.update({
+        where: { id: openIncident.id },
+        data: {
+          eventCount,
+          lastEventAt,
+          firstEventAt,
+          severity: newSeverity,
+        },
+      });
+    } else {
+      const title = getIncidentTitle(incidentType);
+      const summary = getIncidentSummary(incidentType);
+
+      const newIncident = await client.assessmentProctoringIncident.create({
+        data: {
+          tenantId,
+          workspaceId,
+          sessionId,
+          attemptId,
+          assessmentId,
+          learnerPrincipalId,
+          incidentType,
+          severity: finalSeverity,
+          status: 'OPEN',
+          title,
+          summary,
+          firstEventAt: occurredAt,
+          lastEventAt: occurredAt,
+          eventCount: 1,
+        },
+      });
+
+      await client.assessmentProctoringIncidentEvent.create({
+        data: {
+          tenantId,
+          workspaceId,
+          incidentId: newIncident.id,
+          proctoringEventId: event.id,
+        },
+      });
+
+      await client.assessmentProctoringIncidentReviewAction.create({
+        data: {
+          tenantId,
+          workspaceId,
+          incidentId: newIncident.id,
+          actionType: 'OPENED',
+          actorPrincipalId: learnerPrincipalId,
+          note: 'Incident auto-detected by system',
+        },
+      });
+    }
+  } else {
+    const openIncident = await client.assessmentProctoringIncident.findFirst({
+      where: {
+        workspaceId,
+        sessionId,
+        incidentType,
+        status: 'OPEN',
+      },
+    });
+
+    if (openIncident) {
+      await client.assessmentProctoringIncidentEvent.create({
+        data: {
+          tenantId,
+          workspaceId,
+          incidentId: openIncident.id,
+          proctoringEventId: event.id,
+        },
+      });
+
+      const eventCount = openIncident.eventCount + 1;
+      const lastEventAt =
+        occurredAt > openIncident.lastEventAt ? occurredAt : openIncident.lastEventAt;
+      const firstEventAt =
+        occurredAt < openIncident.firstEventAt ? occurredAt : openIncident.firstEventAt;
+
+      let newSeverity = openIncident.severity;
+      if (severityRank(finalSeverity) > severityRank(openIncident.severity)) {
+        newSeverity = finalSeverity;
+      }
+
+      await client.assessmentProctoringIncident.update({
+        where: { id: openIncident.id },
+        data: {
+          eventCount,
+          lastEventAt,
+          firstEventAt,
+          severity: newSeverity,
+        },
+      });
+    } else {
+      const fiveMinutesAgo = new Date(occurredAt.getTime() - 5 * 60_000);
+
+      const matchingEvents = await client.assessmentProctoringEvent.findMany({
+        where: {
+          sessionId,
+          eventType: { in: getEventTypesForIncidentType(incidentType) },
+          occurredAt: { gte: fiveMinutesAgo, lte: occurredAt },
+          incidentEvents: { none: {} },
+        },
+        orderBy: { occurredAt: 'asc' },
+      });
+
+      if (matchingEvents.length >= 3) {
+        const title = getIncidentTitle(incidentType);
+        const summary = getIncidentSummary(incidentType);
+
+        const earliestEvent = matchingEvents[0]!;
+        const latestEvent = matchingEvents[matchingEvents.length - 1]!;
+
+        let newSeverity: AssessmentProctoringIncidentSeverity = 'LOW';
+        for (const ev of matchingEvents) {
+          const evSev: AssessmentProctoringIncidentSeverity =
+            ev.severity === 'HIGH' ? 'HIGH' : ev.severity === 'MEDIUM' ? 'MEDIUM' : 'LOW';
+          if (severityRank(evSev) > severityRank(newSeverity)) {
+            newSeverity = evSev;
+          }
+        }
+
+        const newIncident = await client.assessmentProctoringIncident.create({
+          data: {
+            tenantId,
+            workspaceId,
+            sessionId,
+            attemptId,
+            assessmentId,
+            learnerPrincipalId,
+            incidentType,
+            severity: newSeverity,
+            status: 'OPEN',
+            title,
+            summary,
+            firstEventAt: earliestEvent.occurredAt,
+            lastEventAt: latestEvent.occurredAt,
+            eventCount: matchingEvents.length,
+          },
+        });
+
+        await client.assessmentProctoringIncidentEvent.createMany({
+          data: matchingEvents.map((ev) => ({
+            tenantId,
+            workspaceId,
+            incidentId: newIncident.id,
+            proctoringEventId: ev.id,
+          })),
+        });
+
+        await client.assessmentProctoringIncidentReviewAction.create({
+          data: {
+            tenantId,
+            workspaceId,
+            incidentId: newIncident.id,
+            actionType: 'OPENED',
+            actorPrincipalId: learnerPrincipalId,
+            note: `Incident auto-detected (warning threshold of ${matchingEvents.length} events exceeded)`,
+          },
+        });
+      }
+    }
+  }
+}
+
+@Injectable()
+export class GetProctoringIncidentUseCase {
+  constructor(
+    @Inject(PrismaService) private readonly prisma: PrismaService,
+    @Inject(ProctoringPolicyService) private readonly policy: ProctoringPolicyService,
+    @Inject(PERMISSION_EVALUATOR) private readonly permissions: PermissionEvaluator,
+  ) {}
+
+  async execute(
+    context: RequestContext,
+    incidentId: string,
+  ): Promise<ProctoringIncidentDetailContract> {
+    const workspace = requireWorkspaceActor(context);
+    const permission = await this.permissions.evaluate(
+      { permission: PermissionCatalog.ASSESSMENT_MONITOR, workspace },
+      context,
+    );
+    const fallbackPermission = await this.permissions.evaluate(
+      { permission: PermissionCatalog.ASSESSMENT_UPDATE, workspace },
+      context,
+    );
+
+    if (!permission.allowed && !fallbackPermission.allowed) {
+      throw new AppError('FORBIDDEN', 'permission denied', 403);
+    }
+
+    const client = getPrismaClient(this.prisma);
+    const incident = await client.assessmentProctoringIncident.findUnique({
+      where: { id: incidentId },
+      include: {
+        events: {
+          include: {
+            proctoringEvent: true,
+          },
+        },
+        reviewActions: {
+          orderBy: { createdAt: 'asc' },
+        },
+      },
+    });
+
+    if (!incident || incident.workspaceId !== workspace.workspaceId) {
+      throw new AppError('NOT_FOUND', 'incident not found', 404);
+    }
+
+    const events = incident.events.map((e) => e.proctoringEvent);
+
+    return mapIncidentDetailToContract(
+      this.prisma,
+      incident,
+      events,
+      incident.reviewActions,
+      this.policy,
+    );
+  }
+}
+
+@Injectable()
+export class ListProctoringIncidentsUseCase {
+  constructor(
+    @Inject(PrismaService) private readonly prisma: PrismaService,
+    @Inject(PERMISSION_EVALUATOR) private readonly permissions: PermissionEvaluator,
+  ) {}
+
+  async execute(
+    context: RequestContext,
+    query: ProctoringIncidentListQueryContract,
+  ): Promise<ProctoringIncidentContract[]> {
+    const workspace = requireWorkspaceActor(context);
+    const permission = await this.permissions.evaluate(
+      { permission: PermissionCatalog.ASSESSMENT_MONITOR, workspace },
+      context,
+    );
+    const fallbackPermission = await this.permissions.evaluate(
+      { permission: PermissionCatalog.ASSESSMENT_UPDATE, workspace },
+      context,
+    );
+
+    if (!permission.allowed && !fallbackPermission.allowed) {
+      throw new AppError('FORBIDDEN', 'permission denied', 403);
+    }
+
+    const client = getPrismaClient(this.prisma);
+    const incidents = await client.assessmentProctoringIncident.findMany({
+      where: {
+        workspaceId: workspace.workspaceId,
+        ...(query.assessmentId ? { assessmentId: query.assessmentId } : {}),
+        ...(query.attemptId ? { attemptId: query.attemptId } : {}),
+        ...(query.status ? { status: query.status as any } : {}),
+        ...(query.severity ? { severity: query.severity as any } : {}),
+      },
+      orderBy: { lastEventAt: 'desc' },
+    });
+
+    return mapIncidentsToContracts(this.prisma, incidents);
+  }
+}
+
+@Injectable()
+export class GetProctoringIncidentSummaryUseCase {
+  constructor(
+    @Inject(PrismaService) private readonly prisma: PrismaService,
+    @Inject(PERMISSION_EVALUATOR) private readonly permissions: PermissionEvaluator,
+  ) {}
+
+  async execute(context: RequestContext): Promise<ProctoringIncidentSummaryContract> {
+    const workspace = requireWorkspaceActor(context);
+    const permission = await this.permissions.evaluate(
+      { permission: PermissionCatalog.ASSESSMENT_MONITOR, workspace },
+      context,
+    );
+    const fallbackPermission = await this.permissions.evaluate(
+      { permission: PermissionCatalog.ASSESSMENT_UPDATE, workspace },
+      context,
+    );
+
+    if (!permission.allowed && !fallbackPermission.allowed) {
+      throw new AppError('FORBIDDEN', 'permission denied', 403);
+    }
+
+    const client = getPrismaClient(this.prisma);
+    const workspaceId = workspace.workspaceId;
+
+    const openCount = await client.assessmentProctoringIncident.count({
+      where: { workspaceId, status: 'OPEN' },
+    });
+
+    const highSeverityCount = await client.assessmentProctoringIncident.count({
+      where: {
+        workspaceId,
+        severity: { in: ['HIGH', 'CRITICAL'] },
+        status: { in: ['OPEN', 'IN_REVIEW', 'ESCALATED'] },
+      },
+    });
+
+    const inReviewCount = await client.assessmentProctoringIncident.count({
+      where: { workspaceId, status: 'IN_REVIEW' },
+    });
+
+    const resolvedDismissedCount = await client.assessmentProctoringIncident.count({
+      where: {
+        workspaceId,
+        status: { in: ['RESOLVED', 'DISMISSED'] },
+      },
+    });
+
+    const attempts = await client.assessmentProctoringIncident.groupBy({
+      by: ['attemptId'],
+      where: { workspaceId },
+    });
+
+    return {
+      openCount,
+      highSeverityCount,
+      inReviewCount,
+      resolvedDismissedCount,
+      attemptsWithIncidentsCount: attempts.length,
+    };
+  }
+}
+
+@Injectable()
+export class UpdateProctoringIncidentStatusUseCase {
+  constructor(
+    @Inject(PrismaService) private readonly prisma: PrismaService,
+    @Inject(GetProctoringIncidentUseCase)
+    private readonly getIncident: GetProctoringIncidentUseCase,
+    @Inject(PERMISSION_EVALUATOR) private readonly permissions: PermissionEvaluator,
+  ) {}
+
+  async execute(
+    context: RequestContext,
+    incidentId: string,
+    input: UpdateProctoringIncidentStatusRequestContract,
+  ): Promise<ProctoringIncidentDetailContract> {
+    const workspace = requireWorkspaceActor(context);
+    const permission = await this.permissions.evaluate(
+      { permission: PermissionCatalog.ASSESSMENT_MONITOR, workspace },
+      context,
+    );
+    const fallbackPermission = await this.permissions.evaluate(
+      { permission: PermissionCatalog.ASSESSMENT_UPDATE, workspace },
+      context,
+    );
+
+    if (!permission.allowed && !fallbackPermission.allowed) {
+      throw new AppError('FORBIDDEN', 'permission denied', 403);
+    }
+
+    const client = getPrismaClient(this.prisma);
+    const incident = await client.assessmentProctoringIncident.findUnique({
+      where: { id: incidentId },
+    });
+
+    if (!incident || incident.workspaceId !== workspace.workspaceId) {
+      throw new AppError('NOT_FOUND', 'incident not found', 404);
+    }
+
+    let actionType: AssessmentProctoringIncidentReviewActionType;
+    switch (input.status) {
+      case 'OPEN':
+        actionType = 'REOPENED';
+        break;
+      case 'IN_REVIEW':
+        actionType = 'MARKED_IN_REVIEW';
+        break;
+      case 'RESOLVED':
+        actionType = 'RESOLVED';
+        break;
+      case 'DISMISSED':
+        actionType = 'DISMISSED';
+        break;
+      case 'ESCALATED':
+        actionType = 'ESCALATED';
+        break;
+      default:
+        throw new AppError('VALIDATION_ERROR', 'invalid status value', 400);
+    }
+
+    const isTerminal = input.status === 'RESOLVED' || input.status === 'DISMISSED';
+    const now = new Date();
+
+    await this.prisma.$transaction(async (tx: any) => {
+      await tx.assessmentProctoringIncident.update({
+        where: { id: incidentId },
+        data: {
+          status: input.status as any,
+          reviewedAt: now,
+          reviewedByPrincipalId: workspace.actorId,
+          ...(isTerminal
+            ? { resolvedAt: now, resolution: input.note ?? `Status changed to ${input.status}` }
+            : { resolvedAt: null, resolution: null }),
+        },
+      });
+
+      await tx.assessmentProctoringIncidentReviewAction.create({
+        data: {
+          tenantId: workspace.tenantId,
+          workspaceId: workspace.workspaceId,
+          incidentId,
+          actionType,
+          actorPrincipalId: workspace.actorId,
+          note: input.note ?? null,
+        },
+      });
+    });
+
+    return this.getIncident.execute(context, incidentId);
+  }
+}
+
+@Injectable()
+export class AddProctoringIncidentNoteUseCase {
+  constructor(
+    @Inject(PrismaService) private readonly prisma: PrismaService,
+    @Inject(GetProctoringIncidentUseCase)
+    private readonly getIncident: GetProctoringIncidentUseCase,
+    @Inject(PERMISSION_EVALUATOR) private readonly permissions: PermissionEvaluator,
+  ) {}
+
+  async execute(
+    context: RequestContext,
+    incidentId: string,
+    input: AddProctoringIncidentNoteRequestContract,
+  ): Promise<ProctoringIncidentDetailContract> {
+    const workspace = requireWorkspaceActor(context);
+    const permission = await this.permissions.evaluate(
+      { permission: PermissionCatalog.ASSESSMENT_MONITOR, workspace },
+      context,
+    );
+    const fallbackPermission = await this.permissions.evaluate(
+      { permission: PermissionCatalog.ASSESSMENT_UPDATE, workspace },
+      context,
+    );
+
+    if (!permission.allowed && !fallbackPermission.allowed) {
+      throw new AppError('FORBIDDEN', 'permission denied', 403);
+    }
+
+    if (!input.note || typeof input.note !== 'string' || input.note.trim().length === 0) {
+      throw new AppError('VALIDATION_ERROR', 'note text is required', 400);
+    }
+
+    const client = getPrismaClient(this.prisma);
+    const incident = await client.assessmentProctoringIncident.findUnique({
+      where: { id: incidentId },
+    });
+
+    if (!incident || incident.workspaceId !== workspace.workspaceId) {
+      throw new AppError('NOT_FOUND', 'incident not found', 404);
+    }
+
+    await this.prisma.$transaction(async (tx: any) => {
+      await tx.assessmentProctoringIncidentReviewAction.create({
+        data: {
+          tenantId: workspace.tenantId,
+          workspaceId: workspace.workspaceId,
+          incidentId,
+          actionType: 'NOTE_ADDED',
+          actorPrincipalId: workspace.actorId,
+          note: input.note,
+        },
+      });
+
+      await tx.assessmentProctoringIncident.update({
+        where: { id: incidentId },
+        data: {
+          updatedAt: new Date(),
+        },
+      });
+    });
+
+    return this.getIncident.execute(context, incidentId);
+  }
+}
+
+@Injectable()
+export class CreateManualProctoringIncidentUseCase {
+  constructor(
+    @Inject(PrismaService) private readonly prisma: PrismaService,
+    @Inject(GetProctoringIncidentUseCase)
+    private readonly getIncident: GetProctoringIncidentUseCase,
+    @Inject(PERMISSION_EVALUATOR) private readonly permissions: PermissionEvaluator,
+  ) {}
+
+  async execute(
+    context: RequestContext,
+    input: CreateManualProctoringIncidentRequestContract,
+  ): Promise<ProctoringIncidentDetailContract> {
+    const workspace = requireWorkspaceActor(context);
+    const permission = await this.permissions.evaluate(
+      { permission: PermissionCatalog.ASSESSMENT_MONITOR, workspace },
+      context,
+    );
+    const fallbackPermission = await this.permissions.evaluate(
+      { permission: PermissionCatalog.ASSESSMENT_UPDATE, workspace },
+      context,
+    );
+
+    if (!permission.allowed && !fallbackPermission.allowed) {
+      throw new AppError('FORBIDDEN', 'permission denied', 403);
+    }
+
+    const client = getPrismaClient(this.prisma);
+
+    const session = await client.assessmentProctoringSession.findUnique({
+      where: { id: input.sessionId },
+    });
+
+    if (!session || session.workspaceId !== workspace.workspaceId) {
+      throw new AppError('NOT_FOUND', 'proctoring session not found', 404);
+    }
+
+    const now = new Date();
+
+    const incident = await this.prisma.$transaction(async (tx: any) => {
+      const created = await tx.assessmentProctoringIncident.create({
+        data: {
+          tenantId: workspace.tenantId,
+          workspaceId: workspace.workspaceId,
+          sessionId: input.sessionId,
+          attemptId: input.attemptId,
+          assessmentId: input.assessmentId,
+          learnerPrincipalId: input.learnerPrincipalId,
+          incidentType: input.incidentType as any,
+          severity: input.severity as any,
+          status: 'OPEN',
+          title: input.title,
+          summary: input.summary,
+          firstEventAt: now,
+          lastEventAt: now,
+          eventCount: 0,
+        },
+      });
+
+      await tx.assessmentProctoringIncidentReviewAction.create({
+        data: {
+          tenantId: workspace.tenantId,
+          workspaceId: workspace.workspaceId,
+          incidentId: created.id,
+          actionType: 'OPENED',
+          actorPrincipalId: workspace.actorId,
+          note: input.note ?? 'Manual incident opened by teacher',
+        },
+      });
+
+      return created;
+    });
+
+    return this.getIncident.execute(context, incident.id);
+  }
+}
+</file>
+
 <file path="backend/applications/platform-api/src/modules/proctoring/application/proctoring-read.service.ts">
 import { Inject, Injectable } from '@nestjs/common';
 import type {
@@ -43161,96 +44044,6 @@ export class PrismaProctoringEventRepository implements ProctoringEventRepositor
 }
 </file>
 
-<file path="backend/applications/platform-api/src/modules/proctoring/presentation/http/proctoring.controller.ts">
-import { Body, Controller, Get, Inject, Param, Post, Req } from '@nestjs/common';
-import type { FastifyRequest } from 'fastify';
-import { AppError, RequestContext } from '@mentrily/service-core';
-import type {
-  ProctoringHeartbeatRequestContract,
-  RecordProctoringEventRequestContract,
-} from '@mentrily/contract-catalog';
-import {
-  EndProctoringSessionUseCase,
-  GetActiveAttemptMonitoringUseCase,
-  GetAttemptMonitoringTimelineUseCase,
-  GetProctoringSessionUseCase,
-  RecordProctoringEventUseCase,
-  RecordProctoringHeartbeatUseCase,
-  StartProctoringSessionUseCase,
-} from '../../application/use-cases/proctoring.use-cases.js';
-
-function requestContext(request: FastifyRequest): RequestContext {
-  const context = request.requestContext as RequestContext | undefined;
-  if (!context) {
-    throw new AppError('VALIDATION_ERROR', 'missing request context', 400);
-  }
-  return context;
-}
-
-@Controller('/workspace/proctoring')
-export class ProctoringController {
-  constructor(
-    @Inject(StartProctoringSessionUseCase)
-    private readonly startSession: StartProctoringSessionUseCase,
-    @Inject(RecordProctoringHeartbeatUseCase)
-    private readonly heartbeat: RecordProctoringHeartbeatUseCase,
-    @Inject(RecordProctoringEventUseCase)
-    private readonly recordEvent: RecordProctoringEventUseCase,
-    @Inject(EndProctoringSessionUseCase)
-    private readonly endSession: EndProctoringSessionUseCase,
-    @Inject(GetAttemptMonitoringTimelineUseCase)
-    private readonly timeline: GetAttemptMonitoringTimelineUseCase,
-    @Inject(GetActiveAttemptMonitoringUseCase)
-    private readonly activeSummary: GetActiveAttemptMonitoringUseCase,
-    @Inject(GetProctoringSessionUseCase)
-    private readonly getSession: GetProctoringSessionUseCase,
-  ) {}
-
-  @Post('/attempts/:attemptId/session/start')
-  async start(@Req() request: FastifyRequest, @Param('attemptId') attemptId: string) {
-    return this.startSession.execute(requestContext(request), attemptId);
-  }
-
-  @Post('/sessions/:sessionId/heartbeat')
-  async recordHeartbeat(
-    @Req() request: FastifyRequest,
-    @Param('sessionId') sessionId: string,
-    @Body() body: ProctoringHeartbeatRequestContract,
-  ) {
-    return this.heartbeat.execute(requestContext(request), sessionId, body);
-  }
-
-  @Post('/sessions/:sessionId/events')
-  async createEvent(
-    @Req() request: FastifyRequest,
-    @Param('sessionId') sessionId: string,
-    @Body() body: RecordProctoringEventRequestContract,
-  ) {
-    return this.recordEvent.execute(requestContext(request), sessionId, body);
-  }
-
-  @Post('/sessions/:sessionId/end')
-  async end(@Req() request: FastifyRequest, @Param('sessionId') sessionId: string) {
-    return this.endSession.execute(requestContext(request), sessionId);
-  }
-
-  @Get('/attempts/:attemptId/timeline')
-  async getTimeline(@Req() request: FastifyRequest, @Param('attemptId') attemptId: string) {
-    return this.timeline.execute(requestContext(request), attemptId);
-  }
-
-  @Get('/assessments/:assessmentId/active')
-  async getActive(@Req() request: FastifyRequest, @Param('assessmentId') assessmentId: string) {
-    return this.activeSummary.execute(requestContext(request), assessmentId);
-  }
-
-  @Get('/sessions/:sessionId')
-  async getOne(@Req() request: FastifyRequest, @Param('sessionId') sessionId: string) {
-    return this.getSession.execute(requestContext(request), sessionId);
-  }
-}
-</file>
-
 <file path="backend/applications/platform-api/src/modules/proctoring/tests/proctoring-api.integration.spec.ts">
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { Test } from '@nestjs/testing';
@@ -43746,6 +44539,443 @@ describe.sequential('Proctoring API (integration)', () => {
 });
 </file>
 
+<file path="backend/applications/platform-api/src/modules/proctoring/tests/proctoring-incident-api.integration.spec.ts">
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { Test } from '@nestjs/testing';
+import { FastifyAdapter, type NestFastifyApplication } from '@nestjs/platform-fastify';
+import {
+  PERMISSION_EVALUATOR,
+  TRANSACTION_RUNNER,
+  type PermissionEvaluator,
+  type TransactionRunner,
+} from '@mentrily/service-core';
+import { PrismaService } from '@mentrily/data-platform';
+import { truncatePublicSchema } from '@mentrily/testing-toolkit';
+import { AppModule } from '../../app.module.js';
+import { registerCorrelationIdHook } from '../../../foundation/correlation-id.hook.js';
+
+describe.sequential('Proctoring Incident API (integration)', () => {
+  let app: NestFastifyApplication;
+  let prisma: PrismaService;
+
+  const allowedPermissions = new Set<string>();
+
+  const creatorHeaders = {
+    'x-request-id': 'c1111111-1111-4111-8111-111111111111',
+    'x-correlation-id': 'c2222222-2222-4222-8222-222222222222',
+    'x-tenant-id': 'c3333333-3333-4333-8333-333333333333',
+    'x-workspace-id': 'c4444444-4444-4444-8444-444444444444',
+    'x-actor-id': 'c5555555-5555-4555-8555-555555555555',
+  } as const;
+
+  const learnerHeaders = {
+    ...creatorHeaders,
+    'x-actor-id': 'c6666666-6666-4666-8666-666666666666',
+  } as const;
+
+  const otherWorkspaceHeaders = {
+    ...creatorHeaders,
+    'x-workspace-id': 'c8888888-8888-4888-8888-888888888888',
+  } as const;
+
+  beforeAll(async () => {
+    const prismaRef: { current: PrismaService | undefined } = { current: undefined };
+    const permissionEvaluator: PermissionEvaluator = {
+      evaluate: async (req) => ({
+        allowed: allowedPermissions.has(req.permission),
+      }),
+    };
+    const transactionRunner: TransactionRunner = {
+      run: async <T>(operation: Parameters<TransactionRunner['run']>[0]): Promise<T> => {
+        if (!prismaRef.current) {
+          throw new Error('prismaRef not initialized');
+        }
+        return prismaRef.current.$transaction(async (tx) =>
+          operation({ transactionId: 'tx-proctoring-incident-api-test', client: tx }),
+        ) as Promise<T>;
+      },
+    };
+
+    const moduleRef = await Test.createTestingModule({ imports: [AppModule] })
+      .overrideProvider(PERMISSION_EVALUATOR)
+      .useValue(permissionEvaluator)
+      .overrideProvider(TRANSACTION_RUNNER)
+      .useValue(transactionRunner)
+      .compile();
+
+    app = moduleRef.createNestApplication<NestFastifyApplication>(new FastifyAdapter(), {
+      rawBody: true,
+    });
+    registerCorrelationIdHook(app.getHttpAdapter().getInstance());
+    await app.init();
+    await app.getHttpAdapter().getInstance().ready();
+    prisma = app.get(PrismaService);
+    prismaRef.current = prisma;
+  });
+
+  beforeEach(async () => {
+    await truncatePublicSchema(prisma);
+    allowedPermissions.clear();
+    allowedPermissions.add('assessment.attempt.read');
+  });
+
+  afterAll(async () => {
+    await app.close();
+  });
+
+  function expectHttpStatus(
+    response: { statusCode: number; body: string },
+    expected: number,
+  ): void {
+    if (response.statusCode !== expected) {
+      throw new Error(
+        `Expected HTTP ${expected} but received ${response.statusCode}. Body: ${response.body}`,
+      );
+    }
+  }
+
+  async function setupAssessmentAttemptAndSession() {
+    await prisma.principal.create({
+      data: {
+        id: learnerHeaders['x-actor-id'],
+        email: 'learner@mentrily.com',
+        displayName: 'Learner Test',
+      },
+    });
+
+    await prisma.principal.create({
+      data: {
+        id: creatorHeaders['x-actor-id'],
+        email: 'creator@mentrily.com',
+        displayName: 'Creator Test',
+      },
+    });
+
+    const assessment = await prisma.assessment.create({
+      data: {
+        tenantId: creatorHeaders['x-tenant-id'],
+        workspaceId: creatorHeaders['x-workspace-id'],
+        ownerPrincipalId: creatorHeaders['x-actor-id'],
+        title: 'Proctoring Incident Test Assessment',
+        purpose: 'QUIZ',
+        status: 'PUBLISHED',
+        visibility: 'WORKSPACE',
+        resultReleasePolicy: 'IMMEDIATE',
+        attemptPolicy: {},
+        metadata: { proctoringMode: 'BASIC_EVENT_MONITORING' },
+      },
+    });
+
+    const version = await prisma.assessmentVersion.create({
+      data: {
+        assessmentId: assessment.id,
+        versionNumber: 1,
+        status: 'PUBLISHED_SNAPSHOT',
+        createdByPrincipalId: creatorHeaders['x-actor-id'],
+      },
+    });
+
+    const snapshot = await prisma.assessmentPublishedSnapshot.create({
+      data: {
+        assessmentId: assessment.id,
+        versionId: version.id,
+        versionNumber: 1,
+        sections: [],
+        looseQuestions: [],
+        publishedByPrincipalId: creatorHeaders['x-actor-id'],
+        publishedAt: new Date(),
+      },
+    });
+
+    const attempt = await prisma.assessmentAttempt.create({
+      data: {
+        tenantId: learnerHeaders['x-tenant-id'],
+        workspaceId: learnerHeaders['x-workspace-id'],
+        assessmentId: assessment.id,
+        snapshotId: snapshot.id,
+        snapshotVersionId: version.id,
+        snapshotVersionNumber: 1,
+        learnerPrincipalId: learnerHeaders['x-actor-id'],
+        status: 'IN_PROGRESS',
+        startedAt: new Date(),
+        metadata: { proctoringMode: 'BASIC_EVENT_MONITORING' },
+      },
+    });
+
+    const session = await prisma.assessmentProctoringSession.create({
+      data: {
+        tenantId: learnerHeaders['x-tenant-id'],
+        workspaceId: learnerHeaders['x-workspace-id'],
+        id: 'c9999999-9999-4999-9999-999999999999',
+        attemptId: attempt.id,
+        assessmentId: assessment.id,
+        learnerPrincipalId: learnerHeaders['x-actor-id'],
+        status: 'ACTIVE',
+        mode: 'BASIC_EVENT_MONITORING',
+        startedAt: new Date(),
+      },
+    });
+
+    return { assessment, attempt, session };
+  }
+
+  describe('Incident Automatic Grouping Policy', () => {
+    it('creates an incident immediately when a high-severity event is ingested', async () => {
+      const { session } = await setupAssessmentAttemptAndSession();
+
+      const eventRes = await app.inject({
+        method: 'POST',
+        url: `/workspace/proctoring/sessions/${session.id}/events`,
+        headers: learnerHeaders,
+        payload: {
+          eventType: 'FULLSCREEN_EXITED',
+          severity: 'HIGH',
+          occurredAt: new Date().toISOString(),
+        },
+      });
+      expectHttpStatus(eventRes, 201);
+
+      const incidents = await prisma.assessmentProctoringIncident.findMany({
+        where: { sessionId: session.id },
+      });
+      expect(incidents.length).toBe(1);
+      expect(incidents[0]!.incidentType).toBe('FULLSCREEN_EXIT');
+      expect(incidents[0]!.severity).toBe('HIGH');
+      expect(incidents[0]!.status).toBe('OPEN');
+      expect(incidents[0]!.eventCount).toBe(1);
+    });
+
+    it('groups low/medium severity events into an incident only when warning threshold (>=3 events) is exceeded within 5 minutes', async () => {
+      const { session } = await setupAssessmentAttemptAndSession();
+
+      let eventRes = await app.inject({
+        method: 'POST',
+        url: `/workspace/proctoring/sessions/${session.id}/events`,
+        headers: learnerHeaders,
+        payload: {
+          eventType: 'WINDOW_BLUR',
+          severity: 'LOW',
+          occurredAt: new Date().toISOString(),
+        },
+      });
+      expectHttpStatus(eventRes, 201);
+
+      let incidents = await prisma.assessmentProctoringIncident.findMany({
+        where: { sessionId: session.id },
+      });
+      expect(incidents.length).toBe(0);
+
+      eventRes = await app.inject({
+        method: 'POST',
+        url: `/workspace/proctoring/sessions/${session.id}/events`,
+        headers: learnerHeaders,
+        payload: {
+          eventType: 'VISIBILITY_HIDDEN',
+          severity: 'LOW',
+          occurredAt: new Date(Date.now() + 5000).toISOString(),
+        },
+      });
+      expectHttpStatus(eventRes, 201);
+
+      incidents = await prisma.assessmentProctoringIncident.findMany({
+        where: { sessionId: session.id },
+      });
+      expect(incidents.length).toBe(0);
+
+      eventRes = await app.inject({
+        method: 'POST',
+        url: `/workspace/proctoring/sessions/${session.id}/events`,
+        headers: learnerHeaders,
+        payload: {
+          eventType: 'WINDOW_BLUR',
+          severity: 'LOW',
+          occurredAt: new Date(Date.now() + 10000).toISOString(),
+        },
+      });
+      expectHttpStatus(eventRes, 201);
+
+      incidents = await prisma.assessmentProctoringIncident.findMany({
+        where: { sessionId: session.id },
+      });
+      expect(incidents.length).toBe(1);
+      expect(incidents[0]!.incidentType).toBe('FOCUS_LOSS');
+      expect(incidents[0]!.eventCount).toBe(3);
+
+      eventRes = await app.inject({
+        method: 'POST',
+        url: `/workspace/proctoring/sessions/${session.id}/events`,
+        headers: learnerHeaders,
+        payload: {
+          eventType: 'WINDOW_BLUR',
+          severity: 'HIGH',
+          occurredAt: new Date(Date.now() + 15000).toISOString(),
+        },
+      });
+      expectHttpStatus(eventRes, 201);
+
+      const updatedIncident = await prisma.assessmentProctoringIncident.findUniqueOrThrow({
+        where: { id: incidents[0]!.id },
+      });
+      expect(updatedIncident.eventCount).toBe(4);
+      expect(updatedIncident.severity).toBe('HIGH');
+    });
+  });
+
+  describe('Incident Triage APIs & Permissions', () => {
+    let incidentId: string;
+    let attemptId: string;
+    let assessmentId: string;
+    let sessionId: string;
+
+    beforeEach(async () => {
+      const { attempt, session } = await setupAssessmentAttemptAndSession();
+      attemptId = attempt.id;
+      assessmentId = attempt.assessmentId;
+      sessionId = session.id;
+
+      const eventRes = await app.inject({
+        method: 'POST',
+        url: `/workspace/proctoring/sessions/${session.id}/events`,
+        headers: learnerHeaders,
+        payload: {
+          eventType: 'FULLSCREEN_EXITED',
+          severity: 'HIGH',
+          occurredAt: new Date().toISOString(),
+        },
+      });
+      expectHttpStatus(eventRes, 201);
+
+      const incident = await prisma.assessmentProctoringIncident.findFirstOrThrow({
+        where: { sessionId: session.id },
+      });
+      incidentId = incident.id;
+
+      allowedPermissions.add('assessment.monitor');
+    });
+
+    it('requires assessment.monitor or assessment.update permission for listing/details', async () => {
+      allowedPermissions.clear();
+
+      const listRes = await app.inject({
+        method: 'GET',
+        url: `/workspace/proctoring/incidents`,
+        headers: creatorHeaders,
+      });
+      expectHttpStatus(listRes, 403);
+
+      allowedPermissions.add('assessment.update');
+      const listResOk = await app.inject({
+        method: 'GET',
+        url: `/workspace/proctoring/incidents`,
+        headers: creatorHeaders,
+      });
+      expectHttpStatus(listResOk, 200);
+      expect(listResOk.json().length).toBe(1);
+    });
+
+    it('returns workspace incident details and audit review action log', async () => {
+      const detailRes = await app.inject({
+        method: 'GET',
+        url: `/workspace/proctoring/incidents/${incidentId}`,
+        headers: creatorHeaders,
+      });
+      expectHttpStatus(detailRes, 200);
+      const detail = detailRes.json();
+      expect(detail.incident.id).toBe(incidentId);
+      expect(detail.incident.learnerDisplayName).toBe('Learner Test');
+      expect(detail.events.length).toBe(1);
+      expect(detail.reviewActions.length).toBe(1);
+      expect(detail.reviewActions[0].actionType).toBe('OPENED');
+    });
+
+    it('updates incident status and appends notes', async () => {
+      const noteRes = await app.inject({
+        method: 'POST',
+        url: `/workspace/proctoring/incidents/${incidentId}/notes`,
+        headers: creatorHeaders,
+        payload: { note: 'Investigating copy-paste warnings.' },
+      });
+      expectHttpStatus(noteRes, 201);
+      expect(noteRes.json().reviewActions.length).toBe(2);
+      expect(noteRes.json().reviewActions[1].actionType).toBe('NOTE_ADDED');
+      expect(noteRes.json().reviewActions[1].note).toBe('Investigating copy-paste warnings.');
+
+      const statusRes1 = await app.inject({
+        method: 'POST',
+        url: `/workspace/proctoring/incidents/${incidentId}/status`,
+        headers: creatorHeaders,
+        payload: { status: 'IN_REVIEW', note: 'Moving to in-review status' },
+      });
+      expectHttpStatus(statusRes1, 201);
+      expect(statusRes1.json().incident.status).toBe('IN_REVIEW');
+
+      const statusRes2 = await app.inject({
+        method: 'POST',
+        url: `/workspace/proctoring/incidents/${incidentId}/status`,
+        headers: creatorHeaders,
+        payload: { status: 'RESOLVED', note: 'Reviewed. False alarm.' },
+      });
+      expectHttpStatus(statusRes2, 201);
+      const resData = statusRes2.json();
+      expect(resData.incident.status).toBe('RESOLVED');
+      expect(resData.incident.resolvedAt).not.toBeNull();
+      expect(resData.incident.resolution).toBe('Reviewed. False alarm.');
+      expect(resData.incident.reviewedByDisplayName).toBe('Creator Test');
+    });
+
+    it('strictly isolates queries by workspace preventing cross-workspace leakage', async () => {
+      const badRes = await app.inject({
+        method: 'GET',
+        url: `/workspace/proctoring/incidents/${incidentId}`,
+        headers: otherWorkspaceHeaders,
+      });
+      expectHttpStatus(badRes, 404);
+    });
+
+    it('creates manual incidents by teachers/proctors', async () => {
+      const manualRes = await app.inject({
+        method: 'POST',
+        url: `/workspace/proctoring/incidents/manual`,
+        headers: creatorHeaders,
+        payload: {
+          sessionId,
+          attemptId,
+          assessmentId,
+          learnerPrincipalId: learnerHeaders['x-actor-id'],
+          incidentType: 'MANUAL_REVIEW_FLAG',
+          severity: 'MEDIUM',
+          title: 'Manual Teacher Flag',
+          summary: 'Teacher observed suspicious visual movements.',
+          note: 'Manually flagged during proctor shift',
+        },
+      });
+      expectHttpStatus(manualRes, 201);
+      const data = manualRes.json();
+      expect(data.incident.title).toBe('Manual Teacher Flag');
+      expect(data.incident.incidentType).toBe('MANUAL_REVIEW_FLAG');
+      expect(data.incident.severity).toBe('MEDIUM');
+      expect(data.reviewActions.length).toBe(1);
+      expect(data.reviewActions[0].note).toBe('Manually flagged during proctor shift');
+    });
+
+    it('returns the correct incident summary counts for the workspace', async () => {
+      const summaryRes = await app.inject({
+        method: 'GET',
+        url: `/workspace/proctoring/incidents/summary`,
+        headers: creatorHeaders,
+      });
+      expectHttpStatus(summaryRes, 200);
+      const summary = summaryRes.json();
+      expect(summary.openCount).toBe(1);
+      expect(summary.highSeverityCount).toBe(1);
+      expect(summary.inReviewCount).toBe(0);
+      expect(summary.resolvedDismissedCount).toBe(0);
+      expect(summary.attemptsWithIncidentsCount).toBe(1);
+    });
+  });
+});
+</file>
+
 <file path="backend/applications/platform-api/src/modules/proctoring/tests/proctoring-policy.service.spec.ts">
 import { describe, expect, it } from 'vitest';
 import { ProctoringPolicyService } from '../application/proctoring-policy.service.js';
@@ -43781,67 +45011,6 @@ describe('ProctoringPolicyService', () => {
     expect(disclosure.doesNotCapture).toContain('Webcam video');
   });
 });
-</file>
-
-<file path="backend/applications/platform-api/src/modules/proctoring/proctoring.module.ts">
-import { Module } from '@nestjs/common';
-import { DataPlatformModule } from '@mentrily/data-platform';
-import { FoundationModule } from '../../foundation/foundation.module.js';
-import {
-  ProctoringEventRepository,
-  ProctoringSessionRepository,
-} from './application/proctoring.repository.js';
-import { ProctoringPolicyService } from './application/proctoring-policy.service.js';
-import { ProctoringReadService } from './application/proctoring-read.service.js';
-import {
-  EndProctoringSessionUseCase,
-  GetActiveAttemptMonitoringUseCase,
-  GetAttemptMonitoringTimelineUseCase,
-  GetLearnerAttemptProctoringUseCase,
-  GetProctoringSessionUseCase,
-  RecordProctoringEventUseCase,
-  RecordProctoringHeartbeatUseCase,
-  StartProctoringSessionUseCase,
-  SyncAttemptTerminalProctoringUseCase,
-} from './application/use-cases/proctoring.use-cases.js';
-import {
-  PrismaProctoringEventRepository,
-  PrismaProctoringSessionRepository,
-} from './infrastructure/persistence/prisma/prisma-proctoring.repository.js';
-import { ProctoringController } from './presentation/http/proctoring.controller.js';
-
-@Module({
-  imports: [FoundationModule, DataPlatformModule],
-  controllers: [ProctoringController],
-  providers: [
-    ProctoringPolicyService,
-    ProctoringReadService,
-    {
-      provide: ProctoringSessionRepository,
-      useClass: PrismaProctoringSessionRepository,
-    },
-    {
-      provide: ProctoringEventRepository,
-      useClass: PrismaProctoringEventRepository,
-    },
-    StartProctoringSessionUseCase,
-    RecordProctoringHeartbeatUseCase,
-    RecordProctoringEventUseCase,
-    EndProctoringSessionUseCase,
-    GetAttemptMonitoringTimelineUseCase,
-    GetActiveAttemptMonitoringUseCase,
-    GetProctoringSessionUseCase,
-    GetLearnerAttemptProctoringUseCase,
-    SyncAttemptTerminalProctoringUseCase,
-  ],
-  exports: [
-    ProctoringPolicyService,
-    ProctoringReadService,
-    GetLearnerAttemptProctoringUseCase,
-    SyncAttemptTerminalProctoringUseCase,
-  ],
-})
-export class ProctoringModule {}
 </file>
 
 <file path="backend/applications/platform-api/src/modules/workspace-governance/application/use-cases/add-workspace-member.use-case.ts">
@@ -47343,128 +48512,6 @@ export interface RevokeInvitationInput {
 }
 </file>
 
-<file path="backend/packages/contract-catalog/src/proctoring/index.ts">
-export type ProctoringModeContract = 'OFF' | 'BASIC_EVENT_MONITORING' | 'RESERVED_LIVE_MONITORING';
-
-export type ProctoringSessionStatusContract =
-  | 'PENDING'
-  | 'ACTIVE'
-  | 'ENDED'
-  | 'EXPIRED'
-  | 'CANCELLED';
-
-export type ProctoringEventTypeContract =
-  | 'SESSION_STARTED'
-  | 'SESSION_ENDED'
-  | 'HEARTBEAT'
-  | 'WINDOW_BLUR'
-  | 'WINDOW_FOCUS'
-  | 'VISIBILITY_HIDDEN'
-  | 'VISIBILITY_VISIBLE'
-  | 'FULLSCREEN_EXITED'
-  | 'FULLSCREEN_ENTERED'
-  | 'COPY_ATTEMPTED'
-  | 'PASTE_ATTEMPTED'
-  | 'NETWORK_OFFLINE'
-  | 'NETWORK_ONLINE'
-  | 'SUSPICIOUS_ACTIVITY_REPORTED'
-  | 'SYSTEM_WARNING';
-
-export type ProctoringEventSeverityContract = 'INFO' | 'LOW' | 'MEDIUM' | 'HIGH';
-
-export interface ProctoringLearnerDisclosureContract {
-  mode: ProctoringModeContract;
-  required: boolean;
-  title: string;
-  message: string;
-  visible: boolean;
-  captures: string[];
-  doesNotCapture: string[];
-}
-
-export interface ProctoringSessionContract {
-  sessionId: string;
-  attemptId: string;
-  assessmentId: string;
-  status: ProctoringSessionStatusContract;
-  mode: ProctoringModeContract;
-  startedAt: string;
-  endedAt?: string | undefined;
-  lastHeartbeatAt?: string | undefined;
-}
-
-export interface ProctoringAttemptSummaryContract {
-  enabled: boolean;
-  mode: ProctoringModeContract;
-  required: boolean;
-  disclosure: ProctoringLearnerDisclosureContract;
-  session?: ProctoringSessionContract | undefined;
-}
-
-export interface ProctoringEventContract {
-  id: string;
-  sessionId: string;
-  attemptId: string;
-  assessmentId: string;
-  eventType: ProctoringEventTypeContract;
-  severity: ProctoringEventSeverityContract;
-  occurredAt: string;
-  receivedAt: string;
-  message: string;
-  metadataSummary: Record<string, unknown>;
-}
-
-export interface StartProctoringSessionRequestContract {
-  attemptId?: string | undefined;
-}
-
-export interface StartProctoringSessionResponseContract {
-  summary: ProctoringAttemptSummaryContract;
-}
-
-export interface ProctoringHeartbeatRequestContract {
-  occurredAt?: string | undefined;
-  clientTime?: string | undefined;
-  sequence?: number | undefined;
-}
-
-export interface RecordProctoringEventRequestContract {
-  eventId?: string | undefined;
-  eventType: ProctoringEventTypeContract;
-  severity?: ProctoringEventSeverityContract | undefined;
-  occurredAt?: string | undefined;
-  metadata?: Record<string, unknown> | undefined;
-}
-
-export interface RecordProctoringEventResponseContract {
-  event: ProctoringEventContract;
-  duplicate: boolean;
-}
-
-export interface ProctoringAttemptMonitoringTimelineContract {
-  attemptId: string;
-  assessmentId: string;
-  session?: ProctoringSessionContract | undefined;
-  disclosure: ProctoringLearnerDisclosureContract;
-  events: ProctoringEventContract[];
-}
-
-export interface ProctoringAttemptMonitoringSummaryContract {
-  assessmentId: string;
-  activeCount: number;
-  sessions: Array<{
-    sessionId: string;
-    attemptId: string;
-    learnerPrincipalId: string;
-    status: ProctoringSessionStatusContract;
-    mode: ProctoringModeContract;
-    lastHeartbeatAt?: string | undefined;
-    highSeverityEvents: number;
-    warningEvents: number;
-  }>;
-}
-</file>
-
 <file path="backend/packages/contract-catalog/src/workspace-governance/index.ts">
 export interface WorkspaceDto {
   id: string;
@@ -49621,6 +50668,163 @@ ALTER TABLE "LearningAssessmentLink" ADD CONSTRAINT "LearningAssessmentLink_cour
 ALTER TABLE "LearningAssessmentLink" ADD CONSTRAINT "LearningAssessmentLink_sectionId_fkey" FOREIGN KEY ("sectionId") REFERENCES "LearningSection"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 ALTER TABLE "LearningAssessmentLink" ADD CONSTRAINT "LearningAssessmentLink_lessonId_fkey" FOREIGN KEY ("lessonId") REFERENCES "LearningLesson"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 ALTER TABLE "LearningAssessmentLink" ADD CONSTRAINT "LearningAssessmentLink_assessmentId_fkey" FOREIGN KEY ("assessmentId") REFERENCES "Assessment"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+</file>
+
+<file path="backend/packages/data-platform/prisma/migrations/20260526162044_add_proctoring_incidents/migration.sql">
+-- CreateEnum
+CREATE TYPE "AssessmentProctoringIncidentType" AS ENUM ('FOCUS_LOSS', 'FULLSCREEN_EXIT', 'COPY_PASTE_ACTIVITY', 'CONNECTIVITY_INTERRUPTION', 'SESSION_INTERRUPTION', 'MULTIPLE_WARNINGS', 'HIGH_SEVERITY_EVENT', 'SYSTEM_FLAG', 'MANUAL_REVIEW_FLAG');
+
+-- CreateEnum
+CREATE TYPE "AssessmentProctoringIncidentStatus" AS ENUM ('OPEN', 'IN_REVIEW', 'RESOLVED', 'DISMISSED', 'ESCALATED');
+
+-- CreateEnum
+CREATE TYPE "AssessmentProctoringIncidentSeverity" AS ENUM ('LOW', 'MEDIUM', 'HIGH', 'CRITICAL');
+
+-- CreateEnum
+CREATE TYPE "AssessmentProctoringIncidentReviewActionType" AS ENUM ('OPENED', 'MARKED_IN_REVIEW', 'RESOLVED', 'DISMISSED', 'ESCALATED', 'REOPENED', 'NOTE_ADDED');
+
+-- CreateTable
+CREATE TABLE "AssessmentProctoringIncident" (
+    "id" UUID NOT NULL,
+    "tenantId" UUID NOT NULL,
+    "workspaceId" UUID NOT NULL,
+    "sessionId" UUID NOT NULL,
+    "attemptId" UUID NOT NULL,
+    "assessmentId" UUID NOT NULL,
+    "learnerPrincipalId" UUID NOT NULL,
+    "incidentType" "AssessmentProctoringIncidentType" NOT NULL,
+    "severity" "AssessmentProctoringIncidentSeverity" NOT NULL,
+    "status" "AssessmentProctoringIncidentStatus" NOT NULL DEFAULT 'OPEN',
+    "title" TEXT NOT NULL,
+    "summary" TEXT NOT NULL,
+    "firstEventAt" TIMESTAMP(3) NOT NULL,
+    "lastEventAt" TIMESTAMP(3) NOT NULL,
+    "eventCount" INTEGER NOT NULL,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+    "reviewedAt" TIMESTAMP(3),
+    "reviewedByPrincipalId" UUID,
+    "resolvedAt" TIMESTAMP(3),
+    "resolution" TEXT,
+
+    CONSTRAINT "AssessmentProctoringIncident_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "AssessmentProctoringIncidentEvent" (
+    "id" UUID NOT NULL,
+    "tenantId" UUID NOT NULL,
+    "workspaceId" UUID NOT NULL,
+    "incidentId" UUID NOT NULL,
+    "proctoringEventId" UUID NOT NULL,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "AssessmentProctoringIncidentEvent_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "AssessmentProctoringIncidentReviewAction" (
+    "id" UUID NOT NULL,
+    "tenantId" UUID NOT NULL,
+    "workspaceId" UUID NOT NULL,
+    "incidentId" UUID NOT NULL,
+    "actionType" "AssessmentProctoringIncidentReviewActionType" NOT NULL,
+    "actorPrincipalId" UUID NOT NULL,
+    "note" TEXT,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "AssessmentProctoringIncidentReviewAction_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateIndex
+CREATE INDEX "AssessmentProctoringIncident_tenantId_idx" ON "AssessmentProctoringIncident"("tenantId");
+
+-- CreateIndex
+CREATE INDEX "AssessmentProctoringIncident_workspaceId_idx" ON "AssessmentProctoringIncident"("workspaceId");
+
+-- CreateIndex
+CREATE INDEX "AssessmentProctoringIncident_sessionId_idx" ON "AssessmentProctoringIncident"("sessionId");
+
+-- CreateIndex
+CREATE INDEX "AssessmentProctoringIncident_attemptId_idx" ON "AssessmentProctoringIncident"("attemptId");
+
+-- CreateIndex
+CREATE INDEX "AssessmentProctoringIncident_assessmentId_idx" ON "AssessmentProctoringIncident"("assessmentId");
+
+-- CreateIndex
+CREATE INDEX "AssessmentProctoringIncident_learnerPrincipalId_idx" ON "AssessmentProctoringIncident"("learnerPrincipalId");
+
+-- CreateIndex
+CREATE INDEX "AssessmentProctoringIncident_status_idx" ON "AssessmentProctoringIncident"("status");
+
+-- CreateIndex
+CREATE INDEX "AssessmentProctoringIncident_severity_idx" ON "AssessmentProctoringIncident"("severity");
+
+-- CreateIndex
+CREATE INDEX "AssessmentProctoringIncident_lastEventAt_idx" ON "AssessmentProctoringIncident"("lastEventAt");
+
+-- CreateIndex
+CREATE INDEX "AssessmentProctoringIncident_workspaceId_attemptId_idx" ON "AssessmentProctoringIncident"("workspaceId", "attemptId");
+
+-- CreateIndex
+CREATE INDEX "AssessmentProctoringIncident_workspaceId_assessmentId_idx" ON "AssessmentProctoringIncident"("workspaceId", "assessmentId");
+
+-- CreateIndex
+CREATE INDEX "AssessmentProctoringIncident_workspaceId_sessionId_idx" ON "AssessmentProctoringIncident"("workspaceId", "sessionId");
+
+-- CreateIndex
+CREATE INDEX "AssessmentProctoringIncident_workspaceId_status_idx" ON "AssessmentProctoringIncident"("workspaceId", "status");
+
+-- CreateIndex
+CREATE INDEX "AssessmentProctoringIncident_workspaceId_severity_idx" ON "AssessmentProctoringIncident"("workspaceId", "severity");
+
+-- CreateIndex
+CREATE INDEX "AssessmentProctoringIncident_workspaceId_assessmentId_statu_idx" ON "AssessmentProctoringIncident"("workspaceId", "assessmentId", "status");
+
+-- CreateIndex
+CREATE INDEX "AssessmentProctoringIncident_workspaceId_attemptId_status_idx" ON "AssessmentProctoringIncident"("workspaceId", "attemptId", "status");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "AssessmentProctoringIncident_workspaceId_sessionId_incident_key" ON "AssessmentProctoringIncident"("workspaceId", "sessionId", "incidentType", "status");
+
+-- CreateIndex
+CREATE INDEX "AssessmentProctoringIncidentEvent_tenantId_idx" ON "AssessmentProctoringIncidentEvent"("tenantId");
+
+-- CreateIndex
+CREATE INDEX "AssessmentProctoringIncidentEvent_workspaceId_idx" ON "AssessmentProctoringIncidentEvent"("workspaceId");
+
+-- CreateIndex
+CREATE INDEX "AssessmentProctoringIncidentEvent_incidentId_idx" ON "AssessmentProctoringIncidentEvent"("incidentId");
+
+-- CreateIndex
+CREATE INDEX "AssessmentProctoringIncidentEvent_proctoringEventId_idx" ON "AssessmentProctoringIncidentEvent"("proctoringEventId");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "AssessmentProctoringIncidentEvent_workspaceId_incidentId_pr_key" ON "AssessmentProctoringIncidentEvent"("workspaceId", "incidentId", "proctoringEventId");
+
+-- CreateIndex
+CREATE INDEX "AssessmentProctoringIncidentReviewAction_tenantId_idx" ON "AssessmentProctoringIncidentReviewAction"("tenantId");
+
+-- CreateIndex
+CREATE INDEX "AssessmentProctoringIncidentReviewAction_workspaceId_idx" ON "AssessmentProctoringIncidentReviewAction"("workspaceId");
+
+-- CreateIndex
+CREATE INDEX "AssessmentProctoringIncidentReviewAction_incidentId_idx" ON "AssessmentProctoringIncidentReviewAction"("incidentId");
+
+-- AddForeignKey
+ALTER TABLE "AssessmentProctoringIncident" ADD CONSTRAINT "AssessmentProctoringIncident_sessionId_fkey" FOREIGN KEY ("sessionId") REFERENCES "AssessmentProctoringSession"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "AssessmentProctoringIncident" ADD CONSTRAINT "AssessmentProctoringIncident_attemptId_fkey" FOREIGN KEY ("attemptId") REFERENCES "AssessmentAttempt"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "AssessmentProctoringIncidentEvent" ADD CONSTRAINT "AssessmentProctoringIncidentEvent_incidentId_fkey" FOREIGN KEY ("incidentId") REFERENCES "AssessmentProctoringIncident"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "AssessmentProctoringIncidentEvent" ADD CONSTRAINT "AssessmentProctoringIncidentEvent_proctoringEventId_fkey" FOREIGN KEY ("proctoringEventId") REFERENCES "AssessmentProctoringEvent"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "AssessmentProctoringIncidentReviewAction" ADD CONSTRAINT "AssessmentProctoringIncidentReviewAction_incidentId_fkey" FOREIGN KEY ("incidentId") REFERENCES "AssessmentProctoringIncident"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 </file>
 
 <file path="backend/packages/data-platform/prisma/migrations/20260526193000_add_proctoring_sessions_and_events/migration.sql">
@@ -72213,128 +73417,6 @@ export type PublishContentDocumentRequest = Record<string, never>;
 export type RestoreContentDocumentRequest = Record<string, never>;
 </file>
 
-<file path="frontend/packages/domain-contracts/src/proctoring.ts">
-export type ProctoringModeContract = 'OFF' | 'BASIC_EVENT_MONITORING' | 'RESERVED_LIVE_MONITORING';
-
-export type ProctoringSessionStatusContract =
-  | 'PENDING'
-  | 'ACTIVE'
-  | 'ENDED'
-  | 'EXPIRED'
-  | 'CANCELLED';
-
-export type ProctoringEventTypeContract =
-  | 'SESSION_STARTED'
-  | 'SESSION_ENDED'
-  | 'HEARTBEAT'
-  | 'WINDOW_BLUR'
-  | 'WINDOW_FOCUS'
-  | 'VISIBILITY_HIDDEN'
-  | 'VISIBILITY_VISIBLE'
-  | 'FULLSCREEN_EXITED'
-  | 'FULLSCREEN_ENTERED'
-  | 'COPY_ATTEMPTED'
-  | 'PASTE_ATTEMPTED'
-  | 'NETWORK_OFFLINE'
-  | 'NETWORK_ONLINE'
-  | 'SUSPICIOUS_ACTIVITY_REPORTED'
-  | 'SYSTEM_WARNING';
-
-export type ProctoringEventSeverityContract = 'INFO' | 'LOW' | 'MEDIUM' | 'HIGH';
-
-export interface ProctoringLearnerDisclosureContract {
-  mode: ProctoringModeContract;
-  required: boolean;
-  title: string;
-  message: string;
-  visible: boolean;
-  captures: string[];
-  doesNotCapture: string[];
-}
-
-export interface ProctoringSessionContract {
-  sessionId: string;
-  attemptId: string;
-  assessmentId: string;
-  status: ProctoringSessionStatusContract;
-  mode: ProctoringModeContract;
-  startedAt: string;
-  endedAt?: string | undefined;
-  lastHeartbeatAt?: string | undefined;
-}
-
-export interface ProctoringAttemptSummaryContract {
-  enabled: boolean;
-  mode: ProctoringModeContract;
-  required: boolean;
-  disclosure: ProctoringLearnerDisclosureContract;
-  session?: ProctoringSessionContract | undefined;
-}
-
-export interface ProctoringEventContract {
-  id: string;
-  sessionId: string;
-  attemptId: string;
-  assessmentId: string;
-  eventType: ProctoringEventTypeContract;
-  severity: ProctoringEventSeverityContract;
-  occurredAt: string;
-  receivedAt: string;
-  message: string;
-  metadataSummary: Record<string, unknown>;
-}
-
-export interface StartProctoringSessionRequestContract {
-  attemptId?: string | undefined;
-}
-
-export interface StartProctoringSessionResponseContract {
-  summary: ProctoringAttemptSummaryContract;
-}
-
-export interface ProctoringHeartbeatRequestContract {
-  occurredAt?: string | undefined;
-  clientTime?: string | undefined;
-  sequence?: number | undefined;
-}
-
-export interface RecordProctoringEventRequestContract {
-  eventId?: string | undefined;
-  eventType: ProctoringEventTypeContract;
-  severity?: ProctoringEventSeverityContract | undefined;
-  occurredAt?: string | undefined;
-  metadata?: Record<string, unknown> | undefined;
-}
-
-export interface RecordProctoringEventResponseContract {
-  event: ProctoringEventContract;
-  duplicate: boolean;
-}
-
-export interface ProctoringAttemptMonitoringTimelineContract {
-  attemptId: string;
-  assessmentId: string;
-  session?: ProctoringSessionContract | undefined;
-  disclosure: ProctoringLearnerDisclosureContract;
-  events: ProctoringEventContract[];
-}
-
-export interface ProctoringAttemptMonitoringSummaryContract {
-  assessmentId: string;
-  activeCount: number;
-  sessions: Array<{
-    sessionId: string;
-    attemptId: string;
-    learnerPrincipalId: string;
-    status: ProctoringSessionStatusContract;
-    mode: ProctoringModeContract;
-    lastHeartbeatAt?: string | undefined;
-    highSeverityEvents: number;
-    warningEvents: number;
-  }>;
-}
-</file>
-
 <file path="frontend/packages/domain-contracts/package.json">
 {
   "name": "@mentrily/domain-contracts",
@@ -81246,485 +82328,6 @@ import { MediaLibraryController } from './presentation/index.js';
 export class MediaLibraryModule {}
 </file>
 
-<file path="backend/applications/platform-api/src/modules/proctoring/application/use-cases/proctoring.use-cases.ts">
-import { Inject, Injectable } from '@nestjs/common';
-import type {
-  ProctoringAttemptMonitoringSummaryContract,
-  ProctoringAttemptMonitoringTimelineContract,
-  ProctoringAttemptSummaryContract,
-  ProctoringHeartbeatRequestContract,
-  ProctoringSessionContract,
-  RecordProctoringEventRequestContract,
-  RecordProctoringEventResponseContract,
-  StartProctoringSessionResponseContract,
-} from '@mentrily/contract-catalog';
-import {
-  AppError,
-  PERMISSION_EVALUATOR,
-  PermissionEvaluator,
-  RequestContext,
-  TransactionContext,
-  TRANSACTION_RUNNER,
-  TransactionRunner,
-} from '@mentrily/service-core';
-import { PrismaService, getPrismaClient } from '@mentrily/data-platform';
-import { PermissionCatalog } from '@mentrily/security-toolkit';
-import {
-  ProctoringEventRepository,
-  ProctoringSessionRepository,
-} from '../proctoring.repository.js';
-import type { ProctoringSessionRecord } from '../proctoring.types.js';
-import { ProctoringPolicyService } from '../proctoring-policy.service.js';
-import { ProctoringReadService } from '../proctoring-read.service.js';
-
-function requireWorkspaceActor(context: RequestContext) {
-  const workspace = context.workspace;
-  if (!workspace?.tenantId || !workspace.workspaceId || !workspace.actorId) {
-    throw new AppError('VALIDATION_ERROR', 'missing workspace actor context', 400);
-  }
-  return workspace;
-}
-
-async function loadAttemptForWorkspace(
-  prisma: PrismaService,
-  attemptId: string,
-  workspaceId: string,
-) {
-  const attempt = await getPrismaClient(prisma).assessmentAttempt.findUnique({
-    where: { id: attemptId },
-    select: {
-      id: true,
-      tenantId: true,
-      workspaceId: true,
-      assessmentId: true,
-      learnerPrincipalId: true,
-      status: true,
-      metadata: true,
-    },
-  });
-  if (!attempt || attempt.workspaceId !== workspaceId) {
-    throw new AppError('NOT_FOUND', 'attempt not found', 404);
-  }
-  return attempt;
-}
-
-@Injectable()
-export class StartProctoringSessionUseCase {
-  constructor(
-    @Inject(PrismaService) private readonly prisma: PrismaService,
-    @Inject(ProctoringSessionRepository)
-    private readonly sessions: ProctoringSessionRepository,
-    @Inject(ProctoringPolicyService)
-    private readonly policy: ProctoringPolicyService,
-    @Inject(ProctoringReadService)
-    private readonly reader: ProctoringReadService,
-    @Inject(PERMISSION_EVALUATOR) private readonly permissions: PermissionEvaluator,
-    @Inject(TRANSACTION_RUNNER) private readonly transactionRunner: TransactionRunner,
-  ) {}
-
-  async execute(
-    context: RequestContext,
-    attemptId: string,
-  ): Promise<StartProctoringSessionResponseContract> {
-    const workspace = requireWorkspaceActor(context);
-    const permission = await this.permissions.evaluate(
-      { permission: PermissionCatalog.ASSESSMENT_ATTEMPT_READ, workspace },
-      context,
-    );
-    if (!permission.allowed) {
-      throw new AppError('FORBIDDEN', 'permission denied', 403);
-    }
-
-    const attempt = await loadAttemptForWorkspace(this.prisma, attemptId, workspace.workspaceId);
-    if (attempt.learnerPrincipalId !== workspace.actorId) {
-      throw new AppError('FORBIDDEN', 'you do not own this attempt', 403);
-    }
-    if (attempt.status !== 'IN_PROGRESS') {
-      throw new AppError('CONFLICT', 'attempt is not active', 409);
-    }
-
-    const mode = this.policy.getModeFromAssessmentMetadata(
-      (attempt.metadata as Record<string, unknown> | null | undefined) ?? undefined,
-    );
-
-    if (mode === 'OFF') {
-      return { summary: this.policy.toAttemptSummary(mode, null) };
-    }
-
-    const session = await this.transactionRunner.run<ProctoringSessionRecord>(async (tx) => {
-      const client = getPrismaClient(this.prisma, tx);
-      await client.$executeRawUnsafe(
-        'SELECT id FROM "AssessmentAttempt" WHERE id = $1::uuid FOR UPDATE',
-        attemptId,
-      );
-
-      const existing = await this.sessions.findLatestByAttempt(attemptId, tx);
-      if (existing && (existing.status === 'ACTIVE' || existing.status === 'PENDING')) {
-        return existing;
-      }
-
-      const now = new Date();
-      return await this.sessions.create(
-        {
-          tenantId: attempt.tenantId,
-          workspaceId: attempt.workspaceId,
-          assessmentId: attempt.assessmentId,
-          attemptId: attempt.id,
-          learnerPrincipalId: attempt.learnerPrincipalId,
-          mode,
-          status: 'ACTIVE',
-          startedAt: now,
-          lastHeartbeatAt: now,
-        },
-        tx,
-      );
-    });
-
-    return { summary: this.policy.toAttemptSummary(mode, session) };
-  }
-}
-
-@Injectable()
-export class RecordProctoringHeartbeatUseCase {
-  constructor(
-    @Inject(PrismaService) private readonly prisma: PrismaService,
-    @Inject(ProctoringSessionRepository)
-    private readonly sessions: ProctoringSessionRepository,
-    @Inject(ProctoringEventRepository)
-    private readonly events: ProctoringEventRepository,
-    @Inject(ProctoringPolicyService)
-    private readonly policy: ProctoringPolicyService,
-    @Inject(PERMISSION_EVALUATOR) private readonly permissions: PermissionEvaluator,
-  ) {}
-
-  async execute(
-    context: RequestContext,
-    sessionId: string,
-    input: ProctoringHeartbeatRequestContract,
-  ): Promise<ProctoringSessionContract> {
-    const workspace = requireWorkspaceActor(context);
-    const permission = await this.permissions.evaluate(
-      { permission: PermissionCatalog.ASSESSMENT_ATTEMPT_READ, workspace },
-      context,
-    );
-    if (!permission.allowed) {
-      throw new AppError('FORBIDDEN', 'permission denied', 403);
-    }
-
-    const session = await this.sessions.findById(sessionId);
-    if (!session || session.workspaceId !== workspace.workspaceId) {
-      throw new AppError('NOT_FOUND', 'proctoring session not found', 404);
-    }
-    if (session.learnerPrincipalId !== workspace.actorId) {
-      throw new AppError('FORBIDDEN', 'you do not own this monitoring session', 403);
-    }
-    if (session.status !== 'ACTIVE' && session.status !== 'PENDING') {
-      throw new AppError('CONFLICT', 'monitoring session is not active', 409);
-    }
-
-    const recentCount = await this.events.countRecentBySession(
-      sessionId,
-      new Date(Date.now() - 60_000),
-    );
-    if (recentCount >= this.policy.maxEventsPerMinute) {
-      throw new AppError('RATE_LIMITED', 'too many monitoring events', 429);
-    }
-
-    const now = new Date();
-    await this.events.create({
-      tenantId: session.tenantId,
-      workspaceId: session.workspaceId,
-      sessionId: session.id,
-      attemptId: session.attemptId,
-      assessmentId: session.assessmentId,
-      learnerPrincipalId: session.learnerPrincipalId,
-      eventType: 'HEARTBEAT',
-      severity: 'INFO',
-      occurredAt: input.occurredAt ? new Date(input.occurredAt) : now,
-      metadata: this.policy.sanitizeMetadata('HEARTBEAT', {
-        clientTime: input.clientTime,
-        sequence: input.sequence,
-      }),
-    });
-    const updated = await this.sessions.update(sessionId, {
-      status: 'ACTIVE',
-      lastHeartbeatAt: now,
-    });
-    return this.policy.toSessionContract(updated);
-  }
-}
-
-@Injectable()
-export class RecordProctoringEventUseCase {
-  constructor(
-    @Inject(ProctoringSessionRepository)
-    private readonly sessions: ProctoringSessionRepository,
-    @Inject(ProctoringEventRepository)
-    private readonly events: ProctoringEventRepository,
-    @Inject(ProctoringPolicyService)
-    private readonly policy: ProctoringPolicyService,
-    @Inject(PERMISSION_EVALUATOR) private readonly permissions: PermissionEvaluator,
-  ) {}
-
-  async execute(
-    context: RequestContext,
-    sessionId: string,
-    input: RecordProctoringEventRequestContract,
-  ): Promise<RecordProctoringEventResponseContract> {
-    const workspace = requireWorkspaceActor(context);
-    const permission = await this.permissions.evaluate(
-      { permission: PermissionCatalog.ASSESSMENT_ATTEMPT_READ, workspace },
-      context,
-    );
-    if (!permission.allowed) {
-      throw new AppError('FORBIDDEN', 'permission denied', 403);
-    }
-
-    const session = await this.sessions.findById(sessionId);
-    if (!session || session.workspaceId !== workspace.workspaceId) {
-      throw new AppError('NOT_FOUND', 'proctoring session not found', 404);
-    }
-    if (session.learnerPrincipalId !== workspace.actorId) {
-      throw new AppError('FORBIDDEN', 'you do not own this monitoring session', 403);
-    }
-    if (session.status !== 'ACTIVE' && session.status !== 'PENDING') {
-      throw new AppError('CONFLICT', 'monitoring session is not active', 409);
-    }
-    if (!this.policy.isEventTypeAllowed(input.eventType)) {
-      throw new AppError('VALIDATION_ERROR', 'unsupported proctoring event type', 400);
-    }
-    const severity = input.severity ?? 'INFO';
-    if (!this.policy.isSeverityAllowed(severity)) {
-      throw new AppError('VALIDATION_ERROR', 'unsupported proctoring event severity', 400);
-    }
-    const occurredAt = input.occurredAt ? new Date(input.occurredAt) : new Date();
-    if (
-      Number.isNaN(occurredAt.getTime()) ||
-      Math.abs(Date.now() - occurredAt.getTime()) > 24 * 60 * 60_000
-    ) {
-      throw new AppError('VALIDATION_ERROR', 'invalid proctoring event timestamp', 400);
-    }
-
-    const recentCount = await this.events.countRecentBySession(
-      sessionId,
-      new Date(Date.now() - 60_000),
-    );
-    if (recentCount >= this.policy.maxEventsPerMinute) {
-      throw new AppError('RATE_LIMITED', 'too many monitoring events', 429);
-    }
-
-    const result = await this.events.create({
-      tenantId: session.tenantId,
-      workspaceId: session.workspaceId,
-      sessionId: session.id,
-      attemptId: session.attemptId,
-      assessmentId: session.assessmentId,
-      learnerPrincipalId: session.learnerPrincipalId,
-      ...(input.eventId ? { eventId: input.eventId } : {}),
-      eventType: input.eventType,
-      severity,
-      occurredAt,
-      metadata: this.policy.sanitizeMetadata(input.eventType, input.metadata),
-    });
-
-    return {
-      event: this.policy.toEventContract(result.event),
-      duplicate: result.duplicate,
-    };
-  }
-}
-
-@Injectable()
-export class EndProctoringSessionUseCase {
-  constructor(
-    @Inject(ProctoringSessionRepository)
-    private readonly sessions: ProctoringSessionRepository,
-    @Inject(ProctoringEventRepository)
-    private readonly events: ProctoringEventRepository,
-    @Inject(ProctoringPolicyService)
-    private readonly policy: ProctoringPolicyService,
-    @Inject(PERMISSION_EVALUATOR) private readonly permissions: PermissionEvaluator,
-  ) {}
-
-  async execute(context: RequestContext, sessionId: string): Promise<ProctoringSessionContract> {
-    const workspace = requireWorkspaceActor(context);
-    const permission = await this.permissions.evaluate(
-      { permission: PermissionCatalog.ASSESSMENT_ATTEMPT_READ, workspace },
-      context,
-    );
-    if (!permission.allowed) {
-      throw new AppError('FORBIDDEN', 'permission denied', 403);
-    }
-
-    const session = await this.sessions.findById(sessionId);
-    if (!session || session.workspaceId !== workspace.workspaceId) {
-      throw new AppError('NOT_FOUND', 'proctoring session not found', 404);
-    }
-    if (session.learnerPrincipalId !== workspace.actorId) {
-      throw new AppError('FORBIDDEN', 'you do not own this monitoring session', 403);
-    }
-    if (
-      session.status === 'ENDED' ||
-      session.status === 'EXPIRED' ||
-      session.status === 'CANCELLED'
-    ) {
-      return this.policy.toSessionContract(session);
-    }
-
-    const now = new Date();
-    await this.events.create({
-      tenantId: session.tenantId,
-      workspaceId: session.workspaceId,
-      sessionId: session.id,
-      attemptId: session.attemptId,
-      assessmentId: session.assessmentId,
-      learnerPrincipalId: session.learnerPrincipalId,
-      eventType: 'SESSION_ENDED',
-      severity: 'INFO',
-      occurredAt: now,
-      metadata: {},
-    });
-    const updated = await this.sessions.update(sessionId, {
-      status: 'ENDED',
-      endedAt: now,
-      lastHeartbeatAt: now,
-    });
-    return this.policy.toSessionContract(updated);
-  }
-}
-
-@Injectable()
-export class GetAttemptMonitoringTimelineUseCase {
-  constructor(
-    @Inject(ProctoringReadService)
-    private readonly reader: ProctoringReadService,
-    @Inject(PERMISSION_EVALUATOR) private readonly permissions: PermissionEvaluator,
-  ) {}
-
-  async execute(
-    context: RequestContext,
-    attemptId: string,
-  ): Promise<ProctoringAttemptMonitoringTimelineContract> {
-    const workspace = requireWorkspaceActor(context);
-    const permission = await this.permissions.evaluate(
-      { permission: PermissionCatalog.ASSESSMENT_MONITOR, workspace },
-      context,
-    );
-    if (!permission.allowed) {
-      throw new AppError('FORBIDDEN', 'permission denied', 403);
-    }
-    return this.reader.getAttemptTimeline(attemptId, workspace.workspaceId);
-  }
-}
-
-@Injectable()
-export class GetActiveAttemptMonitoringUseCase {
-  constructor(
-    @Inject(ProctoringReadService)
-    private readonly reader: ProctoringReadService,
-    @Inject(PERMISSION_EVALUATOR) private readonly permissions: PermissionEvaluator,
-  ) {}
-
-  async execute(
-    context: RequestContext,
-    assessmentId: string,
-  ): Promise<ProctoringAttemptMonitoringSummaryContract> {
-    const workspace = requireWorkspaceActor(context);
-    const permission = await this.permissions.evaluate(
-      { permission: PermissionCatalog.ASSESSMENT_MONITOR, workspace },
-      context,
-    );
-    if (!permission.allowed) {
-      throw new AppError('FORBIDDEN', 'permission denied', 403);
-    }
-    return this.reader.getActiveAssessmentSummary(assessmentId, workspace.workspaceId);
-  }
-}
-
-@Injectable()
-export class GetProctoringSessionUseCase {
-  constructor(
-    @Inject(ProctoringSessionRepository)
-    private readonly sessions: ProctoringSessionRepository,
-    @Inject(ProctoringPolicyService)
-    private readonly policy: ProctoringPolicyService,
-    @Inject(PERMISSION_EVALUATOR) private readonly permissions: PermissionEvaluator,
-  ) {}
-
-  async execute(context: RequestContext, sessionId: string): Promise<ProctoringSessionContract> {
-    const workspace = requireWorkspaceActor(context);
-    const permission = await this.permissions.evaluate(
-      { permission: PermissionCatalog.ASSESSMENT_MONITOR, workspace },
-      context,
-    );
-    if (!permission.allowed) {
-      throw new AppError('FORBIDDEN', 'permission denied', 403);
-    }
-    const session = await this.sessions.findById(sessionId);
-    if (!session || session.workspaceId !== workspace.workspaceId) {
-      throw new AppError('NOT_FOUND', 'proctoring session not found', 404);
-    }
-    return this.policy.toSessionContract(session);
-  }
-}
-
-@Injectable()
-export class GetLearnerAttemptProctoringUseCase {
-  constructor(@Inject(ProctoringReadService) private readonly reader: ProctoringReadService) {}
-
-  async execute(
-    context: RequestContext,
-    attemptId: string,
-    transaction?: TransactionContext,
-  ): Promise<ProctoringAttemptSummaryContract> {
-    const workspace = requireWorkspaceActor(context);
-    return this.reader.getAttemptSummary(attemptId, workspace.workspaceId, transaction);
-  }
-}
-
-@Injectable()
-export class SyncAttemptTerminalProctoringUseCase {
-  constructor(
-    @Inject(PrismaService) private readonly prisma: PrismaService,
-    @Inject(ProctoringSessionRepository)
-    private readonly sessions: ProctoringSessionRepository,
-  ) {}
-
-  async execute(
-    attemptId: string,
-    terminalStatus: 'ENDED' | 'EXPIRED' | 'CANCELLED',
-    transaction?: TransactionContext,
-  ): Promise<void> {
-    const attempt = await getPrismaClient(this.prisma, transaction).assessmentAttempt.findUnique({
-      where: { id: attemptId },
-      select: { id: true },
-    });
-    if (!attempt) {
-      return;
-    }
-
-    const latest = await this.sessions.findLatestByAttempt(attemptId, transaction);
-    if (
-      !latest ||
-      latest.status === 'ENDED' ||
-      latest.status === 'EXPIRED' ||
-      latest.status === 'CANCELLED'
-    ) {
-      return;
-    }
-
-    await this.sessions.update(
-      latest.id,
-      {
-        status: terminalStatus,
-        endedAt: new Date(),
-      },
-      transaction,
-    );
-  }
-}
-</file>
-
 <file path="backend/applications/platform-api/src/modules/proctoring/application/proctoring-policy.service.ts">
 import { Injectable } from '@nestjs/common';
 import { AppError } from '@mentrily/service-core';
@@ -81961,6 +82564,236 @@ export class ProctoringPolicyService {
     };
   }
 }
+</file>
+
+<file path="backend/applications/platform-api/src/modules/proctoring/presentation/http/proctoring.controller.ts">
+import { Body, Controller, Get, Inject, Param, Post, Query, Req } from '@nestjs/common';
+import type { FastifyRequest } from 'fastify';
+import { AppError, RequestContext } from '@mentrily/service-core';
+import type {
+  ProctoringHeartbeatRequestContract,
+  RecordProctoringEventRequestContract,
+  ProctoringIncidentListQueryContract,
+  UpdateProctoringIncidentStatusRequestContract,
+  AddProctoringIncidentNoteRequestContract,
+  CreateManualProctoringIncidentRequestContract,
+} from '@mentrily/contract-catalog';
+import {
+  EndProctoringSessionUseCase,
+  GetActiveAttemptMonitoringUseCase,
+  GetAttemptMonitoringTimelineUseCase,
+  GetProctoringSessionUseCase,
+  RecordProctoringEventUseCase,
+  RecordProctoringHeartbeatUseCase,
+  StartProctoringSessionUseCase,
+} from '../../application/use-cases/proctoring.use-cases.js';
+import {
+  GetProctoringIncidentUseCase,
+  ListProctoringIncidentsUseCase,
+  GetProctoringIncidentSummaryUseCase,
+  UpdateProctoringIncidentStatusUseCase,
+  AddProctoringIncidentNoteUseCase,
+  CreateManualProctoringIncidentUseCase,
+} from '../../application/use-cases/proctoring-incident.use-cases.js';
+
+function requestContext(request: FastifyRequest): RequestContext {
+  const context = request.requestContext as RequestContext | undefined;
+  if (!context) {
+    throw new AppError('VALIDATION_ERROR', 'missing request context', 400);
+  }
+  return context;
+}
+
+@Controller('/workspace/proctoring')
+export class ProctoringController {
+  constructor(
+    @Inject(StartProctoringSessionUseCase)
+    private readonly startSession: StartProctoringSessionUseCase,
+    @Inject(RecordProctoringHeartbeatUseCase)
+    private readonly heartbeat: RecordProctoringHeartbeatUseCase,
+    @Inject(RecordProctoringEventUseCase)
+    private readonly recordEvent: RecordProctoringEventUseCase,
+    @Inject(EndProctoringSessionUseCase)
+    private readonly endSession: EndProctoringSessionUseCase,
+    @Inject(GetAttemptMonitoringTimelineUseCase)
+    private readonly timeline: GetAttemptMonitoringTimelineUseCase,
+    @Inject(GetActiveAttemptMonitoringUseCase)
+    private readonly activeSummary: GetActiveAttemptMonitoringUseCase,
+    @Inject(GetProctoringSessionUseCase)
+    private readonly getSession: GetProctoringSessionUseCase,
+    @Inject(GetProctoringIncidentUseCase)
+    private readonly getIncident: GetProctoringIncidentUseCase,
+    @Inject(ListProctoringIncidentsUseCase)
+    private readonly listIncidents: ListProctoringIncidentsUseCase,
+    @Inject(GetProctoringIncidentSummaryUseCase)
+    private readonly summaryIncidents: GetProctoringIncidentSummaryUseCase,
+    @Inject(UpdateProctoringIncidentStatusUseCase)
+    private readonly updateIncidentStatus: UpdateProctoringIncidentStatusUseCase,
+    @Inject(AddProctoringIncidentNoteUseCase)
+    private readonly addIncidentNote: AddProctoringIncidentNoteUseCase,
+    @Inject(CreateManualProctoringIncidentUseCase)
+    private readonly createManualIncident: CreateManualProctoringIncidentUseCase,
+  ) {}
+
+  @Post('/attempts/:attemptId/session/start')
+  async start(@Req() request: FastifyRequest, @Param('attemptId') attemptId: string) {
+    return this.startSession.execute(requestContext(request), attemptId);
+  }
+
+  @Post('/sessions/:sessionId/heartbeat')
+  async recordHeartbeat(
+    @Req() request: FastifyRequest,
+    @Param('sessionId') sessionId: string,
+    @Body() body: ProctoringHeartbeatRequestContract,
+  ) {
+    return this.heartbeat.execute(requestContext(request), sessionId, body);
+  }
+
+  @Post('/sessions/:sessionId/events')
+  async createEvent(
+    @Req() request: FastifyRequest,
+    @Param('sessionId') sessionId: string,
+    @Body() body: RecordProctoringEventRequestContract,
+  ) {
+    return this.recordEvent.execute(requestContext(request), sessionId, body);
+  }
+
+  @Post('/sessions/:sessionId/end')
+  async end(@Req() request: FastifyRequest, @Param('sessionId') sessionId: string) {
+    return this.endSession.execute(requestContext(request), sessionId);
+  }
+
+  @Get('/attempts/:attemptId/timeline')
+  async getTimeline(@Req() request: FastifyRequest, @Param('attemptId') attemptId: string) {
+    return this.timeline.execute(requestContext(request), attemptId);
+  }
+
+  @Get('/assessments/:assessmentId/active')
+  async getActive(@Req() request: FastifyRequest, @Param('assessmentId') assessmentId: string) {
+    return this.activeSummary.execute(requestContext(request), assessmentId);
+  }
+
+  @Get('/sessions/:sessionId')
+  async getOne(@Req() request: FastifyRequest, @Param('sessionId') sessionId: string) {
+    return this.getSession.execute(requestContext(request), sessionId);
+  }
+
+  @Get('/incidents')
+  async list(@Req() request: FastifyRequest, @Query() query: ProctoringIncidentListQueryContract) {
+    return this.listIncidents.execute(requestContext(request), query);
+  }
+
+  @Get('/incidents/summary')
+  async getSummary(@Req() request: FastifyRequest) {
+    return this.summaryIncidents.execute(requestContext(request));
+  }
+
+  @Get('/incidents/:incidentId')
+  async getOneIncident(@Req() request: FastifyRequest, @Param('incidentId') incidentId: string) {
+    return this.getIncident.execute(requestContext(request), incidentId);
+  }
+
+  @Post('/incidents/:incidentId/status')
+  async updateStatus(
+    @Req() request: FastifyRequest,
+    @Param('incidentId') incidentId: string,
+    @Body() body: UpdateProctoringIncidentStatusRequestContract,
+  ) {
+    return this.updateIncidentStatus.execute(requestContext(request), incidentId, body);
+  }
+
+  @Post('/incidents/:incidentId/notes')
+  async addNote(
+    @Req() request: FastifyRequest,
+    @Param('incidentId') incidentId: string,
+    @Body() body: AddProctoringIncidentNoteRequestContract,
+  ) {
+    return this.addIncidentNote.execute(requestContext(request), incidentId, body);
+  }
+
+  @Post('/incidents/manual')
+  async createManual(
+    @Req() request: FastifyRequest,
+    @Body() body: CreateManualProctoringIncidentRequestContract,
+  ) {
+    return this.createManualIncident.execute(requestContext(request), body);
+  }
+}
+</file>
+
+<file path="backend/applications/platform-api/src/modules/proctoring/proctoring.module.ts">
+import { Module } from '@nestjs/common';
+import { DataPlatformModule } from '@mentrily/data-platform';
+import { FoundationModule } from '../../foundation/foundation.module.js';
+import {
+  ProctoringEventRepository,
+  ProctoringSessionRepository,
+} from './application/proctoring.repository.js';
+import { ProctoringPolicyService } from './application/proctoring-policy.service.js';
+import { ProctoringReadService } from './application/proctoring-read.service.js';
+import {
+  EndProctoringSessionUseCase,
+  GetActiveAttemptMonitoringUseCase,
+  GetAttemptMonitoringTimelineUseCase,
+  GetLearnerAttemptProctoringUseCase,
+  GetProctoringSessionUseCase,
+  RecordProctoringEventUseCase,
+  RecordProctoringHeartbeatUseCase,
+  StartProctoringSessionUseCase,
+  SyncAttemptTerminalProctoringUseCase,
+} from './application/use-cases/proctoring.use-cases.js';
+import {
+  GetProctoringIncidentUseCase,
+  ListProctoringIncidentsUseCase,
+  GetProctoringIncidentSummaryUseCase,
+  UpdateProctoringIncidentStatusUseCase,
+  AddProctoringIncidentNoteUseCase,
+  CreateManualProctoringIncidentUseCase,
+} from './application/use-cases/proctoring-incident.use-cases.js';
+import {
+  PrismaProctoringEventRepository,
+  PrismaProctoringSessionRepository,
+} from './infrastructure/persistence/prisma/prisma-proctoring.repository.js';
+import { ProctoringController } from './presentation/http/proctoring.controller.js';
+
+@Module({
+  imports: [FoundationModule, DataPlatformModule],
+  controllers: [ProctoringController],
+  providers: [
+    ProctoringPolicyService,
+    ProctoringReadService,
+    {
+      provide: ProctoringSessionRepository,
+      useClass: PrismaProctoringSessionRepository,
+    },
+    {
+      provide: ProctoringEventRepository,
+      useClass: PrismaProctoringEventRepository,
+    },
+    StartProctoringSessionUseCase,
+    RecordProctoringHeartbeatUseCase,
+    RecordProctoringEventUseCase,
+    EndProctoringSessionUseCase,
+    GetAttemptMonitoringTimelineUseCase,
+    GetActiveAttemptMonitoringUseCase,
+    GetProctoringSessionUseCase,
+    GetLearnerAttemptProctoringUseCase,
+    SyncAttemptTerminalProctoringUseCase,
+    GetProctoringIncidentUseCase,
+    ListProctoringIncidentsUseCase,
+    GetProctoringIncidentSummaryUseCase,
+    UpdateProctoringIncidentStatusUseCase,
+    AddProctoringIncidentNoteUseCase,
+    CreateManualProctoringIncidentUseCase,
+  ],
+  exports: [
+    ProctoringPolicyService,
+    ProctoringReadService,
+    GetLearnerAttemptProctoringUseCase,
+    SyncAttemptTerminalProctoringUseCase,
+  ],
+})
+export class ProctoringModule {}
 </file>
 
 <file path="backend/applications/platform-api/src/modules/workspace-governance/tests/workspace-permission-evaluator.spec.ts">
@@ -85807,6 +86640,237 @@ export interface MultiWorkspaceDashboardSummaryContract {
       | 'campaign'
     >;
   }[];
+}
+</file>
+
+<file path="backend/packages/contract-catalog/src/proctoring/index.ts">
+export type ProctoringModeContract = 'OFF' | 'BASIC_EVENT_MONITORING' | 'RESERVED_LIVE_MONITORING';
+
+export type ProctoringSessionStatusContract =
+  | 'PENDING'
+  | 'ACTIVE'
+  | 'ENDED'
+  | 'EXPIRED'
+  | 'CANCELLED';
+
+export type ProctoringEventTypeContract =
+  | 'SESSION_STARTED'
+  | 'SESSION_ENDED'
+  | 'HEARTBEAT'
+  | 'WINDOW_BLUR'
+  | 'WINDOW_FOCUS'
+  | 'VISIBILITY_HIDDEN'
+  | 'VISIBILITY_VISIBLE'
+  | 'FULLSCREEN_EXITED'
+  | 'FULLSCREEN_ENTERED'
+  | 'COPY_ATTEMPTED'
+  | 'PASTE_ATTEMPTED'
+  | 'NETWORK_OFFLINE'
+  | 'NETWORK_ONLINE'
+  | 'SUSPICIOUS_ACTIVITY_REPORTED'
+  | 'SYSTEM_WARNING';
+
+export type ProctoringEventSeverityContract = 'INFO' | 'LOW' | 'MEDIUM' | 'HIGH';
+
+export interface ProctoringLearnerDisclosureContract {
+  mode: ProctoringModeContract;
+  required: boolean;
+  title: string;
+  message: string;
+  visible: boolean;
+  captures: string[];
+  doesNotCapture: string[];
+}
+
+export interface ProctoringSessionContract {
+  sessionId: string;
+  attemptId: string;
+  assessmentId: string;
+  status: ProctoringSessionStatusContract;
+  mode: ProctoringModeContract;
+  startedAt: string;
+  endedAt?: string | undefined;
+  lastHeartbeatAt?: string | undefined;
+}
+
+export interface ProctoringAttemptSummaryContract {
+  enabled: boolean;
+  mode: ProctoringModeContract;
+  required: boolean;
+  disclosure: ProctoringLearnerDisclosureContract;
+  session?: ProctoringSessionContract | undefined;
+}
+
+export interface ProctoringEventContract {
+  id: string;
+  sessionId: string;
+  attemptId: string;
+  assessmentId: string;
+  eventType: ProctoringEventTypeContract;
+  severity: ProctoringEventSeverityContract;
+  occurredAt: string;
+  receivedAt: string;
+  message: string;
+  metadataSummary: Record<string, unknown>;
+}
+
+export interface StartProctoringSessionRequestContract {
+  attemptId?: string | undefined;
+}
+
+export interface StartProctoringSessionResponseContract {
+  summary: ProctoringAttemptSummaryContract;
+}
+
+export interface ProctoringHeartbeatRequestContract {
+  occurredAt?: string | undefined;
+  clientTime?: string | undefined;
+  sequence?: number | undefined;
+}
+
+export interface RecordProctoringEventRequestContract {
+  eventId?: string | undefined;
+  eventType: ProctoringEventTypeContract;
+  severity?: ProctoringEventSeverityContract | undefined;
+  occurredAt?: string | undefined;
+  metadata?: Record<string, unknown> | undefined;
+}
+
+export interface RecordProctoringEventResponseContract {
+  event: ProctoringEventContract;
+  duplicate: boolean;
+}
+
+export interface ProctoringAttemptMonitoringTimelineContract {
+  attemptId: string;
+  assessmentId: string;
+  session?: ProctoringSessionContract | undefined;
+  disclosure: ProctoringLearnerDisclosureContract;
+  events: ProctoringEventContract[];
+}
+
+export interface ProctoringAttemptMonitoringSummaryContract {
+  assessmentId: string;
+  activeCount: number;
+  sessions: Array<{
+    sessionId: string;
+    attemptId: string;
+    learnerPrincipalId: string;
+    status: ProctoringSessionStatusContract;
+    mode: ProctoringModeContract;
+    lastHeartbeatAt?: string | undefined;
+    highSeverityEvents: number;
+    warningEvents: number;
+  }>;
+}
+
+export type ProctoringIncidentTypeContract =
+  | 'FOCUS_LOSS'
+  | 'FULLSCREEN_EXIT'
+  | 'COPY_PASTE_ACTIVITY'
+  | 'CONNECTIVITY_INTERRUPTION'
+  | 'SESSION_INTERRUPTION'
+  | 'MULTIPLE_WARNINGS'
+  | 'HIGH_SEVERITY_EVENT'
+  | 'SYSTEM_FLAG'
+  | 'MANUAL_REVIEW_FLAG';
+
+export type ProctoringIncidentStatusContract =
+  | 'OPEN'
+  | 'IN_REVIEW'
+  | 'RESOLVED'
+  | 'DISMISSED'
+  | 'ESCALATED';
+
+export type ProctoringIncidentSeverityContract = 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
+
+export type ProctoringIncidentReviewActionTypeContract =
+  | 'OPENED'
+  | 'MARKED_IN_REVIEW'
+  | 'RESOLVED'
+  | 'DISMISSED'
+  | 'ESCALATED'
+  | 'REOPENED'
+  | 'NOTE_ADDED';
+
+export interface ProctoringIncidentContract {
+  id: string;
+  sessionId: string;
+  attemptId: string;
+  assessmentId: string;
+  learnerPrincipalId: string;
+  learnerDisplayName?: string | undefined;
+  incidentType: ProctoringIncidentTypeContract;
+  severity: ProctoringIncidentSeverityContract;
+  status: ProctoringIncidentStatusContract;
+  title: string;
+  summary: string;
+  firstEventAt: string;
+  lastEventAt: string;
+  eventCount: number;
+  createdAt: string;
+  updatedAt: string;
+  reviewedAt?: string | undefined;
+  reviewedByPrincipalId?: string | undefined;
+  reviewedByDisplayName?: string | undefined;
+  resolvedAt?: string | undefined;
+  resolution?: string | undefined;
+}
+
+export interface ProctoringIncidentReviewActionContract {
+  id: string;
+  incidentId: string;
+  actionType: ProctoringIncidentReviewActionTypeContract;
+  actorPrincipalId: string;
+  actorDisplayName?: string | undefined;
+  note?: string | undefined;
+  createdAt: string;
+}
+
+export interface ProctoringIncidentDetailContract {
+  incident: ProctoringIncidentContract;
+  events: ProctoringEventContract[];
+  reviewActions: ProctoringIncidentReviewActionContract[];
+}
+
+export interface ProctoringIncidentSummaryContract {
+  openCount: number;
+  highSeverityCount: number;
+  inReviewCount: number;
+  resolvedDismissedCount: number;
+  attemptsWithIncidentsCount: number;
+}
+
+export interface ProctoringIncidentListQueryContract {
+  assessmentId?: string | undefined;
+  attemptId?: string | undefined;
+  status?: ProctoringIncidentStatusContract | undefined;
+  severity?: ProctoringIncidentSeverityContract | undefined;
+}
+
+export interface ProctoringIncidentListResponseContract {
+  incidents: ProctoringIncidentContract[];
+}
+
+export interface UpdateProctoringIncidentStatusRequestContract {
+  status: ProctoringIncidentStatusContract;
+  note?: string | undefined;
+}
+
+export interface AddProctoringIncidentNoteRequestContract {
+  note: string;
+}
+
+export interface CreateManualProctoringIncidentRequestContract {
+  sessionId: string;
+  attemptId: string;
+  assessmentId: string;
+  learnerPrincipalId: string;
+  incidentType: ProctoringIncidentTypeContract;
+  severity: ProctoringIncidentSeverityContract;
+  title: string;
+  summary: string;
+  note?: string | undefined;
 }
 </file>
 
@@ -92487,6 +93551,237 @@ export interface MultiWorkspaceDashboardSummaryContract {
 }
 </file>
 
+<file path="frontend/packages/domain-contracts/src/proctoring.ts">
+export type ProctoringModeContract = 'OFF' | 'BASIC_EVENT_MONITORING' | 'RESERVED_LIVE_MONITORING';
+
+export type ProctoringSessionStatusContract =
+  | 'PENDING'
+  | 'ACTIVE'
+  | 'ENDED'
+  | 'EXPIRED'
+  | 'CANCELLED';
+
+export type ProctoringEventTypeContract =
+  | 'SESSION_STARTED'
+  | 'SESSION_ENDED'
+  | 'HEARTBEAT'
+  | 'WINDOW_BLUR'
+  | 'WINDOW_FOCUS'
+  | 'VISIBILITY_HIDDEN'
+  | 'VISIBILITY_VISIBLE'
+  | 'FULLSCREEN_EXITED'
+  | 'FULLSCREEN_ENTERED'
+  | 'COPY_ATTEMPTED'
+  | 'PASTE_ATTEMPTED'
+  | 'NETWORK_OFFLINE'
+  | 'NETWORK_ONLINE'
+  | 'SUSPICIOUS_ACTIVITY_REPORTED'
+  | 'SYSTEM_WARNING';
+
+export type ProctoringEventSeverityContract = 'INFO' | 'LOW' | 'MEDIUM' | 'HIGH';
+
+export interface ProctoringLearnerDisclosureContract {
+  mode: ProctoringModeContract;
+  required: boolean;
+  title: string;
+  message: string;
+  visible: boolean;
+  captures: string[];
+  doesNotCapture: string[];
+}
+
+export interface ProctoringSessionContract {
+  sessionId: string;
+  attemptId: string;
+  assessmentId: string;
+  status: ProctoringSessionStatusContract;
+  mode: ProctoringModeContract;
+  startedAt: string;
+  endedAt?: string | undefined;
+  lastHeartbeatAt?: string | undefined;
+}
+
+export interface ProctoringAttemptSummaryContract {
+  enabled: boolean;
+  mode: ProctoringModeContract;
+  required: boolean;
+  disclosure: ProctoringLearnerDisclosureContract;
+  session?: ProctoringSessionContract | undefined;
+}
+
+export interface ProctoringEventContract {
+  id: string;
+  sessionId: string;
+  attemptId: string;
+  assessmentId: string;
+  eventType: ProctoringEventTypeContract;
+  severity: ProctoringEventSeverityContract;
+  occurredAt: string;
+  receivedAt: string;
+  message: string;
+  metadataSummary: Record<string, unknown>;
+}
+
+export interface StartProctoringSessionRequestContract {
+  attemptId?: string | undefined;
+}
+
+export interface StartProctoringSessionResponseContract {
+  summary: ProctoringAttemptSummaryContract;
+}
+
+export interface ProctoringHeartbeatRequestContract {
+  occurredAt?: string | undefined;
+  clientTime?: string | undefined;
+  sequence?: number | undefined;
+}
+
+export interface RecordProctoringEventRequestContract {
+  eventId?: string | undefined;
+  eventType: ProctoringEventTypeContract;
+  severity?: ProctoringEventSeverityContract | undefined;
+  occurredAt?: string | undefined;
+  metadata?: Record<string, unknown> | undefined;
+}
+
+export interface RecordProctoringEventResponseContract {
+  event: ProctoringEventContract;
+  duplicate: boolean;
+}
+
+export interface ProctoringAttemptMonitoringTimelineContract {
+  attemptId: string;
+  assessmentId: string;
+  session?: ProctoringSessionContract | undefined;
+  disclosure: ProctoringLearnerDisclosureContract;
+  events: ProctoringEventContract[];
+}
+
+export interface ProctoringAttemptMonitoringSummaryContract {
+  assessmentId: string;
+  activeCount: number;
+  sessions: Array<{
+    sessionId: string;
+    attemptId: string;
+    learnerPrincipalId: string;
+    status: ProctoringSessionStatusContract;
+    mode: ProctoringModeContract;
+    lastHeartbeatAt?: string | undefined;
+    highSeverityEvents: number;
+    warningEvents: number;
+  }>;
+}
+
+export type ProctoringIncidentTypeContract =
+  | 'FOCUS_LOSS'
+  | 'FULLSCREEN_EXIT'
+  | 'COPY_PASTE_ACTIVITY'
+  | 'CONNECTIVITY_INTERRUPTION'
+  | 'SESSION_INTERRUPTION'
+  | 'MULTIPLE_WARNINGS'
+  | 'HIGH_SEVERITY_EVENT'
+  | 'SYSTEM_FLAG'
+  | 'MANUAL_REVIEW_FLAG';
+
+export type ProctoringIncidentStatusContract =
+  | 'OPEN'
+  | 'IN_REVIEW'
+  | 'RESOLVED'
+  | 'DISMISSED'
+  | 'ESCALATED';
+
+export type ProctoringIncidentSeverityContract = 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
+
+export type ProctoringIncidentReviewActionTypeContract =
+  | 'OPENED'
+  | 'MARKED_IN_REVIEW'
+  | 'RESOLVED'
+  | 'DISMISSED'
+  | 'ESCALATED'
+  | 'REOPENED'
+  | 'NOTE_ADDED';
+
+export interface ProctoringIncidentContract {
+  id: string;
+  sessionId: string;
+  attemptId: string;
+  assessmentId: string;
+  learnerPrincipalId: string;
+  learnerDisplayName?: string | undefined;
+  incidentType: ProctoringIncidentTypeContract;
+  severity: ProctoringIncidentSeverityContract;
+  status: ProctoringIncidentStatusContract;
+  title: string;
+  summary: string;
+  firstEventAt: string;
+  lastEventAt: string;
+  eventCount: number;
+  createdAt: string;
+  updatedAt: string;
+  reviewedAt?: string | undefined;
+  reviewedByPrincipalId?: string | undefined;
+  reviewedByDisplayName?: string | undefined;
+  resolvedAt?: string | undefined;
+  resolution?: string | undefined;
+}
+
+export interface ProctoringIncidentReviewActionContract {
+  id: string;
+  incidentId: string;
+  actionType: ProctoringIncidentReviewActionTypeContract;
+  actorPrincipalId: string;
+  actorDisplayName?: string | undefined;
+  note?: string | undefined;
+  createdAt: string;
+}
+
+export interface ProctoringIncidentDetailContract {
+  incident: ProctoringIncidentContract;
+  events: ProctoringEventContract[];
+  reviewActions: ProctoringIncidentReviewActionContract[];
+}
+
+export interface ProctoringIncidentSummaryContract {
+  openCount: number;
+  highSeverityCount: number;
+  inReviewCount: number;
+  resolvedDismissedCount: number;
+  attemptsWithIncidentsCount: number;
+}
+
+export interface ProctoringIncidentListQueryContract {
+  assessmentId?: string | undefined;
+  attemptId?: string | undefined;
+  status?: ProctoringIncidentStatusContract | undefined;
+  severity?: ProctoringIncidentSeverityContract | undefined;
+}
+
+export interface ProctoringIncidentListResponseContract {
+  incidents: ProctoringIncidentContract[];
+}
+
+export interface UpdateProctoringIncidentStatusRequestContract {
+  status: ProctoringIncidentStatusContract;
+  note?: string | undefined;
+}
+
+export interface AddProctoringIncidentNoteRequestContract {
+  note: string;
+}
+
+export interface CreateManualProctoringIncidentRequestContract {
+  sessionId: string;
+  attemptId: string;
+  assessmentId: string;
+  learnerPrincipalId: string;
+  incidentType: ProctoringIncidentTypeContract;
+  severity: ProctoringIncidentSeverityContract;
+  title: string;
+  summary: string;
+  note?: string | undefined;
+}
+</file>
+
 <file path=".gitignore">
 node_modules/
 .pnpm-store/
@@ -96786,6 +98081,491 @@ describe('Media Library API (integration)', () => {
     expectHttpStatus(readDenied, 409);
   });
 });
+</file>
+
+<file path="backend/applications/platform-api/src/modules/proctoring/application/use-cases/proctoring.use-cases.ts">
+import { Inject, Injectable } from '@nestjs/common';
+import type {
+  ProctoringAttemptMonitoringSummaryContract,
+  ProctoringAttemptMonitoringTimelineContract,
+  ProctoringAttemptSummaryContract,
+  ProctoringHeartbeatRequestContract,
+  ProctoringSessionContract,
+  RecordProctoringEventRequestContract,
+  RecordProctoringEventResponseContract,
+  StartProctoringSessionResponseContract,
+} from '@mentrily/contract-catalog';
+import {
+  AppError,
+  PERMISSION_EVALUATOR,
+  PermissionEvaluator,
+  RequestContext,
+  TransactionContext,
+  TRANSACTION_RUNNER,
+  TransactionRunner,
+} from '@mentrily/service-core';
+import { PrismaService, getPrismaClient } from '@mentrily/data-platform';
+import { PermissionCatalog } from '@mentrily/security-toolkit';
+import {
+  ProctoringEventRepository,
+  ProctoringSessionRepository,
+} from '../proctoring.repository.js';
+import type { ProctoringSessionRecord } from '../proctoring.types.js';
+import { ProctoringPolicyService } from '../proctoring-policy.service.js';
+import { ProctoringReadService } from '../proctoring-read.service.js';
+import { processIncidentPolicyForEvent } from './proctoring-incident.use-cases.js';
+
+function requireWorkspaceActor(context: RequestContext) {
+  const workspace = context.workspace;
+  if (!workspace?.tenantId || !workspace.workspaceId || !workspace.actorId) {
+    throw new AppError('VALIDATION_ERROR', 'missing workspace actor context', 400);
+  }
+  return workspace;
+}
+
+async function loadAttemptForWorkspace(
+  prisma: PrismaService,
+  attemptId: string,
+  workspaceId: string,
+) {
+  const attempt = await getPrismaClient(prisma).assessmentAttempt.findUnique({
+    where: { id: attemptId },
+    select: {
+      id: true,
+      tenantId: true,
+      workspaceId: true,
+      assessmentId: true,
+      learnerPrincipalId: true,
+      status: true,
+      metadata: true,
+    },
+  });
+  if (!attempt || attempt.workspaceId !== workspaceId) {
+    throw new AppError('NOT_FOUND', 'attempt not found', 404);
+  }
+  return attempt;
+}
+
+@Injectable()
+export class StartProctoringSessionUseCase {
+  constructor(
+    @Inject(PrismaService) private readonly prisma: PrismaService,
+    @Inject(ProctoringSessionRepository)
+    private readonly sessions: ProctoringSessionRepository,
+    @Inject(ProctoringPolicyService)
+    private readonly policy: ProctoringPolicyService,
+    @Inject(ProctoringReadService)
+    private readonly reader: ProctoringReadService,
+    @Inject(PERMISSION_EVALUATOR) private readonly permissions: PermissionEvaluator,
+    @Inject(TRANSACTION_RUNNER) private readonly transactionRunner: TransactionRunner,
+  ) {}
+
+  async execute(
+    context: RequestContext,
+    attemptId: string,
+  ): Promise<StartProctoringSessionResponseContract> {
+    const workspace = requireWorkspaceActor(context);
+    const permission = await this.permissions.evaluate(
+      { permission: PermissionCatalog.ASSESSMENT_ATTEMPT_READ, workspace },
+      context,
+    );
+    if (!permission.allowed) {
+      throw new AppError('FORBIDDEN', 'permission denied', 403);
+    }
+
+    const attempt = await loadAttemptForWorkspace(this.prisma, attemptId, workspace.workspaceId);
+    if (attempt.learnerPrincipalId !== workspace.actorId) {
+      throw new AppError('FORBIDDEN', 'you do not own this attempt', 403);
+    }
+    if (attempt.status !== 'IN_PROGRESS') {
+      throw new AppError('CONFLICT', 'attempt is not active', 409);
+    }
+
+    const mode = this.policy.getModeFromAssessmentMetadata(
+      (attempt.metadata as Record<string, unknown> | null | undefined) ?? undefined,
+    );
+
+    if (mode === 'OFF') {
+      return { summary: this.policy.toAttemptSummary(mode, null) };
+    }
+
+    const session = await this.transactionRunner.run<ProctoringSessionRecord>(async (tx) => {
+      const client = getPrismaClient(this.prisma, tx);
+      await client.$executeRawUnsafe(
+        'SELECT id FROM "AssessmentAttempt" WHERE id = $1::uuid FOR UPDATE',
+        attemptId,
+      );
+
+      const existing = await this.sessions.findLatestByAttempt(attemptId, tx);
+      if (existing && (existing.status === 'ACTIVE' || existing.status === 'PENDING')) {
+        return existing;
+      }
+
+      const now = new Date();
+      return await this.sessions.create(
+        {
+          tenantId: attempt.tenantId,
+          workspaceId: attempt.workspaceId,
+          assessmentId: attempt.assessmentId,
+          attemptId: attempt.id,
+          learnerPrincipalId: attempt.learnerPrincipalId,
+          mode,
+          status: 'ACTIVE',
+          startedAt: now,
+          lastHeartbeatAt: now,
+        },
+        tx,
+      );
+    });
+
+    return { summary: this.policy.toAttemptSummary(mode, session) };
+  }
+}
+
+@Injectable()
+export class RecordProctoringHeartbeatUseCase {
+  constructor(
+    @Inject(PrismaService) private readonly prisma: PrismaService,
+    @Inject(ProctoringSessionRepository)
+    private readonly sessions: ProctoringSessionRepository,
+    @Inject(ProctoringEventRepository)
+    private readonly events: ProctoringEventRepository,
+    @Inject(ProctoringPolicyService)
+    private readonly policy: ProctoringPolicyService,
+    @Inject(PERMISSION_EVALUATOR) private readonly permissions: PermissionEvaluator,
+  ) {}
+
+  async execute(
+    context: RequestContext,
+    sessionId: string,
+    input: ProctoringHeartbeatRequestContract,
+  ): Promise<ProctoringSessionContract> {
+    const workspace = requireWorkspaceActor(context);
+    const permission = await this.permissions.evaluate(
+      { permission: PermissionCatalog.ASSESSMENT_ATTEMPT_READ, workspace },
+      context,
+    );
+    if (!permission.allowed) {
+      throw new AppError('FORBIDDEN', 'permission denied', 403);
+    }
+
+    const session = await this.sessions.findById(sessionId);
+    if (!session || session.workspaceId !== workspace.workspaceId) {
+      throw new AppError('NOT_FOUND', 'proctoring session not found', 404);
+    }
+    if (session.learnerPrincipalId !== workspace.actorId) {
+      throw new AppError('FORBIDDEN', 'you do not own this monitoring session', 403);
+    }
+    if (session.status !== 'ACTIVE' && session.status !== 'PENDING') {
+      throw new AppError('CONFLICT', 'monitoring session is not active', 409);
+    }
+
+    const recentCount = await this.events.countRecentBySession(
+      sessionId,
+      new Date(Date.now() - 60_000),
+    );
+    if (recentCount >= this.policy.maxEventsPerMinute) {
+      throw new AppError('RATE_LIMITED', 'too many monitoring events', 429);
+    }
+
+    const now = new Date();
+    await this.events.create({
+      tenantId: session.tenantId,
+      workspaceId: session.workspaceId,
+      sessionId: session.id,
+      attemptId: session.attemptId,
+      assessmentId: session.assessmentId,
+      learnerPrincipalId: session.learnerPrincipalId,
+      eventType: 'HEARTBEAT',
+      severity: 'INFO',
+      occurredAt: input.occurredAt ? new Date(input.occurredAt) : now,
+      metadata: this.policy.sanitizeMetadata('HEARTBEAT', {
+        clientTime: input.clientTime,
+        sequence: input.sequence,
+      }),
+    });
+    const updated = await this.sessions.update(sessionId, {
+      status: 'ACTIVE',
+      lastHeartbeatAt: now,
+    });
+    return this.policy.toSessionContract(updated);
+  }
+}
+
+@Injectable()
+export class RecordProctoringEventUseCase {
+  constructor(
+    @Inject(PrismaService) private readonly prisma: PrismaService,
+    @Inject(ProctoringSessionRepository)
+    private readonly sessions: ProctoringSessionRepository,
+    @Inject(ProctoringEventRepository)
+    private readonly events: ProctoringEventRepository,
+    @Inject(ProctoringPolicyService)
+    private readonly policy: ProctoringPolicyService,
+    @Inject(PERMISSION_EVALUATOR) private readonly permissions: PermissionEvaluator,
+  ) {}
+
+  async execute(
+    context: RequestContext,
+    sessionId: string,
+    input: RecordProctoringEventRequestContract,
+  ): Promise<RecordProctoringEventResponseContract> {
+    const workspace = requireWorkspaceActor(context);
+    const permission = await this.permissions.evaluate(
+      { permission: PermissionCatalog.ASSESSMENT_ATTEMPT_READ, workspace },
+      context,
+    );
+    if (!permission.allowed) {
+      throw new AppError('FORBIDDEN', 'permission denied', 403);
+    }
+
+    const session = await this.sessions.findById(sessionId);
+    if (!session || session.workspaceId !== workspace.workspaceId) {
+      throw new AppError('NOT_FOUND', 'proctoring session not found', 404);
+    }
+    if (session.learnerPrincipalId !== workspace.actorId) {
+      throw new AppError('FORBIDDEN', 'you do not own this monitoring session', 403);
+    }
+    if (session.status !== 'ACTIVE' && session.status !== 'PENDING') {
+      throw new AppError('CONFLICT', 'monitoring session is not active', 409);
+    }
+    if (!this.policy.isEventTypeAllowed(input.eventType)) {
+      throw new AppError('VALIDATION_ERROR', 'unsupported proctoring event type', 400);
+    }
+    const severity = input.severity ?? 'INFO';
+    if (!this.policy.isSeverityAllowed(severity)) {
+      throw new AppError('VALIDATION_ERROR', 'unsupported proctoring event severity', 400);
+    }
+    const occurredAt = input.occurredAt ? new Date(input.occurredAt) : new Date();
+    if (
+      Number.isNaN(occurredAt.getTime()) ||
+      Math.abs(Date.now() - occurredAt.getTime()) > 24 * 60 * 60_000
+    ) {
+      throw new AppError('VALIDATION_ERROR', 'invalid proctoring event timestamp', 400);
+    }
+
+    const recentCount = await this.events.countRecentBySession(
+      sessionId,
+      new Date(Date.now() - 60_000),
+    );
+    if (recentCount >= this.policy.maxEventsPerMinute) {
+      throw new AppError('RATE_LIMITED', 'too many monitoring events', 429);
+    }
+
+    const result = await this.events.create({
+      tenantId: session.tenantId,
+      workspaceId: session.workspaceId,
+      sessionId: session.id,
+      attemptId: session.attemptId,
+      assessmentId: session.assessmentId,
+      learnerPrincipalId: session.learnerPrincipalId,
+      ...(input.eventId ? { eventId: input.eventId } : {}),
+      eventType: input.eventType,
+      severity,
+      occurredAt,
+      metadata: this.policy.sanitizeMetadata(input.eventType, input.metadata),
+    });
+
+    if (!result.duplicate) {
+      await processIncidentPolicyForEvent(this.prisma, result.event);
+    }
+
+    return {
+      event: this.policy.toEventContract(result.event),
+      duplicate: result.duplicate,
+    };
+  }
+}
+
+@Injectable()
+export class EndProctoringSessionUseCase {
+  constructor(
+    @Inject(ProctoringSessionRepository)
+    private readonly sessions: ProctoringSessionRepository,
+    @Inject(ProctoringEventRepository)
+    private readonly events: ProctoringEventRepository,
+    @Inject(ProctoringPolicyService)
+    private readonly policy: ProctoringPolicyService,
+    @Inject(PERMISSION_EVALUATOR) private readonly permissions: PermissionEvaluator,
+  ) {}
+
+  async execute(context: RequestContext, sessionId: string): Promise<ProctoringSessionContract> {
+    const workspace = requireWorkspaceActor(context);
+    const permission = await this.permissions.evaluate(
+      { permission: PermissionCatalog.ASSESSMENT_ATTEMPT_READ, workspace },
+      context,
+    );
+    if (!permission.allowed) {
+      throw new AppError('FORBIDDEN', 'permission denied', 403);
+    }
+
+    const session = await this.sessions.findById(sessionId);
+    if (!session || session.workspaceId !== workspace.workspaceId) {
+      throw new AppError('NOT_FOUND', 'proctoring session not found', 404);
+    }
+    if (session.learnerPrincipalId !== workspace.actorId) {
+      throw new AppError('FORBIDDEN', 'you do not own this monitoring session', 403);
+    }
+    if (
+      session.status === 'ENDED' ||
+      session.status === 'EXPIRED' ||
+      session.status === 'CANCELLED'
+    ) {
+      return this.policy.toSessionContract(session);
+    }
+
+    const now = new Date();
+    await this.events.create({
+      tenantId: session.tenantId,
+      workspaceId: session.workspaceId,
+      sessionId: session.id,
+      attemptId: session.attemptId,
+      assessmentId: session.assessmentId,
+      learnerPrincipalId: session.learnerPrincipalId,
+      eventType: 'SESSION_ENDED',
+      severity: 'INFO',
+      occurredAt: now,
+      metadata: {},
+    });
+    const updated = await this.sessions.update(sessionId, {
+      status: 'ENDED',
+      endedAt: now,
+      lastHeartbeatAt: now,
+    });
+    return this.policy.toSessionContract(updated);
+  }
+}
+
+@Injectable()
+export class GetAttemptMonitoringTimelineUseCase {
+  constructor(
+    @Inject(ProctoringReadService)
+    private readonly reader: ProctoringReadService,
+    @Inject(PERMISSION_EVALUATOR) private readonly permissions: PermissionEvaluator,
+  ) {}
+
+  async execute(
+    context: RequestContext,
+    attemptId: string,
+  ): Promise<ProctoringAttemptMonitoringTimelineContract> {
+    const workspace = requireWorkspaceActor(context);
+    const permission = await this.permissions.evaluate(
+      { permission: PermissionCatalog.ASSESSMENT_MONITOR, workspace },
+      context,
+    );
+    if (!permission.allowed) {
+      throw new AppError('FORBIDDEN', 'permission denied', 403);
+    }
+    return this.reader.getAttemptTimeline(attemptId, workspace.workspaceId);
+  }
+}
+
+@Injectable()
+export class GetActiveAttemptMonitoringUseCase {
+  constructor(
+    @Inject(ProctoringReadService)
+    private readonly reader: ProctoringReadService,
+    @Inject(PERMISSION_EVALUATOR) private readonly permissions: PermissionEvaluator,
+  ) {}
+
+  async execute(
+    context: RequestContext,
+    assessmentId: string,
+  ): Promise<ProctoringAttemptMonitoringSummaryContract> {
+    const workspace = requireWorkspaceActor(context);
+    const permission = await this.permissions.evaluate(
+      { permission: PermissionCatalog.ASSESSMENT_MONITOR, workspace },
+      context,
+    );
+    if (!permission.allowed) {
+      throw new AppError('FORBIDDEN', 'permission denied', 403);
+    }
+    return this.reader.getActiveAssessmentSummary(assessmentId, workspace.workspaceId);
+  }
+}
+
+@Injectable()
+export class GetProctoringSessionUseCase {
+  constructor(
+    @Inject(ProctoringSessionRepository)
+    private readonly sessions: ProctoringSessionRepository,
+    @Inject(ProctoringPolicyService)
+    private readonly policy: ProctoringPolicyService,
+    @Inject(PERMISSION_EVALUATOR) private readonly permissions: PermissionEvaluator,
+  ) {}
+
+  async execute(context: RequestContext, sessionId: string): Promise<ProctoringSessionContract> {
+    const workspace = requireWorkspaceActor(context);
+    const permission = await this.permissions.evaluate(
+      { permission: PermissionCatalog.ASSESSMENT_MONITOR, workspace },
+      context,
+    );
+    if (!permission.allowed) {
+      throw new AppError('FORBIDDEN', 'permission denied', 403);
+    }
+    const session = await this.sessions.findById(sessionId);
+    if (!session || session.workspaceId !== workspace.workspaceId) {
+      throw new AppError('NOT_FOUND', 'proctoring session not found', 404);
+    }
+    return this.policy.toSessionContract(session);
+  }
+}
+
+@Injectable()
+export class GetLearnerAttemptProctoringUseCase {
+  constructor(@Inject(ProctoringReadService) private readonly reader: ProctoringReadService) {}
+
+  async execute(
+    context: RequestContext,
+    attemptId: string,
+    transaction?: TransactionContext,
+  ): Promise<ProctoringAttemptSummaryContract> {
+    const workspace = requireWorkspaceActor(context);
+    return this.reader.getAttemptSummary(attemptId, workspace.workspaceId, transaction);
+  }
+}
+
+@Injectable()
+export class SyncAttemptTerminalProctoringUseCase {
+  constructor(
+    @Inject(PrismaService) private readonly prisma: PrismaService,
+    @Inject(ProctoringSessionRepository)
+    private readonly sessions: ProctoringSessionRepository,
+  ) {}
+
+  async execute(
+    attemptId: string,
+    terminalStatus: 'ENDED' | 'EXPIRED' | 'CANCELLED',
+    transaction?: TransactionContext,
+  ): Promise<void> {
+    const attempt = await getPrismaClient(this.prisma, transaction).assessmentAttempt.findUnique({
+      where: { id: attemptId },
+      select: { id: true },
+    });
+    if (!attempt) {
+      return;
+    }
+
+    const latest = await this.sessions.findLatestByAttempt(attemptId, transaction);
+    if (
+      !latest ||
+      latest.status === 'ENDED' ||
+      latest.status === 'EXPIRED' ||
+      latest.status === 'CANCELLED'
+    ) {
+      return;
+    }
+
+    await this.sessions.update(
+      latest.id,
+      {
+        status: terminalStatus,
+        endedAt: new Date(),
+      },
+      transaction,
+    );
+  }
+}
 </file>
 
 <file path="backend/applications/platform-worker/src/inbox-processing/inbox-processing.worker.ts">
@@ -107012,320 +108792,6 @@ export type ReleaseAssessmentResultRequest = Record<string, never>;
 export type ReleaseAssessmentResultResponse = AssessmentInstructorResultContract;
 </file>
 
-<file path="docs/architecture/data-architecture.md">
-# Data Architecture
-
-## Core Stores
-
-- **PostgreSQL**: Source of truth for transactional product data (Identity, Workspace, Content, Assessments).
-- **Redis**: Cache, locks, queue support, ephemeral coordination.
-- **Object Storage (R2/S3-compatible)**: Media, artifacts, exports.
-- **ClickHouse (later)**: Analytics warehouse and heavy rollups.
-
-## Durable Audit, Outbox, and Inbox Tables
-
-### AuditRecord
-
-Immutable append-only audit log for compliance and security investigations.
-
-Stores:
-
-- **action**: What happened (e.g., 'workspace.member.added')
-- **actorId**: Who did it (nullable for system actions)
-- **targetType/targetId**: What changed
-
-## Media storage note
-
-- Media bytes are not stored in Postgres.
-- Postgres stores only media metadata, upload intents, lifecycle state, and audit/outbox records.
-- Object keys must remain tenant/workspace scoped.
-- **tenantId/workspaceId**: Context (may be null for principal-scoped events)
-- **requestId/correlationId**: Distributed tracing
-- **metadata**: JSON additional context
-- **occurredAt**: Business event timestamp
-- **createdAt**: Record creation time
-
-Indexes:
-
-- `(workspaceId)` - query audit by workspace
-- `(actorId)` - query audit by actor
-- `(action)` - query by action type
-- `(occurredAt)` - time-based queries
-
-**Retention**: Audit records are immutable and never deleted. Retention policies (archival/deletion) are organizational concerns, not application concerns.
-
-## Task 014D Update
-
-- Assessment attempt reliability stayed on existing tables; no Prisma migration was required for 014D.
-- Attempt/session expiry is enforced from persisted timestamps already present in the assessment attempt aggregate model.
-
-### OutboxMessage
-
-Durable event persistence for reliable cross-module and async distribution.
-
-Stores:
-
-- **eventId**: Unique event identifier (enforced unique constraint)
-- **eventName/eventVersion**: Event schema metadata
-- **payload**: JSON-safe event data
-- **tenantId/workspaceId**: Optional context
-- **correlationId**: Distributed tracing
-- **idempotencyKey**: Optional dedup key
-- **status**: PENDING|PROCESSING|PUBLISHED|FAILED
-- **attemptCount**: Retry tracking
-- **availableAt**: When next available for relay (supports scheduled/backoff retry)
-- **publishedAt**: When successfully published to subscribers
-- **occurredAt**: Business event timestamp
-- **createdAt/updatedAt**: Lifecycle timestamps
-
-Constraints & Indexes:
-
-- Unique constraint on `eventId` - prevents duplicate event persistence
-- Index on `status` - for relay polling queries
-- Index on `availableAt` - for scheduled message discovery
-- Index on `createdAt` - for audits and replay operations
-- Compound index on `(workspaceId, status)` - tenant-scoped relay
-
-**Lifecycle**: Messages transition PENDING → PROCESSING → PUBLISHED.
-On relay failure, status returns to PENDING with `attemptCount++` and `availableAt` advanced for backoff.
-After max attempts, status = FAILED for manual investigation.
-
-Duplicate `eventId` inserts are idempotent: the repository returns the already-persisted row for producer retries instead of writing a second message.
-
-**Adapter Rule**: Concrete outbox publisher adapters MUST forward the complete `OutboxEvent` envelope to the repository without reconstructing or dropping metadata. In particular, `idempotencyKey` and other envelope fields must be preserved exactly as provided by the caller so deduplication and idempotency guarantees remain intact.
-
-### InboxMessage
-
-Idempotent inbound external event deduplication.
-
-Stores:
-
-- **source**: External source identifier (e.g., 'stripe', 'slack')
-- **externalEventId**: Source-provided event ID
-- **eventName**: Internal event name mapped from source
-- **idempotencyKey**: Additional optional dedup key
-- **payloadHash**: SHA256 hash of payload for change detection
-- **status**: RECEIVED|PROCESSING|PROCESSED|FAILED
-- **receivedAt**: Inbound receipt timestamp
-- **processedAt**: When successfully processed
-- **createdAt/updatedAt**: Lifecycle timestamps
-
-Constraints & Indexes:
-
-- Unique constraint on `(source, externalEventId)` - dedupe key
-- **Index on `status`** - for worker polling
-- **Index on `receivedAt`** - for time-based recovery
-
-**Deduplication Rule**: First inbound event with a given (source, externalEventId) claims the inbox slot.
-Subsequent identical events are detected as duplicates and can be skipped or logged.
-
-Inbox duplicate detection is keyed on `(source, externalEventId)` and the repository re-reads the existing row after unique-constraint failures.
-
-**Idempotency Pattern**:
-
-1. Consumer calls `InboxRepository.claimOrInsert(source, externalEventId, ...)`
-2. If new: record created with RECEIVED status, `wasClaimed=true`
-3. If duplicate: existing record returned, `wasClaimed=false`
-4. Consumer processes only if `wasClaimed=true` or retrying a failed record
-
-### Assessment Builder Models
-
-Flexible assessment and exam authoring state with versioning and immutable snapshots.
-
-Models:
-
-- **Assessment**: Root aggregate for an assessment/exam. Stores settings, policies (attempt, time limit, result release), and metadata.
-- **AssessmentVersion**: Incremental draft/published versions of an assessment.
-- **AssessmentSection**: Named groupings of questions within a version.
-- **AssessmentQuestion**: Individual questions. Supports 10 kinds (MCQ, ShortText, Code, etc.) with kind-specific prompt/options/answer schemas.
-- **AssessmentGradingRubric**: Reusable rubrics for subjective or complex grading.
-- **AssessmentGradingRule**: Specific automated or manual rules for scoring questions.
-- **AssessmentPublishedSnapshot**: Immutable, flattened JSON snapshot of a version at the moment of publication, optimized for high-performance delivery.
-
-**Persistence Pattern**:
-
-- **Full-Replacement Drafts**: Saving a draft assessment replaces all draft sections and questions to simplify complex tree-reordering and diffing.
-- **Flattened Snapshots**: Published snapshots store the entire assessment structure in a single row to minimize joins during high-concurrency learner delivery.
-- **Ordered Result Sets**: Sections and questions are always queried with deterministic `orderBy: { position: 'asc' }`.
-  125: ## ORM and Migrations
-
-- **Prisma**: The TypeScript ORM boundary.
-- **Migration Style**: Explicit expand/contract rollout plans. Avoid destructive migrations without backward-compatible staging.
-- **Schema Evolution**: Use field aliasing and gradual deprecation patterns.
-
-The repository maintains strict isolation between development and testing persistence:
-
-- **Development Database**: `mentrily` (port 5432). Used for local development and manual testing.
-- **Integration Test Database**: `mentrily_test` (port 5433). Dedicated, volatile database used exclusively for integration tests.
-
-**Rules for Integration Persistence**:
-
-- **Isolation**: Never run integration tests against the development database.
-- **Cleanup**: `truncatePublicSchema` must run between every test to ensure state isolation.
-- **Cleanup Safety**: `truncatePublicSchema` acquires an advisory lock to serialize cleanup across concurrent integration runs.
-- **Automation**: `automation/run-integration-tests.mjs` is the source of truth for integration runs. It fails fast on any error and prohibits false success reporting.
-- **Repeatability**: Integration tests must be safely repeatable and must not depend on pre-existing data (except baseline migrations).
-- **Generated Clients**: Prisma clients generated during tests reside in `node_modules` and are NEVER committed to version control.
-- **Content Studio 009B1**: The schema includes `ContentDocument`, `ContentVersion`, `ContentBlock`, and `ContentPublishedSnapshot`, and the committed Content Studio migration was reviewed to ensure it does not silently alter Learning Delivery tables.
-- **Assessment Delivery 011A**: The schema now also includes `AssessmentAttempt`, `AssessmentAttemptAnswer`, `AssessmentAttemptSession`, and `AssessmentAttemptResult` for learner runtime persistence. Attempt records reference published assessment snapshots and remain separate from Assessment Builder draft/version authoring records.
-- **Assessment Delivery 011G**: Execution runtime uses no persistence yet. Execution requests/results stay in-memory inside the configured provider adapter for safe tests/internal harness flows, so no new Prisma tables or migrations were added in 011G.
-- **Content Studio 009D**: browser E2E persists through the same real Content Studio tables in the dedicated test database. The E2E runner rejects non-test database names before starting.
-
-## Multi-tenant Isolation
-
-- **Tenant Sovereignty**: Resource access is strictly scoped to `workspaceId`.
-- **Identity Isolation**: `Principal` records are global but their access is scoped through `WorkspaceMember` links.
-- **Audit/Outbox Context**: Tenant/workspace fields on audit/outbox records enable tenant-scoped queries for compliance.
-- **Free Accounts**: Support for users without a workspace membership exists for personal/individual paths.
-
-## Relational Modeling
-
-- **Normalized Identity**: Principal entities are separated from external identity provider (Clerk) links to support multi-provider evolution.
-- **Role/Permission Mapping**: Normalized relational structure for roles and permissions to ensure auditability and flexibility beyond simple strings.
-- **Indexes**: Strategic indexing on `externalId`, `slug`, `domain`, `workspaceId`, and `eventId` for high-performance lookups.
-
-## Reliability Patterns
-
-- **Outbox Pattern**: For cross-module and async consistency (persisted to `OutboxMessage`)
-  - Write state + event in same transaction
-  - Relay worker polls and distributes externally
-  - Failures tracked in `attemptCount` and `status`
-  - Duplicate `eventId` retries return the existing record
-
-- **Inbox Pattern**: For inbound external idempotency (persisted to `InboxMessage`)
-  - Deduplicate by (source + externalEventId)
-  - Process once per unique external event
-  - Failures tracked in status
-  - Unique-constraint retries rehydrate the existing `(source, externalEventId)` row
-
-- **Audit Logs**: Integrated via `AuditRecorder` for privileged operations (persisted to `AuditRecord`)
-  - Immutable append-only
-  - Context enrichment (request ID, correlation ID, tenant/workspace)
-  - Enables compliance investigations and security reviews
-
-Repository ownership is exposed through `DataPlatformModule`, which provides `PrismaService`, `AuditRecordRepository`, `OutboxRepository`, and `InboxRepository`.
-
-- **Idempotency**: Policy-enforced on all mutating APIs and worker consumers
-  - Deterministic idempotency keys (not random UUID)
-  - Inbox deduplication by (source + externalEventId)
-  - Outbox unique constraint on eventId
-
-## Transaction Safety
-
-All mutations to the source-of-truth stores MUST be transactional when they involve side effects like audit logs or outbox events.
-Content Studio 009B1 follows this rule for create, rename, replace-blocks, publish, archive, and restore flows.
-
-Content Studio 009B1 validation also requires direct HTTP integration coverage for those backend routes. The API integration suite must go through the real Nest/Fastify app and real Postgres database rather than calling use cases as a fallback.
-Assessment Delivery backend persistence/API and frontend builder authoring UI now both exist. The first cross-stack Assessment Builder E2E also exists and runs against the real frontend, real backend, and dedicated test Postgres database. Learner attempt runtime now includes backend persistence/API, learner-safe published snapshot reads, learner frontend routes, and attempt Playwright E2E. Grading runtime foundation now adds `AssessmentGradingRun` and `AssessmentAnswerGrade` persistence so submitted attempts can be scored and tracked without mutating authoring drafts.
-Attempt runtime reads published snapshot records only and does not mutate or expose Assessment Builder draft/version state.
-Assessment Delivery is not linked to Learning Delivery runtime flows yet, and Assessment persistence is not directly linked to Content Studio persistence in this slice.
-Execution request/result persistence remains intentionally deferred; 011G keeps execution state inside the safe provider boundary until a real isolated worker/provider is introduced behind a feature flag.
-
-### TransactionRunner
-
-The `TransactionRunner` (implemented via `PrismaTransactionRunner`) ensures that:
-
-- **Atomicity**: The domain state change, the `AuditRecord` append, and the `OutboxMessage` append are committed in a single database transaction.
-- **Isolation**: Concurrent operations on the same data are handled according to database isolation levels (defaulting to Read Committed).
-- **Consistency**: Reads used to decide a write (e.g., checking if a slug exists or a role is valid) are performed within the transaction where practical to prevent race conditions.
-
-### Usage Pattern
-
-```typescript
-await transactionRunner.run(async (tx) => {
-  // 1. Read existing state
-  const existing = await repository.findById(id, tx);
-
-  // 2. Perform mutation
-  await repository.save(newData, tx);
-
-  // 3. Side effects
-  await auditRecorder.record(auditInput, context, tx);
-  await outboxPublisher.publish(eventInput, context, tx);
-});
-```
-
-All repositories, the `AuditRecorder`, and the `OutboxPublisher` accept an optional `TransactionContext` to participate in the shared transaction. If omitted, they fallback to a standard non-transactional client.
-
-**Important Type Safety Rule**: `TransactionContext.client` is intentionally typed as `unknown` in shared contracts (like `@mentrily/service-core`) so domain layers are not coupled to Prisma. Data-platform code MUST NOT access `tx.client` directly. Instead, data-platform code must resolve the client using the transaction helper:
-`import { getPrismaClient } from '../transactions/transaction-client.js';`
-
-## Performance Considerations
-
-- Outbox/inbox queries are indexed by status for efficient polling
-- Audit records are append-only (no deletion triggers contention)
-- Payload JSON fields are indexed for common queries in Postgres
-- Consider archive/purge strategies for old audit records (not implemented in task 007A)
-- Worker relay remains deferred to Task 007B.
-
-- 2026-05-18: Task 011C1 validation confirmed grading runtime and outbox/inbox/audit Prisma enum/status alignment remains stable; root lint/typecheck/test/build passed.
-
-## Task 011D Update (2026-05-18)
-
-- Manual grading UI now exists for creator/admin review.
-- Creator/admin can view pending manual-review answers, open grading runs, and submit manual score + feedback.
-- Learner result page is not implemented yet.
-- Result release workflow is not implemented yet.
-- Code execution grading, notebook execution grading, AI grading, and proctoring are not implemented yet.
-- Learning Delivery is not connected to Assessment grading.
-- Content Studio is not connected to Assessment grading.
-- Grading E2E uses real frontend + real backend + test Postgres.
-
-## Assessment Result Release Data
-
-Result release reuses the existing `AssessmentAttemptResult` record with `gradingStatus = RELEASED` and `releasedAt`. No learner-only result table is required for the initial workflow.
-
-## Task 011H Update (2026-05-19)
-
-- Assessment reliability now relies on existing uniqueness for:
-  - one session per attempt,
-  - one result per attempt,
-  - one answer per `(attemptId, questionId)`,
-  - one answer grade per `(gradingRunId, answerId)`.
-- 011H adds a narrow DB guard for one active `IN_PROGRESS` attempt per learner/assessment to support retry-safe concurrent starts.
-- No execution-provider persistence changes were added. Real code execution remains deferred.
-
-## Task 011I Update (2026-05-20)
-
-- Task 011I required no schema or migration changes.
-- Existing assessment question JSON continues to carry reading-passage content and file-upload placeholder metadata.
-- Existing attempt-answer JSON remains sufficient for placeholder file-upload answers shaped as `fileIds: string[]`.
-- Media Library schema, asset persistence, object storage adapters, and signed URL models are still future work.
-
-## Task 012B Update (2026-05-21)
-
-- Media asset metadata continues to live in Postgres while file bytes remain outside Postgres in object storage.
-- Portal uploads still use signed object-storage URLs; the 012B frontend work does not change storage persistence boundaries.
-
-## Communication Center
-
-- Postgres now persists `NotificationTemplate`, `NotificationIntent`, and `NotificationDeliveryAttempt`.
-- Recipient addressing and metadata live in JSON fields; provider secrets are not stored.
-- Delivery-attempt persistence is present for future worker/provider tasks even though 012C does not perform real sends.
-- `OutboxMessage.eventId` remains unique and now acts as a strict append-time idempotency key.
-- `NotificationDeliveryAttempt` uniqueness on `(intentId, attemptNumber)` is used by the internal scheduler as a race-safe claim boundary.
-- Task 012E keeps Communication provider configuration out of persisted public contracts.
-- Notification intents and delivery attempts may record provider-disabled failures, but no provider secrets, API keys, or raw transport credentials are stored.
-
-# Communication Inbox Data Model
-
-- `NotificationIntent` remains the source of truth for in-app inbox records; no separate inbox table is required for `012F`.
-- `NotificationPreference` remains the source of truth for workspace-scoped user notification preferences.
-- Inbox read/archive state is stored in sanitized metadata and returned through frontend-safe DTO mapping only.
-
-## Task 014A Additions
-
-- Introduced a workspace-scoped `Campaign` persistence model with narrow status and scheduling metadata.
-- Dashboard reads remain aggregate queries over existing learning, assessment, content, media, audit, and campaign tables.
-- No provider credentials, storage keys, or scanner payloads are persisted in dashboard or campaign contracts.
-
-## Task 014E Additions
-
-- Added `AssessmentProctoringSession` and `AssessmentProctoringEvent` as explicit workspace-scoped persistence models.
-- Proctoring events store only sanitized metadata summaries and indexed identifiers for workspace, attempt, assessment, learner, session, type, and time.
-- Duplicate event ingestion is bounded by a `(workspaceId, sessionId, eventId)` uniqueness rule when an idempotency key is provided.
-</file>
-
 <file path="docs/architecture/system-overview.md">
 # System Overview
 
@@ -109058,6 +110524,327 @@ export type ReleaseAssessmentResultRequest = Record<string, never>;
 export type ReleaseAssessmentResultResponse = AssessmentInstructorResultContract;
 </file>
 
+<file path="docs/architecture/data-architecture.md">
+# Data Architecture
+
+## Core Stores
+
+- **PostgreSQL**: Source of truth for transactional product data (Identity, Workspace, Content, Assessments).
+- **Redis**: Cache, locks, queue support, ephemeral coordination.
+- **Object Storage (R2/S3-compatible)**: Media, artifacts, exports.
+- **ClickHouse (later)**: Analytics warehouse and heavy rollups.
+
+## Durable Audit, Outbox, and Inbox Tables
+
+### AuditRecord
+
+Immutable append-only audit log for compliance and security investigations.
+
+Stores:
+
+- **action**: What happened (e.g., 'workspace.member.added')
+- **actorId**: Who did it (nullable for system actions)
+- **targetType/targetId**: What changed
+
+## Media storage note
+
+- Media bytes are not stored in Postgres.
+- Postgres stores only media metadata, upload intents, lifecycle state, and audit/outbox records.
+- Object keys must remain tenant/workspace scoped.
+- **tenantId/workspaceId**: Context (may be null for principal-scoped events)
+- **requestId/correlationId**: Distributed tracing
+- **metadata**: JSON additional context
+- **occurredAt**: Business event timestamp
+- **createdAt**: Record creation time
+
+Indexes:
+
+- `(workspaceId)` - query audit by workspace
+- `(actorId)` - query audit by actor
+- `(action)` - query by action type
+- `(occurredAt)` - time-based queries
+
+**Retention**: Audit records are immutable and never deleted. Retention policies (archival/deletion) are organizational concerns, not application concerns.
+
+## Task 014D Update
+
+- Assessment attempt reliability stayed on existing tables; no Prisma migration was required for 014D.
+- Attempt/session expiry is enforced from persisted timestamps already present in the assessment attempt aggregate model.
+
+### OutboxMessage
+
+Durable event persistence for reliable cross-module and async distribution.
+
+Stores:
+
+- **eventId**: Unique event identifier (enforced unique constraint)
+- **eventName/eventVersion**: Event schema metadata
+- **payload**: JSON-safe event data
+- **tenantId/workspaceId**: Optional context
+- **correlationId**: Distributed tracing
+- **idempotencyKey**: Optional dedup key
+- **status**: PENDING|PROCESSING|PUBLISHED|FAILED
+- **attemptCount**: Retry tracking
+- **availableAt**: When next available for relay (supports scheduled/backoff retry)
+- **publishedAt**: When successfully published to subscribers
+- **occurredAt**: Business event timestamp
+- **createdAt/updatedAt**: Lifecycle timestamps
+
+Constraints & Indexes:
+
+- Unique constraint on `eventId` - prevents duplicate event persistence
+- Index on `status` - for relay polling queries
+- Index on `availableAt` - for scheduled message discovery
+- Index on `createdAt` - for audits and replay operations
+- Compound index on `(workspaceId, status)` - tenant-scoped relay
+
+**Lifecycle**: Messages transition PENDING → PROCESSING → PUBLISHED.
+On relay failure, status returns to PENDING with `attemptCount++` and `availableAt` advanced for backoff.
+After max attempts, status = FAILED for manual investigation.
+
+Duplicate `eventId` inserts are idempotent: the repository returns the already-persisted row for producer retries instead of writing a second message.
+
+**Adapter Rule**: Concrete outbox publisher adapters MUST forward the complete `OutboxEvent` envelope to the repository without reconstructing or dropping metadata. In particular, `idempotencyKey` and other envelope fields must be preserved exactly as provided by the caller so deduplication and idempotency guarantees remain intact.
+
+### InboxMessage
+
+Idempotent inbound external event deduplication.
+
+Stores:
+
+- **source**: External source identifier (e.g., 'stripe', 'slack')
+- **externalEventId**: Source-provided event ID
+- **eventName**: Internal event name mapped from source
+- **idempotencyKey**: Additional optional dedup key
+- **payloadHash**: SHA256 hash of payload for change detection
+- **status**: RECEIVED|PROCESSING|PROCESSED|FAILED
+- **receivedAt**: Inbound receipt timestamp
+- **processedAt**: When successfully processed
+- **createdAt/updatedAt**: Lifecycle timestamps
+
+Constraints & Indexes:
+
+- Unique constraint on `(source, externalEventId)` - dedupe key
+- **Index on `status`** - for worker polling
+- **Index on `receivedAt`** - for time-based recovery
+
+**Deduplication Rule**: First inbound event with a given (source, externalEventId) claims the inbox slot.
+Subsequent identical events are detected as duplicates and can be skipped or logged.
+
+Inbox duplicate detection is keyed on `(source, externalEventId)` and the repository re-reads the existing row after unique-constraint failures.
+
+**Idempotency Pattern**:
+
+1. Consumer calls `InboxRepository.claimOrInsert(source, externalEventId, ...)`
+2. If new: record created with RECEIVED status, `wasClaimed=true`
+3. If duplicate: existing record returned, `wasClaimed=false`
+4. Consumer processes only if `wasClaimed=true` or retrying a failed record
+
+### Assessment Builder Models
+
+Flexible assessment and exam authoring state with versioning and immutable snapshots.
+
+Models:
+
+- **Assessment**: Root aggregate for an assessment/exam. Stores settings, policies (attempt, time limit, result release), and metadata.
+- **AssessmentVersion**: Incremental draft/published versions of an assessment.
+- **AssessmentSection**: Named groupings of questions within a version.
+- **AssessmentQuestion**: Individual questions. Supports 10 kinds (MCQ, ShortText, Code, etc.) with kind-specific prompt/options/answer schemas.
+- **AssessmentGradingRubric**: Reusable rubrics for subjective or complex grading.
+- **AssessmentGradingRule**: Specific automated or manual rules for scoring questions.
+- **AssessmentPublishedSnapshot**: Immutable, flattened JSON snapshot of a version at the moment of publication, optimized for high-performance delivery.
+
+**Persistence Pattern**:
+
+- **Full-Replacement Drafts**: Saving a draft assessment replaces all draft sections and questions to simplify complex tree-reordering and diffing.
+- **Flattened Snapshots**: Published snapshots store the entire assessment structure in a single row to minimize joins during high-concurrency learner delivery.
+- **Ordered Result Sets**: Sections and questions are always queried with deterministic `orderBy: { position: 'asc' }`.
+  125: ## ORM and Migrations
+
+- **Prisma**: The TypeScript ORM boundary.
+- **Migration Style**: Explicit expand/contract rollout plans. Avoid destructive migrations without backward-compatible staging.
+- **Schema Evolution**: Use field aliasing and gradual deprecation patterns.
+
+The repository maintains strict isolation between development and testing persistence:
+
+- **Development Database**: `mentrily` (port 5432). Used for local development and manual testing.
+- **Integration Test Database**: `mentrily_test` (port 5433). Dedicated, volatile database used exclusively for integration tests.
+
+**Rules for Integration Persistence**:
+
+- **Isolation**: Never run integration tests against the development database.
+- **Cleanup**: `truncatePublicSchema` must run between every test to ensure state isolation.
+- **Cleanup Safety**: `truncatePublicSchema` acquires an advisory lock to serialize cleanup across concurrent integration runs.
+- **Automation**: `automation/run-integration-tests.mjs` is the source of truth for integration runs. It fails fast on any error and prohibits false success reporting.
+- **Repeatability**: Integration tests must be safely repeatable and must not depend on pre-existing data (except baseline migrations).
+- **Generated Clients**: Prisma clients generated during tests reside in `node_modules` and are NEVER committed to version control.
+- **Content Studio 009B1**: The schema includes `ContentDocument`, `ContentVersion`, `ContentBlock`, and `ContentPublishedSnapshot`, and the committed Content Studio migration was reviewed to ensure it does not silently alter Learning Delivery tables.
+- **Assessment Delivery 011A**: The schema now also includes `AssessmentAttempt`, `AssessmentAttemptAnswer`, `AssessmentAttemptSession`, and `AssessmentAttemptResult` for learner runtime persistence. Attempt records reference published assessment snapshots and remain separate from Assessment Builder draft/version authoring records.
+- **Assessment Delivery 011G**: Execution runtime uses no persistence yet. Execution requests/results stay in-memory inside the configured provider adapter for safe tests/internal harness flows, so no new Prisma tables or migrations were added in 011G.
+- **Content Studio 009D**: browser E2E persists through the same real Content Studio tables in the dedicated test database. The E2E runner rejects non-test database names before starting.
+
+## Multi-tenant Isolation
+
+- **Tenant Sovereignty**: Resource access is strictly scoped to `workspaceId`.
+- **Identity Isolation**: `Principal` records are global but their access is scoped through `WorkspaceMember` links.
+- **Audit/Outbox Context**: Tenant/workspace fields on audit/outbox records enable tenant-scoped queries for compliance.
+- **Free Accounts**: Support for users without a workspace membership exists for personal/individual paths.
+
+## Relational Modeling
+
+- **Normalized Identity**: Principal entities are separated from external identity provider (Clerk) links to support multi-provider evolution.
+- **Role/Permission Mapping**: Normalized relational structure for roles and permissions to ensure auditability and flexibility beyond simple strings.
+- **Indexes**: Strategic indexing on `externalId`, `slug`, `domain`, `workspaceId`, and `eventId` for high-performance lookups.
+
+## Reliability Patterns
+
+- **Outbox Pattern**: For cross-module and async consistency (persisted to `OutboxMessage`)
+  - Write state + event in same transaction
+  - Relay worker polls and distributes externally
+  - Failures tracked in `attemptCount` and `status`
+  - Duplicate `eventId` retries return the existing record
+
+- **Inbox Pattern**: For inbound external idempotency (persisted to `InboxMessage`)
+  - Deduplicate by (source + externalEventId)
+  - Process once per unique external event
+  - Failures tracked in status
+  - Unique-constraint retries rehydrate the existing `(source, externalEventId)` row
+
+- **Audit Logs**: Integrated via `AuditRecorder` for privileged operations (persisted to `AuditRecord`)
+  - Immutable append-only
+  - Context enrichment (request ID, correlation ID, tenant/workspace)
+  - Enables compliance investigations and security reviews
+
+Repository ownership is exposed through `DataPlatformModule`, which provides `PrismaService`, `AuditRecordRepository`, `OutboxRepository`, and `InboxRepository`.
+
+- **Idempotency**: Policy-enforced on all mutating APIs and worker consumers
+  - Deterministic idempotency keys (not random UUID)
+  - Inbox deduplication by (source + externalEventId)
+  - Outbox unique constraint on eventId
+
+## Transaction Safety
+
+All mutations to the source-of-truth stores MUST be transactional when they involve side effects like audit logs or outbox events.
+Content Studio 009B1 follows this rule for create, rename, replace-blocks, publish, archive, and restore flows.
+
+Content Studio 009B1 validation also requires direct HTTP integration coverage for those backend routes. The API integration suite must go through the real Nest/Fastify app and real Postgres database rather than calling use cases as a fallback.
+Assessment Delivery backend persistence/API and frontend builder authoring UI now both exist. The first cross-stack Assessment Builder E2E also exists and runs against the real frontend, real backend, and dedicated test Postgres database. Learner attempt runtime now includes backend persistence/API, learner-safe published snapshot reads, learner frontend routes, and attempt Playwright E2E. Grading runtime foundation now adds `AssessmentGradingRun` and `AssessmentAnswerGrade` persistence so submitted attempts can be scored and tracked without mutating authoring drafts.
+Attempt runtime reads published snapshot records only and does not mutate or expose Assessment Builder draft/version state.
+Assessment Delivery is not linked to Learning Delivery runtime flows yet, and Assessment persistence is not directly linked to Content Studio persistence in this slice.
+Execution request/result persistence remains intentionally deferred; 011G keeps execution state inside the safe provider boundary until a real isolated worker/provider is introduced behind a feature flag.
+
+### TransactionRunner
+
+The `TransactionRunner` (implemented via `PrismaTransactionRunner`) ensures that:
+
+- **Atomicity**: The domain state change, the `AuditRecord` append, and the `OutboxMessage` append are committed in a single database transaction.
+- **Isolation**: Concurrent operations on the same data are handled according to database isolation levels (defaulting to Read Committed).
+- **Consistency**: Reads used to decide a write (e.g., checking if a slug exists or a role is valid) are performed within the transaction where practical to prevent race conditions.
+
+### Usage Pattern
+
+```typescript
+await transactionRunner.run(async (tx) => {
+  // 1. Read existing state
+  const existing = await repository.findById(id, tx);
+
+  // 2. Perform mutation
+  await repository.save(newData, tx);
+
+  // 3. Side effects
+  await auditRecorder.record(auditInput, context, tx);
+  await outboxPublisher.publish(eventInput, context, tx);
+});
+```
+
+All repositories, the `AuditRecorder`, and the `OutboxPublisher` accept an optional `TransactionContext` to participate in the shared transaction. If omitted, they fallback to a standard non-transactional client.
+
+**Important Type Safety Rule**: `TransactionContext.client` is intentionally typed as `unknown` in shared contracts (like `@mentrily/service-core`) so domain layers are not coupled to Prisma. Data-platform code MUST NOT access `tx.client` directly. Instead, data-platform code must resolve the client using the transaction helper:
+`import { getPrismaClient } from '../transactions/transaction-client.js';`
+
+## Performance Considerations
+
+- Outbox/inbox queries are indexed by status for efficient polling
+- Audit records are append-only (no deletion triggers contention)
+- Payload JSON fields are indexed for common queries in Postgres
+- Consider archive/purge strategies for old audit records (not implemented in task 007A)
+- Worker relay remains deferred to Task 007B.
+
+- 2026-05-18: Task 011C1 validation confirmed grading runtime and outbox/inbox/audit Prisma enum/status alignment remains stable; root lint/typecheck/test/build passed.
+
+## Task 011D Update (2026-05-18)
+
+- Manual grading UI now exists for creator/admin review.
+- Creator/admin can view pending manual-review answers, open grading runs, and submit manual score + feedback.
+- Learner result page is not implemented yet.
+- Result release workflow is not implemented yet.
+- Code execution grading, notebook execution grading, AI grading, and proctoring are not implemented yet.
+- Learning Delivery is not connected to Assessment grading.
+- Content Studio is not connected to Assessment grading.
+- Grading E2E uses real frontend + real backend + test Postgres.
+
+## Assessment Result Release Data
+
+Result release reuses the existing `AssessmentAttemptResult` record with `gradingStatus = RELEASED` and `releasedAt`. No learner-only result table is required for the initial workflow.
+
+## Task 011H Update (2026-05-19)
+
+- Assessment reliability now relies on existing uniqueness for:
+  - one session per attempt,
+  - one result per attempt,
+  - one answer per `(attemptId, questionId)`,
+  - one answer grade per `(gradingRunId, answerId)`.
+- 011H adds a narrow DB guard for one active `IN_PROGRESS` attempt per learner/assessment to support retry-safe concurrent starts.
+- No execution-provider persistence changes were added. Real code execution remains deferred.
+
+## Task 011I Update (2026-05-20)
+
+- Task 011I required no schema or migration changes.
+- Existing assessment question JSON continues to carry reading-passage content and file-upload placeholder metadata.
+- Existing attempt-answer JSON remains sufficient for placeholder file-upload answers shaped as `fileIds: string[]`.
+- Media Library schema, asset persistence, object storage adapters, and signed URL models are still future work.
+
+## Task 012B Update (2026-05-21)
+
+- Media asset metadata continues to live in Postgres while file bytes remain outside Postgres in object storage.
+- Portal uploads still use signed object-storage URLs; the 012B frontend work does not change storage persistence boundaries.
+
+## Communication Center
+
+- Postgres now persists `NotificationTemplate`, `NotificationIntent`, and `NotificationDeliveryAttempt`.
+- Recipient addressing and metadata live in JSON fields; provider secrets are not stored.
+- Delivery-attempt persistence is present for future worker/provider tasks even though 012C does not perform real sends.
+- `OutboxMessage.eventId` remains unique and now acts as a strict append-time idempotency key.
+- `NotificationDeliveryAttempt` uniqueness on `(intentId, attemptNumber)` is used by the internal scheduler as a race-safe claim boundary.
+- Task 012E keeps Communication provider configuration out of persisted public contracts.
+- Notification intents and delivery attempts may record provider-disabled failures, but no provider secrets, API keys, or raw transport credentials are stored.
+
+# Communication Inbox Data Model
+
+- `NotificationIntent` remains the source of truth for in-app inbox records; no separate inbox table is required for `012F`.
+- `NotificationPreference` remains the source of truth for workspace-scoped user notification preferences.
+- Inbox read/archive state is stored in sanitized metadata and returned through frontend-safe DTO mapping only.
+
+## Task 014A Additions
+
+- Introduced a workspace-scoped `Campaign` persistence model with narrow status and scheduling metadata.
+- Dashboard reads remain aggregate queries over existing learning, assessment, content, media, audit, and campaign tables.
+- No provider credentials, storage keys, or scanner payloads are persisted in dashboard or campaign contracts.
+
+## Task 014E Additions
+
+- Added `AssessmentProctoringSession` and `AssessmentProctoringEvent` as explicit workspace-scoped persistence models.
+- Proctoring events store only sanitized metadata summaries and indexed identifiers for workspace, attempt, assessment, learner, session, type, and time.
+- Duplicate event ingestion is bounded by a `(workspaceId, sessionId, eventId)` uniqueness rule when an idempotency key is provided.
+
+## Task 014F Additions
+
+- Added `AssessmentProctoringIncident`, `AssessmentProctoringIncidentEvent`, and `AssessmentProctoringIncidentReviewAction` to the PostgreSQL schema.
+- Proctoring incidents model the integrity status of a proctored assessment attempt, grouping multiple telemetry events.
+- Workspace data isolation is enforced via compound foreign keys and indexes ensuring all incident entities align strictly with the tenant workspace boundary.
+- Incident review logs track status transitions and manual notes transactionally using NestJS's `TransactionRunner` wrapper.
+</file>
+
 <file path="docs/architecture/integration-architecture.md">
 # Integration Architecture
 
@@ -109147,6 +110934,88 @@ Provider integrations (Clerk, WorkOS, Stripe, email providers, telemetry provide
 
 - Portal attempt runtime now integrates with backend proctoring routes for explicit session start, heartbeat, and safe metadata-only event recording.
 - Teacher monitoring views reuse authenticated workspace APIs and do not introduce any direct browser media integrations or external vendor dependencies.
+</file>
+
+<file path="docs/standards/security-standard.md">
+# Security Standard
+
+- Permission-based authorization only.
+- Validate and sanitize all inbound input.
+- Protect privileged operations with audit logs.
+- No secrets in source code.
+- Enforce webhook signature verification and replay protection.
+- Execution runtimes must be isolated, must not receive database credentials, and must enforce strict resource limits.
+- The 011G default `platform-api` execution binding must remain non-executing. Test fixtures may simulate results, but they must never run learner source or notebook payloads.
+
+## Task 011H Update (2026-05-19)
+
+- Assessment lifecycle mutations must continue to trust tenant/workspace/actor context from request context only, never from request bodies.
+- Retry safety must not weaken authorization: repeated start/save/submit/release still require the same permission and ownership checks as the first request.
+- No real execution provider, notebook execution, AI grading, or proctoring capability was added in this task.
+
+## Task 011I Update (2026-05-20)
+
+- Timer warnings and offline states remain client hints only; the backend is still authoritative for expiry and submission enforcement.
+- File upload remains a disabled placeholder boundary. No binary upload, signed URL issuance, object storage credential exposure, or media processing path was added.
+
+## Task 012A Update (2026-05-20)
+
+- Media Library issues signed upload/read URL contracts but still forbids raw file-byte ingestion through `platform-api`.
+- Private asset access is restricted to ownership or authorized workspace visibility checks.
+- No public/CDN asset delivery, virus scanning, or media processing was added.
+- Real code execution, notebook execution, AI grading, and proctoring remain absent, keeping the current assessment attack surface intentionally narrow.
+
+## Task 012B Update (2026-05-21)
+
+- Signed upload URLs and signed read URLs must not be logged or persisted in localStorage/sessionStorage.
+- Private media assets must not be exposed without backend-issued signed access checks.
+- The frontend must not bypass backend permission checks or trust tenant/workspace identifiers from mutation bodies.
+
+## Task 014D Update (2026-05-26)
+
+- Assessment attempt save and submit mutations must reject post-terminal edits and must not leak unreleased scores, private grading notes, raw answer payloads, or storage/object keys in learner-facing conflicts.
+- Cross-workspace attempt access remains blocked and learner ownership remains mandatory for mutation paths.
+
+## Communication Center
+
+- Communication Center must enforce workspace ownership checks after loading templates or intents.
+- Private recipient details must remain permission-gated and must not be leaked into logs, events, or outbox payloads beyond what is required.
+- Real provider credentials are out of scope for 012C and must not be introduced.
+- `communication.scheduler.process` is reserved for internal/system scheduler execution and is not granted to learner, viewer, creator, workspace admin, or workspace owner role presets by default.
+- Task 012E keeps provider enablement environment-only; there is no learner, viewer, creator, admin, or owner live-provider override.
+- Reserved email/SMS adapters must fail closed when feature flags or `COMMUNICATION_ALLOW_LIVE_DELIVERY` disable live delivery.
+- Provider secrets must not appear in contracts, events, logs, failure metadata, or env example values.
+
+# Notification Security Posture
+
+- Own-notification and own-preference APIs require authenticated actor context and explicit own-record permissions.
+- Provider configuration is backend-only and must not be surfaced in notification inbox/preferences routes, contracts, logs, or frontend UI.
+
+## Task 013C & 013C1 Updates (2026-05-22)
+
+- **Strict Scanning Enforcements**: Read URLs must never be generated for un-scanned (`SCAN_QUEUED`, `SCANNING`), failed (`SCAN_FAILED`), or malicious (`INFECTED`, `QUARANTINED`) media assets. Read URL access is strictly limited to assets marked as `AVAILABLE` and with a `CLEAN` scan status.
+- **Pre-selection Restrictions**: Interactive media selection components (e.g. Asset Picker, Content Editor, Learning Delivery) must block selectors from choosing assets with unsafe or pending scan states.
+- **Asset Reference and Safe Exclusions**: The `MediaLifecycleWorker` must not delete any media asset that is actively referenced in another module (such as `LearningLesson`, `ContentBlock`, `AssessmentQuestion`, or `AssessmentAttemptAnswer`). Lifecycle exclusion checks are mandatory to prevent active course/assessment file reference corruption.
+- **Verification Hook Rules**: Save/mutation requests in Content Studio or Learning Delivery must evaluate and validate the status of referenced media assets at validation time, failing if referenced assets are infected, deleted, or in unauthorized states.
+
+## Task 013D Update (2026-05-23)
+
+- Media processing templates must remain typed configuration only. They must not contain executable code, secrets, webhook URLs, or provider credentials.
+- Media processing hooks must execute only registered backend handlers. `eval`, `new Function`, arbitrary JavaScript, and live outbound provider/webhook calls are prohibited by default.
+- Media processing must not bypass `MediaAccessPolicyService`, must not trust tenant/workspace identifiers from request bodies, and must not promote non-clean media into readable/usable states.
+- Frontend-safe media contracts may expose template keys, deferred rendition summaries, and hook stage summaries, but must not expose storage keys, bucket paths, origin URLs, or scanner internals.
+
+## Task 014A Additions
+
+- Dashboard and campaign reads must remain workspace-scoped and permission-enforced.
+- Audience preview must never accept arbitrary raw email or phone inputs for this foundation.
+- Live provider delivery remains disabled by default for campaign flows.
+
+## Task 014E Additions
+
+- Monitoring must never be hidden from learners and must never bypass browser permission prompts.
+- The 014E foundation must not capture webcam, screen, audio, clipboard contents, raw keystrokes, biometric data, or face recognition signals.
+- Monitoring reads and writes must remain cross-workspace safe and must not expose unreleased scores, private grading notes, storage keys, object keys, or private URLs.
 </file>
 
 <file path="backend/packages/data-platform/prisma/schema.prisma">
@@ -110142,6 +112011,44 @@ enum AssessmentProctoringEventSeverity {
   HIGH
 }
 
+enum AssessmentProctoringIncidentType {
+  FOCUS_LOSS
+  FULLSCREEN_EXIT
+  COPY_PASTE_ACTIVITY
+  CONNECTIVITY_INTERRUPTION
+  SESSION_INTERRUPTION
+  MULTIPLE_WARNINGS
+  HIGH_SEVERITY_EVENT
+  SYSTEM_FLAG
+  MANUAL_REVIEW_FLAG
+}
+
+enum AssessmentProctoringIncidentStatus {
+  OPEN
+  IN_REVIEW
+  RESOLVED
+  DISMISSED
+  ESCALATED
+}
+
+enum AssessmentProctoringIncidentSeverity {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum AssessmentProctoringIncidentReviewActionType {
+  OPENED
+  MARKED_IN_REVIEW
+  RESOLVED
+  DISMISSED
+  ESCALATED
+  REOPENED
+  NOTE_ADDED
+}
+
+
 enum AssessmentAttemptAnswerStatus {
   DRAFT
   SUBMITTED
@@ -110202,6 +112109,7 @@ model AssessmentAttempt {
   answers      AssessmentAttemptAnswer[]
   session      AssessmentAttemptSession?
   proctoringSessions AssessmentProctoringSession[]
+  proctoringIncidents AssessmentProctoringIncident[]
   result       AssessmentAttemptResult?
   gradingRuns  AssessmentGradingRun[]
   answerGrades AssessmentAnswerGrade[]
@@ -110271,6 +112179,7 @@ model AssessmentProctoringSession {
 
   attempt AssessmentAttempt @relation(fields: [attemptId], references: [id], onDelete: Cascade)
   events  AssessmentProctoringEvent[]
+  incidents AssessmentProctoringIncident[]
 
   @@index([tenantId])
   @@index([workspaceId])
@@ -110299,6 +112208,7 @@ model AssessmentProctoringEvent {
   metadata           Json
 
   session AssessmentProctoringSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  incidentEvents AssessmentProctoringIncidentEvent[]
 
   @@index([tenantId])
   @@index([workspaceId])
@@ -110312,6 +112222,88 @@ model AssessmentProctoringEvent {
   @@index([workspaceId, sessionId, occurredAt])
   @@index([workspaceId, eventType, occurredAt])
   @@unique([workspaceId, sessionId, eventId])
+}
+
+model AssessmentProctoringIncident {
+  id                    String                                 @id @default(uuid()) @db.Uuid
+  tenantId              String                                 @db.Uuid
+  workspaceId           String                                 @db.Uuid
+  sessionId             String                                 @db.Uuid
+  attemptId             String                                 @db.Uuid
+  assessmentId          String                                 @db.Uuid
+  learnerPrincipalId    String                                 @db.Uuid
+  incidentType          AssessmentProctoringIncidentType
+  severity              AssessmentProctoringIncidentSeverity
+  status                AssessmentProctoringIncidentStatus     @default(OPEN)
+  title                 String
+  summary               String
+  firstEventAt          DateTime
+  lastEventAt           DateTime
+  eventCount            Int
+  createdAt             DateTime                               @default(now())
+  updatedAt             DateTime                               @updatedAt
+  reviewedAt            DateTime?
+  reviewedByPrincipalId String?                                @db.Uuid
+  resolvedAt            DateTime?
+  resolution            String?
+
+  session            AssessmentProctoringSession        @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  attempt            AssessmentAttempt                  @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+  events             AssessmentProctoringIncidentEvent[]
+  reviewActions      AssessmentProctoringIncidentReviewAction[]
+
+  @@index([tenantId])
+  @@index([workspaceId])
+  @@index([sessionId])
+  @@index([attemptId])
+  @@index([assessmentId])
+  @@index([learnerPrincipalId])
+  @@index([status])
+  @@index([severity])
+  @@index([lastEventAt])
+  @@index([workspaceId, attemptId])
+  @@index([workspaceId, assessmentId])
+  @@index([workspaceId, sessionId])
+  @@index([workspaceId, status])
+  @@index([workspaceId, severity])
+  @@index([workspaceId, assessmentId, status])
+  @@index([workspaceId, attemptId, status])
+  @@unique([workspaceId, sessionId, incidentType, status])
+}
+
+model AssessmentProctoringIncidentEvent {
+  id                 String                       @id @default(uuid()) @db.Uuid
+  tenantId           String                       @db.Uuid
+  workspaceId        String                       @db.Uuid
+  incidentId         String                       @db.Uuid
+  proctoringEventId  String                       @db.Uuid
+  createdAt          DateTime                     @default(now())
+
+  incident           AssessmentProctoringIncident @relation(fields: [incidentId], references: [id], onDelete: Cascade)
+  proctoringEvent    AssessmentProctoringEvent    @relation(fields: [proctoringEventId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@index([workspaceId])
+  @@index([incidentId])
+  @@index([proctoringEventId])
+  @@unique([workspaceId, incidentId, proctoringEventId])
+}
+
+model AssessmentProctoringIncidentReviewAction {
+  id               String                                       @id @default(uuid()) @db.Uuid
+  tenantId         String                                       @db.Uuid
+  workspaceId      String                                       @db.Uuid
+  incidentId       String                                       @db.Uuid
+  actionType       AssessmentProctoringIncidentReviewActionType
+  actorPrincipalId String                                       @db.Uuid
+  note             String?
+  createdAt        DateTime                                     @default(now())
+
+  incident         AssessmentProctoringIncident                 @relation(fields: [incidentId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@index([workspaceId])
+  @@index([incidentId])
 }
 
 model AssessmentAttemptResult {
@@ -111181,94 +113173,19 @@ The platform API now exposes result release and result read use cases inside the
 - Added a standalone `proctoring` module to `platform-api` with workspace-scoped session lifecycle routes, event ingestion, and monitoring read APIs.
 - Assessment attempt responses now include a learner-safe proctoring summary and disclosure without embedding raw monitoring payloads.
 - Proctoring integrates with attempt terminal transitions by ending or expiring the latest monitoring session without weakening 014D attempt reliability rules.
-</file>
 
-<file path="docs/standards/security-standard.md">
-# Security Standard
+## Task 014F Additions
 
-- Permission-based authorization only.
-- Validate and sanitize all inbound input.
-- Protect privileged operations with audit logs.
-- No secrets in source code.
-- Enforce webhook signature verification and replay protection.
-- Execution runtimes must be isolated, must not receive database credentials, and must enforce strict resource limits.
-- The 011G default `platform-api` execution binding must remain non-executing. Test fixtures may simulate results, but they must never run learner source or notebook payloads.
-
-## Task 011H Update (2026-05-19)
-
-- Assessment lifecycle mutations must continue to trust tenant/workspace/actor context from request context only, never from request bodies.
-- Retry safety must not weaken authorization: repeated start/save/submit/release still require the same permission and ownership checks as the first request.
-- No real execution provider, notebook execution, AI grading, or proctoring capability was added in this task.
-
-## Task 011I Update (2026-05-20)
-
-- Timer warnings and offline states remain client hints only; the backend is still authoritative for expiry and submission enforcement.
-- File upload remains a disabled placeholder boundary. No binary upload, signed URL issuance, object storage credential exposure, or media processing path was added.
-
-## Task 012A Update (2026-05-20)
-
-- Media Library issues signed upload/read URL contracts but still forbids raw file-byte ingestion through `platform-api`.
-- Private asset access is restricted to ownership or authorized workspace visibility checks.
-- No public/CDN asset delivery, virus scanning, or media processing was added.
-- Real code execution, notebook execution, AI grading, and proctoring remain absent, keeping the current assessment attack surface intentionally narrow.
-
-## Task 012B Update (2026-05-21)
-
-- Signed upload URLs and signed read URLs must not be logged or persisted in localStorage/sessionStorage.
-- Private media assets must not be exposed without backend-issued signed access checks.
-- The frontend must not bypass backend permission checks or trust tenant/workspace identifiers from mutation bodies.
-
-## Task 014D Update (2026-05-26)
-
-- Assessment attempt save and submit mutations must reject post-terminal edits and must not leak unreleased scores, private grading notes, raw answer payloads, or storage/object keys in learner-facing conflicts.
-- Cross-workspace attempt access remains blocked and learner ownership remains mandatory for mutation paths.
-
-## Communication Center
-
-- Communication Center must enforce workspace ownership checks after loading templates or intents.
-- Private recipient details must remain permission-gated and must not be leaked into logs, events, or outbox payloads beyond what is required.
-- Real provider credentials are out of scope for 012C and must not be introduced.
-- `communication.scheduler.process` is reserved for internal/system scheduler execution and is not granted to learner, viewer, creator, workspace admin, or workspace owner role presets by default.
-- Task 012E keeps provider enablement environment-only; there is no learner, viewer, creator, admin, or owner live-provider override.
-- Reserved email/SMS adapters must fail closed when feature flags or `COMMUNICATION_ALLOW_LIVE_DELIVERY` disable live delivery.
-- Provider secrets must not appear in contracts, events, logs, failure metadata, or env example values.
-
-# Notification Security Posture
-
-- Own-notification and own-preference APIs require authenticated actor context and explicit own-record permissions.
-- Provider configuration is backend-only and must not be surfaced in notification inbox/preferences routes, contracts, logs, or frontend UI.
-
-## Task 013C & 013C1 Updates (2026-05-22)
-
-- **Strict Scanning Enforcements**: Read URLs must never be generated for un-scanned (`SCAN_QUEUED`, `SCANNING`), failed (`SCAN_FAILED`), or malicious (`INFECTED`, `QUARANTINED`) media assets. Read URL access is strictly limited to assets marked as `AVAILABLE` and with a `CLEAN` scan status.
-- **Pre-selection Restrictions**: Interactive media selection components (e.g. Asset Picker, Content Editor, Learning Delivery) must block selectors from choosing assets with unsafe or pending scan states.
-- **Asset Reference and Safe Exclusions**: The `MediaLifecycleWorker` must not delete any media asset that is actively referenced in another module (such as `LearningLesson`, `ContentBlock`, `AssessmentQuestion`, or `AssessmentAttemptAnswer`). Lifecycle exclusion checks are mandatory to prevent active course/assessment file reference corruption.
-- **Verification Hook Rules**: Save/mutation requests in Content Studio or Learning Delivery must evaluate and validate the status of referenced media assets at validation time, failing if referenced assets are infected, deleted, or in unauthorized states.
-
-## Task 013D Update (2026-05-23)
-
-- Media processing templates must remain typed configuration only. They must not contain executable code, secrets, webhook URLs, or provider credentials.
-- Media processing hooks must execute only registered backend handlers. `eval`, `new Function`, arbitrary JavaScript, and live outbound provider/webhook calls are prohibited by default.
-- Media processing must not bypass `MediaAccessPolicyService`, must not trust tenant/workspace identifiers from request bodies, and must not promote non-clean media into readable/usable states.
-- Frontend-safe media contracts may expose template keys, deferred rendition summaries, and hook stage summaries, but must not expose storage keys, bucket paths, origin URLs, or scanner internals.
-
-## Task 014A Additions
-
-- Dashboard and campaign reads must remain workspace-scoped and permission-enforced.
-- Audience preview must never accept arbitrary raw email or phone inputs for this foundation.
-- Live provider delivery remains disabled by default for campaign flows.
-
-## Task 014E Additions
-
-- Monitoring must never be hidden from learners and must never bypass browser permission prompts.
-- The 014E foundation must not capture webcam, screen, audio, clipboard contents, raw keystrokes, biometric data, or face recognition signals.
-- Monitoring reads and writes must remain cross-workspace safe and must not expose unreleased scores, private grading notes, storage keys, object keys, or private URLs.
+- Added an incident triage system to the `proctoring` module for identifying and managing integrity events.
+- Automatic incident detection assesses severity; high-severity events trigger incidents immediately, whereas low/medium events are aggregated under a 5-minute sliding window (incidents are triggered only when event count >= 3).
+- Added manual incident logging capability allowing proctors/teachers to flag suspicious activity with a title, summary, and custom notes.
+- Enforced strict multi-tenant workspace isolation at the API controller layer (returning 404 NOT_FOUND for unauthorized cross-workspace incident reads/writes).
 </file>
 
 <file path="frontend/apps/portal/next-env.d.ts">
 /// <reference types="next" />
 /// <reference types="next/image-types/global" />
-import './.next/dev/types/routes.d.ts';
+import './.next/types/routes.d.ts';
 
 // NOTE: This file should not be edited
 // see https://nextjs.org/docs/app/api-reference/config/typescript for more information.
@@ -111278,6 +113195,63 @@ import './.next/dev/types/routes.d.ts';
 # Mentrily Build Ledger
 
 This document serves as a permanent continuity/backtrace system for the Mentrily SaaS codebase. Every task must record its progress here to ensure a reliable audit trail and clear path forward.
+
+### Task 014F — Live Monitoring Review Workflow and Proctoring Incident Triage
+
+- **Task ID**: 014F
+- **Previous Task**: Task 014E — Proctoring Gateway and Attempt Monitoring Foundation
+- **Implementation Status**: Complete, full validation matrix passed
+- **Baseline Validation Discipline**:
+  - Confirmed the platform-api builds and typechecks cleanly before starting.
+  - Successfully ran baseline integration tests under `src/modules/proctoring/tests/` to verify session and event ingestion foundations.
+- **Incident Grouping and Automatic Triage Decisions**:
+  - Implemented automatic incident detection: High-severity events trigger incidents immediately, while low-to-medium severity events are grouped dynamically under a 5-minute sliding window (incidents are created/upgraded only when event count >= 3).
+  - Configured workspace scoping validation on all read and write triage APIs to prevent cross-workspace data leakage.
+- **Prisma / Migration Changes**:
+  - Added new Prisma models: `AssessmentProctoringIncident`, `AssessmentProctoringIncidentEvent`, and `AssessmentProctoringIncidentReviewAction` to the PostgreSQL schema.
+  - Deployed migration `20260526162044_add_proctoring_incidents` to the test database.
+- **Work Completed**:
+  - Added shared data contracts for proctoring incidents, review actions, and triage API request/response payloads in `@mentrily/contract-catalog` and `@mentrily/domain-contracts`.
+  - Implemented 6 new use cases in `proctoring-incident.use-cases.ts`:
+    - `GetProctoringIncidentUseCase`
+    - `ListProctoringIncidentsUseCase`
+    - `GetProctoringIncidentSummaryUseCase`
+    - `UpdateProctoringIncidentStatusUseCase`
+    - `AddProctoringIncidentNoteUseCase`
+    - `CreateManualProctoringIncidentUseCase`
+  - Secured all endpoints in `ProctoringController` under workspace-scoped checks, requiring the `ASSESSMENT_MONITOR` (or fallback `ASSESSMENT_UPDATE`) permission.
+  - Wired automatic incident generation into `RecordProctoringEventUseCase`.
+  - Added comprehensive integration tests in `proctoring-incident-api.integration.spec.ts` covering immediate vs window-grouped incidents, status transitions, review notes, manual incident creation, permission enforcement, and workspace isolation.
+- **Validation Performed**:
+  - ✅ `git status --short`: **PASS** (clean status locally after committing documentation changes)
+  - ✅ `pnpm lint`: **PASS**
+  - ✅ `pnpm typecheck`: **PASS**
+  - ✅ `pnpm test`: **PASS**
+  - ✅ `pnpm build`: **PASS**
+  - ✅ `pnpm test:integration`: **PASS**
+  - ✅ `pnpm test:e2e`: **PASS** (all suites: content, learning, assessment, assessment-attempt, assessment-grading, assessment-result)
+  - ✅ `pnpm --filter @mentrily/platform-api test`: **PASS**
+  - ✅ `pnpm --filter @mentrily/platform-api typecheck`: **PASS**
+  - ✅ `pnpm --filter @mentrily/platform-api test:integration`: **PASS** (30 test files, 103 tests)
+  - ✅ `pnpm --filter @mentrily/platform-worker test`: **PASS**
+  - ✅ `pnpm --filter @mentrily/platform-worker typecheck`: **PASS**
+  - ✅ `pnpm --filter @mentrily/data-platform prisma:validate`: **PASS**
+  - ✅ `pnpm --filter @mentrily/data-platform prisma:generate`: **PASS**
+  - ✅ `pnpm --filter @mentrily/contract-catalog typecheck`: **PASS**
+  - ✅ `pnpm --filter @mentrily/domain-contracts typecheck`: **PASS**
+  - ✅ `pnpm --filter @mentrily/security-toolkit test`: **PASS**
+  - ✅ `pnpm --filter @mentrily/portal test`: **PASS**
+  - ✅ `pnpm --filter @mentrily/portal typecheck`: **PASS**
+  - ✅ `pnpm --filter @mentrily/portal build`: **PASS**
+  - ✅ `node automation/verify-env-examples.mjs`: **PASS**
+  - ✅ `pnpm --filter @mentrily/data-platform prisma:migrate:deploy`: **PASS** (21 migrations, none pending)
+  - ✅ `pnpm db:test:down`: **PASS**
+- **Remaining Gaps**:
+  - Real-time notification socket push for active incident alerts remains future work.
+- **Next Recommended Task**:
+  - Proceed with the frontend Proctoring Incident Triage UI implementation.
+
+---
 
 ### Task 014E — Proctoring Gateway and Attempt Monitoring Foundation
 
