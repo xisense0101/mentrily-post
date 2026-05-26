@@ -309,3 +309,10 @@ Result release reuses the existing `AssessmentAttemptResult` record with `gradin
 - Added `AssessmentProctoringSession` and `AssessmentProctoringEvent` as explicit workspace-scoped persistence models.
 - Proctoring events store only sanitized metadata summaries and indexed identifiers for workspace, attempt, assessment, learner, session, type, and time.
 - Duplicate event ingestion is bounded by a `(workspaceId, sessionId, eventId)` uniqueness rule when an idempotency key is provided.
+
+## Task 014F Additions
+
+- Added `AssessmentProctoringIncident`, `AssessmentProctoringIncidentEvent`, and `AssessmentProctoringIncidentReviewAction` to the PostgreSQL schema.
+- Proctoring incidents model the integrity status of a proctored assessment attempt, grouping multiple telemetry events.
+- Workspace data isolation is enforced via compound foreign keys and indexes ensuring all incident entities align strictly with the tenant workspace boundary.
+- Incident review logs track status transitions and manual notes transactionally using NestJS's `TransactionRunner` wrapper.

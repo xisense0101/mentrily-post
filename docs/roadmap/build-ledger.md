@@ -2,6 +2,45 @@
 
 This document serves as a permanent continuity/backtrace system for the Mentrily SaaS codebase. Every task must record its progress here to ensure a reliable audit trail and clear path forward.
 
+### Task 014F — Live Monitoring Review Workflow and Proctoring Incident Triage
+
+- **Task ID**: 014F
+- **Previous Task**: Task 014E — Proctoring Gateway and Attempt Monitoring Foundation
+- **Implementation Status**: Complete, full validation matrix passed
+- **Baseline Validation Discipline**:
+  - Confirmed the platform-api builds and typechecks cleanly before starting.
+  - Successfully ran baseline integration tests under `src/modules/proctoring/tests/` to verify session and event ingestion foundations.
+- **Incident Grouping and Automatic Triage Decisions**:
+  - Implemented automatic incident detection: High-severity events trigger incidents immediately, while low-to-medium severity events are grouped dynamically under a 5-minute sliding window (incidents are created/upgraded only when event count >= 3).
+  - Configured workspace scoping validation on all read and write triage APIs to prevent cross-workspace data leakage.
+- **Prisma / Migration Changes**:
+  - Added new Prisma models: `AssessmentProctoringIncident`, `AssessmentProctoringIncidentEvent`, and `AssessmentProctoringIncidentReviewAction` to the PostgreSQL schema.
+  - Deployed migration `20260526162044_add_proctoring_incidents` to the test database.
+- **Work Completed**:
+  - Added shared data contracts for proctoring incidents, review actions, and triage API request/response payloads in `@mentrily/contract-catalog` and `@mentrily/domain-contracts`.
+  - Implemented 6 new use cases in `proctoring-incident.use-cases.ts`:
+    - `GetProctoringIncidentUseCase`
+    - `ListProctoringIncidentsUseCase`
+    - `GetProctoringIncidentSummaryUseCase`
+    - `UpdateProctoringIncidentStatusUseCase`
+    - `AddProctoringIncidentNoteUseCase`
+    - `CreateManualProctoringIncidentUseCase`
+  - Secured all endpoints in `ProctoringController` under workspace-scoped checks, requiring the `ASSESSMENT_MONITOR` (or fallback `ASSESSMENT_UPDATE`) permission.
+  - Wired automatic incident generation into `RecordProctoringEventUseCase`.
+  - Added comprehensive integration tests in `proctoring-incident-api.integration.spec.ts` covering immediate vs window-grouped incidents, status transitions, review notes, manual incident creation, permission enforcement, and workspace isolation.
+- **Validation Performed**:
+  - ✅ `pnpm lint`: **PASS**
+  - ✅ `pnpm typecheck`: **PASS**
+  - ✅ `pnpm build`: **PASS**
+  - ✅ `pnpm --filter platform-api test:integration` (all proctoring tests): **PASS** (23 tests: 15 for sessions/events, 8 for incidents)
+  - ✅ `pnpm --filter @mentrily/domain-contracts build`: **PASS**
+- **Remaining Gaps**:
+  - Real-time notification socket push for active incident alerts remains future work.
+- **Next Recommended Task**:
+  - Proceed with the frontend Proctoring Incident Triage UI implementation.
+
+---
+
 ### Task 014E — Proctoring Gateway and Attempt Monitoring Foundation
 
 - **Task ID**: 014E

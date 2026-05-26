@@ -316,3 +316,10 @@ The platform API now exposes result release and result read use cases inside the
 - Added a standalone `proctoring` module to `platform-api` with workspace-scoped session lifecycle routes, event ingestion, and monitoring read APIs.
 - Assessment attempt responses now include a learner-safe proctoring summary and disclosure without embedding raw monitoring payloads.
 - Proctoring integrates with attempt terminal transitions by ending or expiring the latest monitoring session without weakening 014D attempt reliability rules.
+
+## Task 014F Additions
+
+- Added an incident triage system to the `proctoring` module for identifying and managing integrity events.
+- Automatic incident detection assesses severity; high-severity events trigger incidents immediately, whereas low/medium events are aggregated under a 5-minute sliding window (incidents are triggered only when event count >= 3).
+- Added manual incident logging capability allowing proctors/teachers to flag suspicious activity with a title, summary, and custom notes.
+- Enforced strict multi-tenant workspace isolation at the API controller layer (returning 404 NOT_FOUND for unauthorized cross-workspace incident reads/writes).
