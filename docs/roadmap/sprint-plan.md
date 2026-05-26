@@ -73,3 +73,8 @@ Each ticket includes:
 
 - Added proctoring gateway and metadata-only attempt monitoring foundation after 014D attempt reliability hardening.
 - Deferred live monitoring triage, realtime supervision, media capture, and vendor integrations to the follow-up task stream.
+
+## Task 014F Additions
+
+- Hardened backend proctoring incident triage use cases, contracts, and schema migrations.
+- Established strict status lifecycle state machine, note character limit validation, and consistent entity matching on manual incident creation.

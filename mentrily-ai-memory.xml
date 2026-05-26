@@ -1229,9 +1229,9 @@ backend/
             migration.sql
           20260524180000_add_learning_assessment_links/
             migration.sql
-          20260526162044_add_proctoring_incidents/
-            migration.sql
           20260526193000_add_proctoring_sessions_and_events/
+            migration.sql
+          20260526194000_add_proctoring_incidents/
             migration.sql
           migration_lock.toml
         seed/
@@ -2033,6 +2033,163 @@ vitest.workspace.ts
 
 <files>
 This section contains the contents of the repository's files.
+
+<file path="backend/packages/data-platform/prisma/migrations/20260526194000_add_proctoring_incidents/migration.sql">
+-- CreateEnum
+CREATE TYPE "AssessmentProctoringIncidentType" AS ENUM ('FOCUS_LOSS', 'FULLSCREEN_EXIT', 'COPY_PASTE_ACTIVITY', 'CONNECTIVITY_INTERRUPTION', 'SESSION_INTERRUPTION', 'MULTIPLE_WARNINGS', 'HIGH_SEVERITY_EVENT', 'SYSTEM_FLAG', 'MANUAL_REVIEW_FLAG');
+
+-- CreateEnum
+CREATE TYPE "AssessmentProctoringIncidentStatus" AS ENUM ('OPEN', 'IN_REVIEW', 'RESOLVED', 'DISMISSED', 'ESCALATED');
+
+-- CreateEnum
+CREATE TYPE "AssessmentProctoringIncidentSeverity" AS ENUM ('LOW', 'MEDIUM', 'HIGH', 'CRITICAL');
+
+-- CreateEnum
+CREATE TYPE "AssessmentProctoringIncidentReviewActionType" AS ENUM ('OPENED', 'MARKED_IN_REVIEW', 'RESOLVED', 'DISMISSED', 'ESCALATED', 'REOPENED', 'NOTE_ADDED');
+
+-- CreateTable
+CREATE TABLE "AssessmentProctoringIncident" (
+    "id" UUID NOT NULL,
+    "tenantId" UUID NOT NULL,
+    "workspaceId" UUID NOT NULL,
+    "sessionId" UUID NOT NULL,
+    "attemptId" UUID NOT NULL,
+    "assessmentId" UUID NOT NULL,
+    "learnerPrincipalId" UUID NOT NULL,
+    "incidentType" "AssessmentProctoringIncidentType" NOT NULL,
+    "severity" "AssessmentProctoringIncidentSeverity" NOT NULL,
+    "status" "AssessmentProctoringIncidentStatus" NOT NULL DEFAULT 'OPEN',
+    "title" TEXT NOT NULL,
+    "summary" TEXT NOT NULL,
+    "firstEventAt" TIMESTAMP(3) NOT NULL,
+    "lastEventAt" TIMESTAMP(3) NOT NULL,
+    "eventCount" INTEGER NOT NULL,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+    "reviewedAt" TIMESTAMP(3),
+    "reviewedByPrincipalId" UUID,
+    "resolvedAt" TIMESTAMP(3),
+    "resolution" TEXT,
+
+    CONSTRAINT "AssessmentProctoringIncident_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "AssessmentProctoringIncidentEvent" (
+    "id" UUID NOT NULL,
+    "tenantId" UUID NOT NULL,
+    "workspaceId" UUID NOT NULL,
+    "incidentId" UUID NOT NULL,
+    "proctoringEventId" UUID NOT NULL,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "AssessmentProctoringIncidentEvent_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "AssessmentProctoringIncidentReviewAction" (
+    "id" UUID NOT NULL,
+    "tenantId" UUID NOT NULL,
+    "workspaceId" UUID NOT NULL,
+    "incidentId" UUID NOT NULL,
+    "actionType" "AssessmentProctoringIncidentReviewActionType" NOT NULL,
+    "actorPrincipalId" UUID NOT NULL,
+    "note" TEXT,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "AssessmentProctoringIncidentReviewAction_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateIndex
+CREATE INDEX "AssessmentProctoringIncident_tenantId_idx" ON "AssessmentProctoringIncident"("tenantId");
+
+-- CreateIndex
+CREATE INDEX "AssessmentProctoringIncident_workspaceId_idx" ON "AssessmentProctoringIncident"("workspaceId");
+
+-- CreateIndex
+CREATE INDEX "AssessmentProctoringIncident_sessionId_idx" ON "AssessmentProctoringIncident"("sessionId");
+
+-- CreateIndex
+CREATE INDEX "AssessmentProctoringIncident_attemptId_idx" ON "AssessmentProctoringIncident"("attemptId");
+
+-- CreateIndex
+CREATE INDEX "AssessmentProctoringIncident_assessmentId_idx" ON "AssessmentProctoringIncident"("assessmentId");
+
+-- CreateIndex
+CREATE INDEX "AssessmentProctoringIncident_learnerPrincipalId_idx" ON "AssessmentProctoringIncident"("learnerPrincipalId");
+
+-- CreateIndex
+CREATE INDEX "AssessmentProctoringIncident_status_idx" ON "AssessmentProctoringIncident"("status");
+
+-- CreateIndex
+CREATE INDEX "AssessmentProctoringIncident_severity_idx" ON "AssessmentProctoringIncident"("severity");
+
+-- CreateIndex
+CREATE INDEX "AssessmentProctoringIncident_lastEventAt_idx" ON "AssessmentProctoringIncident"("lastEventAt");
+
+-- CreateIndex
+CREATE INDEX "AssessmentProctoringIncident_workspaceId_attemptId_idx" ON "AssessmentProctoringIncident"("workspaceId", "attemptId");
+
+-- CreateIndex
+CREATE INDEX "AssessmentProctoringIncident_workspaceId_assessmentId_idx" ON "AssessmentProctoringIncident"("workspaceId", "assessmentId");
+
+-- CreateIndex
+CREATE INDEX "AssessmentProctoringIncident_workspaceId_sessionId_idx" ON "AssessmentProctoringIncident"("workspaceId", "sessionId");
+
+-- CreateIndex
+CREATE INDEX "AssessmentProctoringIncident_workspaceId_status_idx" ON "AssessmentProctoringIncident"("workspaceId", "status");
+
+-- CreateIndex
+CREATE INDEX "AssessmentProctoringIncident_workspaceId_severity_idx" ON "AssessmentProctoringIncident"("workspaceId", "severity");
+
+-- CreateIndex
+CREATE INDEX "AssessmentProctoringIncident_workspaceId_assessmentId_statu_idx" ON "AssessmentProctoringIncident"("workspaceId", "assessmentId", "status");
+
+-- CreateIndex
+CREATE INDEX "AssessmentProctoringIncident_workspaceId_attemptId_status_idx" ON "AssessmentProctoringIncident"("workspaceId", "attemptId", "status");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "AssessmentProctoringIncident_workspaceId_sessionId_incident_key" ON "AssessmentProctoringIncident"("workspaceId", "sessionId", "incidentType", "status");
+
+-- CreateIndex
+CREATE INDEX "AssessmentProctoringIncidentEvent_tenantId_idx" ON "AssessmentProctoringIncidentEvent"("tenantId");
+
+-- CreateIndex
+CREATE INDEX "AssessmentProctoringIncidentEvent_workspaceId_idx" ON "AssessmentProctoringIncidentEvent"("workspaceId");
+
+-- CreateIndex
+CREATE INDEX "AssessmentProctoringIncidentEvent_incidentId_idx" ON "AssessmentProctoringIncidentEvent"("incidentId");
+
+-- CreateIndex
+CREATE INDEX "AssessmentProctoringIncidentEvent_proctoringEventId_idx" ON "AssessmentProctoringIncidentEvent"("proctoringEventId");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "AssessmentProctoringIncidentEvent_workspaceId_incidentId_pr_key" ON "AssessmentProctoringIncidentEvent"("workspaceId", "incidentId", "proctoringEventId");
+
+-- CreateIndex
+CREATE INDEX "AssessmentProctoringIncidentReviewAction_tenantId_idx" ON "AssessmentProctoringIncidentReviewAction"("tenantId");
+
+-- CreateIndex
+CREATE INDEX "AssessmentProctoringIncidentReviewAction_workspaceId_idx" ON "AssessmentProctoringIncidentReviewAction"("workspaceId");
+
+-- CreateIndex
+CREATE INDEX "AssessmentProctoringIncidentReviewAction_incidentId_idx" ON "AssessmentProctoringIncidentReviewAction"("incidentId");
+
+-- AddForeignKey
+ALTER TABLE "AssessmentProctoringIncident" ADD CONSTRAINT "AssessmentProctoringIncident_sessionId_fkey" FOREIGN KEY ("sessionId") REFERENCES "AssessmentProctoringSession"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "AssessmentProctoringIncident" ADD CONSTRAINT "AssessmentProctoringIncident_attemptId_fkey" FOREIGN KEY ("attemptId") REFERENCES "AssessmentAttempt"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "AssessmentProctoringIncidentEvent" ADD CONSTRAINT "AssessmentProctoringIncidentEvent_incidentId_fkey" FOREIGN KEY ("incidentId") REFERENCES "AssessmentProctoringIncident"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "AssessmentProctoringIncidentEvent" ADD CONSTRAINT "AssessmentProctoringIncidentEvent_proctoringEventId_fkey" FOREIGN KEY ("proctoringEventId") REFERENCES "AssessmentProctoringEvent"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "AssessmentProctoringIncidentReviewAction" ADD CONSTRAINT "AssessmentProctoringIncidentReviewAction_incidentId_fkey" FOREIGN KEY ("incidentId") REFERENCES "AssessmentProctoringIncident"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+</file>
 
 <file path=".github/CODEOWNERS">
 # Default ownership
@@ -42661,10 +42818,14 @@ Manages global platform settings, logs, and system-wide operations.
 <file path="backend/applications/platform-api/src/modules/proctoring/application/use-cases/proctoring-incident.use-cases.ts">
 import { Inject, Injectable } from '@nestjs/common';
 import {
+  AssessmentProctoringIncident,
+  AssessmentProctoringEvent,
+  AssessmentProctoringIncidentReviewAction,
   AssessmentProctoringIncidentSeverity,
   AssessmentProctoringIncidentType,
   AssessmentProctoringIncidentReviewActionType,
   AssessmentProctoringEventType,
+  AssessmentProctoringIncidentStatus,
 } from '@prisma/client';
 import type {
   ProctoringIncidentContract,
@@ -42675,6 +42836,10 @@ import type {
   UpdateProctoringIncidentStatusRequestContract,
   AddProctoringIncidentNoteRequestContract,
   CreateManualProctoringIncidentRequestContract,
+  ProctoringIncidentSeverityContract,
+  ProctoringIncidentStatusContract,
+  ProctoringIncidentReviewActionTypeContract,
+  ProctoringIncidentTypeContract,
 } from '@mentrily/contract-catalog';
 import {
   AppError,
@@ -42682,6 +42847,8 @@ import {
   PermissionEvaluator,
   RequestContext,
   TransactionContext,
+  TRANSACTION_RUNNER,
+  TransactionRunner,
 } from '@mentrily/service-core';
 import { PrismaService, getPrismaClient } from '@mentrily/data-platform';
 import { PermissionCatalog } from '@mentrily/security-toolkit';
@@ -42778,7 +42945,7 @@ function getEventTypesForIncidentType(
 
 async function mapIncidentsToContracts(
   prisma: PrismaService,
-  incidents: any[],
+  incidents: AssessmentProctoringIncident[],
   transaction?: TransactionContext,
 ): Promise<ProctoringIncidentContract[]> {
   const principalIds = new Set<string>();
@@ -42805,9 +42972,9 @@ async function mapIncidentsToContracts(
     assessmentId: incident.assessmentId,
     learnerPrincipalId: incident.learnerPrincipalId,
     learnerDisplayName: principalMap.get(incident.learnerPrincipalId) ?? 'Unknown',
-    incidentType: incident.incidentType,
-    severity: incident.severity as any,
-    status: incident.status as any,
+    incidentType: incident.incidentType as ProctoringIncidentTypeContract,
+    severity: incident.severity as ProctoringIncidentSeverityContract,
+    status: incident.status as ProctoringIncidentStatusContract,
     title: incident.title,
     summary: incident.summary,
     firstEventAt: incident.firstEventAt.toISOString(),
@@ -42829,9 +42996,9 @@ async function mapIncidentsToContracts(
 
 async function mapIncidentDetailToContract(
   prisma: PrismaService,
-  incident: any,
-  events: any[],
-  reviewActions: any[],
+  incident: AssessmentProctoringIncident,
+  events: AssessmentProctoringEvent[],
+  reviewActions: AssessmentProctoringIncidentReviewAction[],
   policy: ProctoringPolicyService,
   transaction?: TransactionContext,
 ): Promise<ProctoringIncidentDetailContract> {
@@ -42857,7 +43024,7 @@ async function mapIncidentDetailToContract(
   const mappedActions: ProctoringIncidentReviewActionContract[] = reviewActions.map((action) => ({
     id: action.id,
     incidentId: action.incidentId,
-    actionType: action.actionType as any,
+    actionType: action.actionType as ProctoringIncidentReviewActionTypeContract,
     actorPrincipalId: action.actorPrincipalId,
     actorDisplayName: principalMap.get(action.actorPrincipalId) ?? 'Unknown',
     note: action.note ?? undefined,
@@ -43154,6 +43321,7 @@ export class GetProctoringIncidentUseCase {
   async execute(
     context: RequestContext,
     incidentId: string,
+    transaction?: TransactionContext,
   ): Promise<ProctoringIncidentDetailContract> {
     const workspace = requireWorkspaceActor(context);
     const permission = await this.permissions.evaluate(
@@ -43169,7 +43337,7 @@ export class GetProctoringIncidentUseCase {
       throw new AppError('FORBIDDEN', 'permission denied', 403);
     }
 
-    const client = getPrismaClient(this.prisma);
+    const client = getPrismaClient(this.prisma, transaction);
     const incident = await client.assessmentProctoringIncident.findUnique({
       where: { id: incidentId },
       include: {
@@ -43196,6 +43364,7 @@ export class GetProctoringIncidentUseCase {
       events,
       incident.reviewActions,
       this.policy,
+      transaction,
     );
   }
 }
@@ -43231,8 +43400,8 @@ export class ListProctoringIncidentsUseCase {
         workspaceId: workspace.workspaceId,
         ...(query.assessmentId ? { assessmentId: query.assessmentId } : {}),
         ...(query.attemptId ? { attemptId: query.attemptId } : {}),
-        ...(query.status ? { status: query.status as any } : {}),
-        ...(query.severity ? { severity: query.severity as any } : {}),
+        ...(query.status ? { status: query.status as AssessmentProctoringIncidentStatus } : {}),
+        ...(query.severity ? { severity: query.severity as AssessmentProctoringIncidentSeverity } : {}),
       },
       orderBy: { lastEventAt: 'desc' },
     });
@@ -43311,6 +43480,7 @@ export class UpdateProctoringIncidentStatusUseCase {
     @Inject(GetProctoringIncidentUseCase)
     private readonly getIncident: GetProctoringIncidentUseCase,
     @Inject(PERMISSION_EVALUATOR) private readonly permissions: PermissionEvaluator,
+    @Inject(TRANSACTION_RUNNER) private readonly transactionRunner: TransactionRunner,
   ) {}
 
   async execute(
@@ -43332,6 +43502,10 @@ export class UpdateProctoringIncidentStatusUseCase {
       throw new AppError('FORBIDDEN', 'permission denied', 403);
     }
 
+    if (input.note && (typeof input.note !== 'string' || input.note.length > 2000)) {
+      throw new AppError('VALIDATION_ERROR', 'note text must not exceed 2000 characters', 400);
+    }
+
     const client = getPrismaClient(this.prisma);
     const incident = await client.assessmentProctoringIncident.findUnique({
       where: { id: incidentId },
@@ -43341,8 +43515,35 @@ export class UpdateProctoringIncidentStatusUseCase {
       throw new AppError('NOT_FOUND', 'incident not found', 404);
     }
 
+    const currentStatus = incident.status;
+    const targetStatus = input.status;
+
+    if (currentStatus === targetStatus) {
+      throw new AppError('VALIDATION_ERROR', `Incident is already in status ${targetStatus}`, 400);
+    }
+
+    // Check valid transitions
+    let isValid = false;
+    if (currentStatus === 'OPEN') {
+      isValid = ['IN_REVIEW', 'RESOLVED', 'DISMISSED', 'ESCALATED'].includes(targetStatus);
+    } else if (currentStatus === 'IN_REVIEW') {
+      isValid = ['RESOLVED', 'DISMISSED', 'ESCALATED'].includes(targetStatus);
+    } else if (currentStatus === 'ESCALATED') {
+      isValid = ['IN_REVIEW', 'RESOLVED', 'DISMISSED'].includes(targetStatus);
+    } else if (currentStatus === 'RESOLVED' || currentStatus === 'DISMISSED') {
+      isValid = ['OPEN', 'IN_REVIEW'].includes(targetStatus);
+    }
+
+    if (!isValid) {
+      throw new AppError(
+        'VALIDATION_ERROR',
+        `Invalid status transition from ${currentStatus} to ${targetStatus}`,
+        400,
+      );
+    }
+
     let actionType: AssessmentProctoringIncidentReviewActionType;
-    switch (input.status) {
+    switch (targetStatus) {
       case 'OPEN':
         actionType = 'REOPENED';
         break;
@@ -43362,35 +43563,36 @@ export class UpdateProctoringIncidentStatusUseCase {
         throw new AppError('VALIDATION_ERROR', 'invalid status value', 400);
     }
 
-    const isTerminal = input.status === 'RESOLVED' || input.status === 'DISMISSED';
+    const isTerminal = targetStatus === 'RESOLVED' || targetStatus === 'DISMISSED';
     const now = new Date();
 
-    await this.prisma.$transaction(async (tx: any) => {
-      await tx.assessmentProctoringIncident.update({
+    return this.transactionRunner.run(async (tx) => {
+      const txClient = getPrismaClient(this.prisma, tx);
+      await txClient.assessmentProctoringIncident.update({
         where: { id: incidentId },
         data: {
-          status: input.status as any,
+          status: targetStatus as AssessmentProctoringIncidentStatus,
           reviewedAt: now,
-          reviewedByPrincipalId: workspace.actorId,
+          reviewedByPrincipalId: workspace.actorId!,
           ...(isTerminal
-            ? { resolvedAt: now, resolution: input.note ?? `Status changed to ${input.status}` }
+            ? { resolvedAt: now, resolution: input.note ?? `Status changed to ${targetStatus}` }
             : { resolvedAt: null, resolution: null }),
         },
       });
 
-      await tx.assessmentProctoringIncidentReviewAction.create({
+      await txClient.assessmentProctoringIncidentReviewAction.create({
         data: {
-          tenantId: workspace.tenantId,
-          workspaceId: workspace.workspaceId,
+          tenantId: workspace.tenantId!,
+          workspaceId: workspace.workspaceId!,
           incidentId,
           actionType,
-          actorPrincipalId: workspace.actorId,
+          actorPrincipalId: workspace.actorId!,
           note: input.note ?? null,
         },
       });
-    });
 
-    return this.getIncident.execute(context, incidentId);
+      return this.getIncident.execute(context, incidentId, tx);
+    });
   }
 }
 
@@ -43401,6 +43603,7 @@ export class AddProctoringIncidentNoteUseCase {
     @Inject(GetProctoringIncidentUseCase)
     private readonly getIncident: GetProctoringIncidentUseCase,
     @Inject(PERMISSION_EVALUATOR) private readonly permissions: PermissionEvaluator,
+    @Inject(TRANSACTION_RUNNER) private readonly transactionRunner: TransactionRunner,
   ) {}
 
   async execute(
@@ -43426,6 +43629,10 @@ export class AddProctoringIncidentNoteUseCase {
       throw new AppError('VALIDATION_ERROR', 'note text is required', 400);
     }
 
+    if (input.note.length > 2000) {
+      throw new AppError('VALIDATION_ERROR', 'note text must not exceed 2000 characters', 400);
+    }
+
     const client = getPrismaClient(this.prisma);
     const incident = await client.assessmentProctoringIncident.findUnique({
       where: { id: incidentId },
@@ -43435,27 +43642,28 @@ export class AddProctoringIncidentNoteUseCase {
       throw new AppError('NOT_FOUND', 'incident not found', 404);
     }
 
-    await this.prisma.$transaction(async (tx: any) => {
-      await tx.assessmentProctoringIncidentReviewAction.create({
+    return this.transactionRunner.run(async (tx) => {
+      const txClient = getPrismaClient(this.prisma, tx);
+      await txClient.assessmentProctoringIncidentReviewAction.create({
         data: {
-          tenantId: workspace.tenantId,
-          workspaceId: workspace.workspaceId,
+          tenantId: workspace.tenantId!,
+          workspaceId: workspace.workspaceId!,
           incidentId,
           actionType: 'NOTE_ADDED',
-          actorPrincipalId: workspace.actorId,
+          actorPrincipalId: workspace.actorId!,
           note: input.note,
         },
       });
 
-      await tx.assessmentProctoringIncident.update({
+      await txClient.assessmentProctoringIncident.update({
         where: { id: incidentId },
         data: {
           updatedAt: new Date(),
         },
       });
-    });
 
-    return this.getIncident.execute(context, incidentId);
+      return this.getIncident.execute(context, incidentId, tx);
+    });
   }
 }
 
@@ -43466,6 +43674,7 @@ export class CreateManualProctoringIncidentUseCase {
     @Inject(GetProctoringIncidentUseCase)
     private readonly getIncident: GetProctoringIncidentUseCase,
     @Inject(PERMISSION_EVALUATOR) private readonly permissions: PermissionEvaluator,
+    @Inject(TRANSACTION_RUNNER) private readonly transactionRunner: TransactionRunner,
   ) {}
 
   async execute(
@@ -43486,6 +43695,10 @@ export class CreateManualProctoringIncidentUseCase {
       throw new AppError('FORBIDDEN', 'permission denied', 403);
     }
 
+    if (input.note && (typeof input.note !== 'string' || input.note.length > 2000)) {
+      throw new AppError('VALIDATION_ERROR', 'note text must not exceed 2000 characters', 400);
+    }
+
     const client = getPrismaClient(this.prisma);
 
     const session = await client.assessmentProctoringSession.findUnique({
@@ -43496,19 +43709,30 @@ export class CreateManualProctoringIncidentUseCase {
       throw new AppError('NOT_FOUND', 'proctoring session not found', 404);
     }
 
+    if (session.attemptId !== input.attemptId) {
+      throw new AppError('VALIDATION_ERROR', 'attemptId does not match the proctoring session', 400);
+    }
+    if (session.assessmentId !== input.assessmentId) {
+      throw new AppError('VALIDATION_ERROR', 'assessmentId does not match the proctoring session', 400);
+    }
+    if (session.learnerPrincipalId !== input.learnerPrincipalId) {
+      throw new AppError('VALIDATION_ERROR', 'learnerPrincipalId does not match the proctoring session', 400);
+    }
+
     const now = new Date();
 
-    const incident = await this.prisma.$transaction(async (tx: any) => {
-      const created = await tx.assessmentProctoringIncident.create({
+    return this.transactionRunner.run(async (tx) => {
+      const txClient = getPrismaClient(this.prisma, tx);
+      const created = await txClient.assessmentProctoringIncident.create({
         data: {
-          tenantId: workspace.tenantId,
-          workspaceId: workspace.workspaceId,
+          tenantId: workspace.tenantId!,
+          workspaceId: workspace.workspaceId!,
           sessionId: input.sessionId,
           attemptId: input.attemptId,
           assessmentId: input.assessmentId,
           learnerPrincipalId: input.learnerPrincipalId,
-          incidentType: input.incidentType as any,
-          severity: input.severity as any,
+          incidentType: input.incidentType as AssessmentProctoringIncidentType,
+          severity: input.severity as AssessmentProctoringIncidentSeverity,
           status: 'OPEN',
           title: input.title,
           summary: input.summary,
@@ -43518,21 +43742,19 @@ export class CreateManualProctoringIncidentUseCase {
         },
       });
 
-      await tx.assessmentProctoringIncidentReviewAction.create({
+      await txClient.assessmentProctoringIncidentReviewAction.create({
         data: {
-          tenantId: workspace.tenantId,
-          workspaceId: workspace.workspaceId,
+          tenantId: workspace.tenantId!,
+          workspaceId: workspace.workspaceId!,
           incidentId: created.id,
           actionType: 'OPENED',
-          actorPrincipalId: workspace.actorId,
+          actorPrincipalId: workspace.actorId!,
           note: input.note ?? 'Manual incident opened by teacher',
         },
       });
 
-      return created;
+      return this.getIncident.execute(context, created.id, tx);
     });
-
-    return this.getIncident.execute(context, incident.id);
   }
 }
 </file>
@@ -50668,163 +50890,6 @@ ALTER TABLE "LearningAssessmentLink" ADD CONSTRAINT "LearningAssessmentLink_cour
 ALTER TABLE "LearningAssessmentLink" ADD CONSTRAINT "LearningAssessmentLink_sectionId_fkey" FOREIGN KEY ("sectionId") REFERENCES "LearningSection"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 ALTER TABLE "LearningAssessmentLink" ADD CONSTRAINT "LearningAssessmentLink_lessonId_fkey" FOREIGN KEY ("lessonId") REFERENCES "LearningLesson"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 ALTER TABLE "LearningAssessmentLink" ADD CONSTRAINT "LearningAssessmentLink_assessmentId_fkey" FOREIGN KEY ("assessmentId") REFERENCES "Assessment"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
-</file>
-
-<file path="backend/packages/data-platform/prisma/migrations/20260526162044_add_proctoring_incidents/migration.sql">
--- CreateEnum
-CREATE TYPE "AssessmentProctoringIncidentType" AS ENUM ('FOCUS_LOSS', 'FULLSCREEN_EXIT', 'COPY_PASTE_ACTIVITY', 'CONNECTIVITY_INTERRUPTION', 'SESSION_INTERRUPTION', 'MULTIPLE_WARNINGS', 'HIGH_SEVERITY_EVENT', 'SYSTEM_FLAG', 'MANUAL_REVIEW_FLAG');
-
--- CreateEnum
-CREATE TYPE "AssessmentProctoringIncidentStatus" AS ENUM ('OPEN', 'IN_REVIEW', 'RESOLVED', 'DISMISSED', 'ESCALATED');
-
--- CreateEnum
-CREATE TYPE "AssessmentProctoringIncidentSeverity" AS ENUM ('LOW', 'MEDIUM', 'HIGH', 'CRITICAL');
-
--- CreateEnum
-CREATE TYPE "AssessmentProctoringIncidentReviewActionType" AS ENUM ('OPENED', 'MARKED_IN_REVIEW', 'RESOLVED', 'DISMISSED', 'ESCALATED', 'REOPENED', 'NOTE_ADDED');
-
--- CreateTable
-CREATE TABLE "AssessmentProctoringIncident" (
-    "id" UUID NOT NULL,
-    "tenantId" UUID NOT NULL,
-    "workspaceId" UUID NOT NULL,
-    "sessionId" UUID NOT NULL,
-    "attemptId" UUID NOT NULL,
-    "assessmentId" UUID NOT NULL,
-    "learnerPrincipalId" UUID NOT NULL,
-    "incidentType" "AssessmentProctoringIncidentType" NOT NULL,
-    "severity" "AssessmentProctoringIncidentSeverity" NOT NULL,
-    "status" "AssessmentProctoringIncidentStatus" NOT NULL DEFAULT 'OPEN',
-    "title" TEXT NOT NULL,
-    "summary" TEXT NOT NULL,
-    "firstEventAt" TIMESTAMP(3) NOT NULL,
-    "lastEventAt" TIMESTAMP(3) NOT NULL,
-    "eventCount" INTEGER NOT NULL,
-    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updatedAt" TIMESTAMP(3) NOT NULL,
-    "reviewedAt" TIMESTAMP(3),
-    "reviewedByPrincipalId" UUID,
-    "resolvedAt" TIMESTAMP(3),
-    "resolution" TEXT,
-
-    CONSTRAINT "AssessmentProctoringIncident_pkey" PRIMARY KEY ("id")
-);
-
--- CreateTable
-CREATE TABLE "AssessmentProctoringIncidentEvent" (
-    "id" UUID NOT NULL,
-    "tenantId" UUID NOT NULL,
-    "workspaceId" UUID NOT NULL,
-    "incidentId" UUID NOT NULL,
-    "proctoringEventId" UUID NOT NULL,
-    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-
-    CONSTRAINT "AssessmentProctoringIncidentEvent_pkey" PRIMARY KEY ("id")
-);
-
--- CreateTable
-CREATE TABLE "AssessmentProctoringIncidentReviewAction" (
-    "id" UUID NOT NULL,
-    "tenantId" UUID NOT NULL,
-    "workspaceId" UUID NOT NULL,
-    "incidentId" UUID NOT NULL,
-    "actionType" "AssessmentProctoringIncidentReviewActionType" NOT NULL,
-    "actorPrincipalId" UUID NOT NULL,
-    "note" TEXT,
-    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-
-    CONSTRAINT "AssessmentProctoringIncidentReviewAction_pkey" PRIMARY KEY ("id")
-);
-
--- CreateIndex
-CREATE INDEX "AssessmentProctoringIncident_tenantId_idx" ON "AssessmentProctoringIncident"("tenantId");
-
--- CreateIndex
-CREATE INDEX "AssessmentProctoringIncident_workspaceId_idx" ON "AssessmentProctoringIncident"("workspaceId");
-
--- CreateIndex
-CREATE INDEX "AssessmentProctoringIncident_sessionId_idx" ON "AssessmentProctoringIncident"("sessionId");
-
--- CreateIndex
-CREATE INDEX "AssessmentProctoringIncident_attemptId_idx" ON "AssessmentProctoringIncident"("attemptId");
-
--- CreateIndex
-CREATE INDEX "AssessmentProctoringIncident_assessmentId_idx" ON "AssessmentProctoringIncident"("assessmentId");
-
--- CreateIndex
-CREATE INDEX "AssessmentProctoringIncident_learnerPrincipalId_idx" ON "AssessmentProctoringIncident"("learnerPrincipalId");
-
--- CreateIndex
-CREATE INDEX "AssessmentProctoringIncident_status_idx" ON "AssessmentProctoringIncident"("status");
-
--- CreateIndex
-CREATE INDEX "AssessmentProctoringIncident_severity_idx" ON "AssessmentProctoringIncident"("severity");
-
--- CreateIndex
-CREATE INDEX "AssessmentProctoringIncident_lastEventAt_idx" ON "AssessmentProctoringIncident"("lastEventAt");
-
--- CreateIndex
-CREATE INDEX "AssessmentProctoringIncident_workspaceId_attemptId_idx" ON "AssessmentProctoringIncident"("workspaceId", "attemptId");
-
--- CreateIndex
-CREATE INDEX "AssessmentProctoringIncident_workspaceId_assessmentId_idx" ON "AssessmentProctoringIncident"("workspaceId", "assessmentId");
-
--- CreateIndex
-CREATE INDEX "AssessmentProctoringIncident_workspaceId_sessionId_idx" ON "AssessmentProctoringIncident"("workspaceId", "sessionId");
-
--- CreateIndex
-CREATE INDEX "AssessmentProctoringIncident_workspaceId_status_idx" ON "AssessmentProctoringIncident"("workspaceId", "status");
-
--- CreateIndex
-CREATE INDEX "AssessmentProctoringIncident_workspaceId_severity_idx" ON "AssessmentProctoringIncident"("workspaceId", "severity");
-
--- CreateIndex
-CREATE INDEX "AssessmentProctoringIncident_workspaceId_assessmentId_statu_idx" ON "AssessmentProctoringIncident"("workspaceId", "assessmentId", "status");
-
--- CreateIndex
-CREATE INDEX "AssessmentProctoringIncident_workspaceId_attemptId_status_idx" ON "AssessmentProctoringIncident"("workspaceId", "attemptId", "status");
-
--- CreateIndex
-CREATE UNIQUE INDEX "AssessmentProctoringIncident_workspaceId_sessionId_incident_key" ON "AssessmentProctoringIncident"("workspaceId", "sessionId", "incidentType", "status");
-
--- CreateIndex
-CREATE INDEX "AssessmentProctoringIncidentEvent_tenantId_idx" ON "AssessmentProctoringIncidentEvent"("tenantId");
-
--- CreateIndex
-CREATE INDEX "AssessmentProctoringIncidentEvent_workspaceId_idx" ON "AssessmentProctoringIncidentEvent"("workspaceId");
-
--- CreateIndex
-CREATE INDEX "AssessmentProctoringIncidentEvent_incidentId_idx" ON "AssessmentProctoringIncidentEvent"("incidentId");
-
--- CreateIndex
-CREATE INDEX "AssessmentProctoringIncidentEvent_proctoringEventId_idx" ON "AssessmentProctoringIncidentEvent"("proctoringEventId");
-
--- CreateIndex
-CREATE UNIQUE INDEX "AssessmentProctoringIncidentEvent_workspaceId_incidentId_pr_key" ON "AssessmentProctoringIncidentEvent"("workspaceId", "incidentId", "proctoringEventId");
-
--- CreateIndex
-CREATE INDEX "AssessmentProctoringIncidentReviewAction_tenantId_idx" ON "AssessmentProctoringIncidentReviewAction"("tenantId");
-
--- CreateIndex
-CREATE INDEX "AssessmentProctoringIncidentReviewAction_workspaceId_idx" ON "AssessmentProctoringIncidentReviewAction"("workspaceId");
-
--- CreateIndex
-CREATE INDEX "AssessmentProctoringIncidentReviewAction_incidentId_idx" ON "AssessmentProctoringIncidentReviewAction"("incidentId");
-
--- AddForeignKey
-ALTER TABLE "AssessmentProctoringIncident" ADD CONSTRAINT "AssessmentProctoringIncident_sessionId_fkey" FOREIGN KEY ("sessionId") REFERENCES "AssessmentProctoringSession"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "AssessmentProctoringIncident" ADD CONSTRAINT "AssessmentProctoringIncident_attemptId_fkey" FOREIGN KEY ("attemptId") REFERENCES "AssessmentAttempt"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "AssessmentProctoringIncidentEvent" ADD CONSTRAINT "AssessmentProctoringIncidentEvent_incidentId_fkey" FOREIGN KEY ("incidentId") REFERENCES "AssessmentProctoringIncident"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "AssessmentProctoringIncidentEvent" ADD CONSTRAINT "AssessmentProctoringIncidentEvent_proctoringEventId_fkey" FOREIGN KEY ("proctoringEventId") REFERENCES "AssessmentProctoringEvent"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "AssessmentProctoringIncidentReviewAction" ADD CONSTRAINT "AssessmentProctoringIncidentReviewAction_incidentId_fkey" FOREIGN KEY ("incidentId") REFERENCES "AssessmentProctoringIncident"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 </file>
 
 <file path="backend/packages/data-platform/prisma/migrations/20260526193000_add_proctoring_sessions_and_events/migration.sql">
@@ -109543,6 +109608,10 @@ Creators and admins can release graded assessment results to learners. Learners 
 
 - Added a proctoring foundation epic covering safe session lifecycle, metadata-only monitoring ingestion, learner disclosure, and teacher timeline review.
 - Live monitoring incident triage remains the next follow-up epic slice rather than part of this foundation task.
+
+## Task 014F Additions
+
+- Hardened backend proctoring incident triage, including transaction runner typings, validation rules, note length rules, and strict status machine validation.
 </file>
 
 <file path="docs/roadmap/sprint-plan.md">
@@ -109621,6 +109690,11 @@ Each ticket includes:
 
 - Added proctoring gateway and metadata-only attempt monitoring foundation after 014D attempt reliability hardening.
 - Deferred live monitoring triage, realtime supervision, media capture, and vendor integrations to the follow-up task stream.
+
+## Task 014F Additions
+
+- Hardened backend proctoring incident triage use cases, contracts, and schema migrations.
+- Established strict status lifecycle state machine, note character limit validation, and consistent entity matching on manual incident creation.
 </file>
 
 <file path="docs/standards/api-standard.md">
@@ -113209,7 +113283,7 @@ This document serves as a permanent continuity/backtrace system for the Mentrily
   - Configured workspace scoping validation on all read and write triage APIs to prevent cross-workspace data leakage.
 - **Prisma / Migration Changes**:
   - Added new Prisma models: `AssessmentProctoringIncident`, `AssessmentProctoringIncidentEvent`, and `AssessmentProctoringIncidentReviewAction` to the PostgreSQL schema.
-  - Deployed migration `20260526162044_add_proctoring_incidents` to the test database.
+  - Deployed migration `20260526194000_add_proctoring_incidents` to the test database (renamed from `20260526162044_add_proctoring_incidents` to resolve chronological dependency ordering issues with proctoring sessions and events).
 - **Work Completed**:
   - Added shared data contracts for proctoring incidents, review actions, and triage API request/response payloads in `@mentrily/contract-catalog` and `@mentrily/domain-contracts`.
   - Implemented 6 new use cases in `proctoring-incident.use-cases.ts`:
@@ -113219,6 +113293,10 @@ This document serves as a permanent continuity/backtrace system for the Mentrily
     - `UpdateProctoringIncidentStatusUseCase`
     - `AddProctoringIncidentNoteUseCase`
     - `CreateManualProctoringIncidentUseCase`
+  - Hardened backend use cases to eliminate unsafe `any` casts by using NestJS `TransactionRunner` and typing the transaction context parameter native to the data-platform client wrapper.
+  - Enforced strict state transitions in the incident lifecycle (e.g. `OPEN` -> `IN_REVIEW`/`RESOLVED`/`DISMISSED`/`ESCALATED`; `IN_REVIEW` -> `RESOLVED`/`DISMISSED`/`ESCALATED`; `RESOLVED`/`DISMISSED` -> `OPEN`/`IN_REVIEW`).
+  - Added character limit validation (max 2000 characters) on status transition notes, new review action notes, and manual incident creation notes.
+  - Implemented strict inputs consistency checking in `CreateManualProctoringIncidentUseCase` to ensure the session, attempt, assessment, and learner IDs strictly match.
   - Secured all endpoints in `ProctoringController` under workspace-scoped checks, requiring the `ASSESSMENT_MONITOR` (or fallback `ASSESSMENT_UPDATE`) permission.
   - Wired automatic incident generation into `RecordProctoringEventUseCase`.
   - Added comprehensive integration tests in `proctoring-incident-api.integration.spec.ts` covering immediate vs window-grouped incidents, status transitions, review notes, manual incident creation, permission enforcement, and workspace isolation.
@@ -113249,7 +113327,7 @@ This document serves as a permanent continuity/backtrace system for the Mentrily
 - **Remaining Gaps**:
   - Real-time notification socket push for active incident alerts remains future work.
 - **Next Recommended Task**:
-  - Proceed with the frontend Proctoring Incident Triage UI implementation.
+  - Task 014F1 — Proctoring Incident Triage Frontend Dashboard and API Client Integration.
 
 ---
 

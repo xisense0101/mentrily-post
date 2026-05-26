@@ -15,7 +15,7 @@ This document serves as a permanent continuity/backtrace system for the Mentrily
   - Configured workspace scoping validation on all read and write triage APIs to prevent cross-workspace data leakage.
 - **Prisma / Migration Changes**:
   - Added new Prisma models: `AssessmentProctoringIncident`, `AssessmentProctoringIncidentEvent`, and `AssessmentProctoringIncidentReviewAction` to the PostgreSQL schema.
-  - Deployed migration `20260526162044_add_proctoring_incidents` to the test database.
+  - Deployed migration `20260526194000_add_proctoring_incidents` to the test database (renamed from `20260526162044_add_proctoring_incidents` to resolve chronological dependency ordering issues with proctoring sessions and events).
 - **Work Completed**:
   - Added shared data contracts for proctoring incidents, review actions, and triage API request/response payloads in `@mentrily/contract-catalog` and `@mentrily/domain-contracts`.
   - Implemented 6 new use cases in `proctoring-incident.use-cases.ts`:
@@ -25,6 +25,10 @@ This document serves as a permanent continuity/backtrace system for the Mentrily
     - `UpdateProctoringIncidentStatusUseCase`
     - `AddProctoringIncidentNoteUseCase`
     - `CreateManualProctoringIncidentUseCase`
+  - Hardened backend use cases to eliminate unsafe `any` casts by using NestJS `TransactionRunner` and typing the transaction context parameter native to the data-platform client wrapper.
+  - Enforced strict state transitions in the incident lifecycle (e.g. `OPEN` -> `IN_REVIEW`/`RESOLVED`/`DISMISSED`/`ESCALATED`; `IN_REVIEW` -> `RESOLVED`/`DISMISSED`/`ESCALATED`; `RESOLVED`/`DISMISSED` -> `OPEN`/`IN_REVIEW`).
+  - Added character limit validation (max 2000 characters) on status transition notes, new review action notes, and manual incident creation notes.
+  - Implemented strict inputs consistency checking in `CreateManualProctoringIncidentUseCase` to ensure the session, attempt, assessment, and learner IDs strictly match.
   - Secured all endpoints in `ProctoringController` under workspace-scoped checks, requiring the `ASSESSMENT_MONITOR` (or fallback `ASSESSMENT_UPDATE`) permission.
   - Wired automatic incident generation into `RecordProctoringEventUseCase`.
   - Added comprehensive integration tests in `proctoring-incident-api.integration.spec.ts` covering immediate vs window-grouped incidents, status transitions, review notes, manual incident creation, permission enforcement, and workspace isolation.
@@ -55,7 +59,7 @@ This document serves as a permanent continuity/backtrace system for the Mentrily
 - **Remaining Gaps**:
   - Real-time notification socket push for active incident alerts remains future work.
 - **Next Recommended Task**:
-  - Proceed with the frontend Proctoring Incident Triage UI implementation.
+  - Task 014F1 — Proctoring Incident Triage Frontend Dashboard and API Client Integration.
 
 ---
 

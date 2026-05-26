@@ -1,9 +1,13 @@
 import { Inject, Injectable } from '@nestjs/common';
 import {
+  AssessmentProctoringIncident,
+  AssessmentProctoringEvent,
+  AssessmentProctoringIncidentReviewAction,
   AssessmentProctoringIncidentSeverity,
   AssessmentProctoringIncidentType,
   AssessmentProctoringIncidentReviewActionType,
   AssessmentProctoringEventType,
+  AssessmentProctoringIncidentStatus,
 } from '@prisma/client';
 import type {
   ProctoringIncidentContract,
@@ -14,6 +18,10 @@ import type {
   UpdateProctoringIncidentStatusRequestContract,
   AddProctoringIncidentNoteRequestContract,
   CreateManualProctoringIncidentRequestContract,
+  ProctoringIncidentSeverityContract,
+  ProctoringIncidentStatusContract,
+  ProctoringIncidentReviewActionTypeContract,
+  ProctoringIncidentTypeContract,
 } from '@mentrily/contract-catalog';
 import {
   AppError,
@@ -21,6 +29,8 @@ import {
   PermissionEvaluator,
   RequestContext,
   TransactionContext,
+  TRANSACTION_RUNNER,
+  TransactionRunner,
 } from '@mentrily/service-core';
 import { PrismaService, getPrismaClient } from '@mentrily/data-platform';
 import { PermissionCatalog } from '@mentrily/security-toolkit';
@@ -117,7 +127,7 @@ function getEventTypesForIncidentType(
 
 async function mapIncidentsToContracts(
   prisma: PrismaService,
-  incidents: any[],
+  incidents: AssessmentProctoringIncident[],
   transaction?: TransactionContext,
 ): Promise<ProctoringIncidentContract[]> {
   const principalIds = new Set<string>();
@@ -144,9 +154,9 @@ async function mapIncidentsToContracts(
     assessmentId: incident.assessmentId,
     learnerPrincipalId: incident.learnerPrincipalId,
     learnerDisplayName: principalMap.get(incident.learnerPrincipalId) ?? 'Unknown',
-    incidentType: incident.incidentType,
-    severity: incident.severity as any,
-    status: incident.status as any,
+    incidentType: incident.incidentType as ProctoringIncidentTypeContract,
+    severity: incident.severity as ProctoringIncidentSeverityContract,
+    status: incident.status as ProctoringIncidentStatusContract,
     title: incident.title,
     summary: incident.summary,
     firstEventAt: incident.firstEventAt.toISOString(),
@@ -168,9 +178,9 @@ async function mapIncidentsToContracts(
 
 async function mapIncidentDetailToContract(
   prisma: PrismaService,
-  incident: any,
-  events: any[],
-  reviewActions: any[],
+  incident: AssessmentProctoringIncident,
+  events: AssessmentProctoringEvent[],
+  reviewActions: AssessmentProctoringIncidentReviewAction[],
   policy: ProctoringPolicyService,
   transaction?: TransactionContext,
 ): Promise<ProctoringIncidentDetailContract> {
@@ -196,7 +206,7 @@ async function mapIncidentDetailToContract(
   const mappedActions: ProctoringIncidentReviewActionContract[] = reviewActions.map((action) => ({
     id: action.id,
     incidentId: action.incidentId,
-    actionType: action.actionType as any,
+    actionType: action.actionType as ProctoringIncidentReviewActionTypeContract,
     actorPrincipalId: action.actorPrincipalId,
     actorDisplayName: principalMap.get(action.actorPrincipalId) ?? 'Unknown',
     note: action.note ?? undefined,
@@ -493,6 +503,7 @@ export class GetProctoringIncidentUseCase {
   async execute(
     context: RequestContext,
     incidentId: string,
+    transaction?: TransactionContext,
   ): Promise<ProctoringIncidentDetailContract> {
     const workspace = requireWorkspaceActor(context);
     const permission = await this.permissions.evaluate(
@@ -508,7 +519,7 @@ export class GetProctoringIncidentUseCase {
       throw new AppError('FORBIDDEN', 'permission denied', 403);
     }
 
-    const client = getPrismaClient(this.prisma);
+    const client = getPrismaClient(this.prisma, transaction);
     const incident = await client.assessmentProctoringIncident.findUnique({
       where: { id: incidentId },
       include: {
@@ -535,6 +546,7 @@ export class GetProctoringIncidentUseCase {
       events,
       incident.reviewActions,
       this.policy,
+      transaction,
     );
   }
 }
@@ -570,8 +582,10 @@ export class ListProctoringIncidentsUseCase {
         workspaceId: workspace.workspaceId,
         ...(query.assessmentId ? { assessmentId: query.assessmentId } : {}),
         ...(query.attemptId ? { attemptId: query.attemptId } : {}),
-        ...(query.status ? { status: query.status as any } : {}),
-        ...(query.severity ? { severity: query.severity as any } : {}),
+        ...(query.status ? { status: query.status as AssessmentProctoringIncidentStatus } : {}),
+        ...(query.severity
+          ? { severity: query.severity as AssessmentProctoringIncidentSeverity }
+          : {}),
       },
       orderBy: { lastEventAt: 'desc' },
     });
@@ -650,6 +664,7 @@ export class UpdateProctoringIncidentStatusUseCase {
     @Inject(GetProctoringIncidentUseCase)
     private readonly getIncident: GetProctoringIncidentUseCase,
     @Inject(PERMISSION_EVALUATOR) private readonly permissions: PermissionEvaluator,
+    @Inject(TRANSACTION_RUNNER) private readonly transactionRunner: TransactionRunner,
   ) {}
 
   async execute(
@@ -671,6 +686,10 @@ export class UpdateProctoringIncidentStatusUseCase {
       throw new AppError('FORBIDDEN', 'permission denied', 403);
     }
 
+    if (input.note && (typeof input.note !== 'string' || input.note.length > 2000)) {
+      throw new AppError('VALIDATION_ERROR', 'note text must not exceed 2000 characters', 400);
+    }
+
     const client = getPrismaClient(this.prisma);
     const incident = await client.assessmentProctoringIncident.findUnique({
       where: { id: incidentId },
@@ -680,8 +699,35 @@ export class UpdateProctoringIncidentStatusUseCase {
       throw new AppError('NOT_FOUND', 'incident not found', 404);
     }
 
+    const currentStatus = incident.status;
+    const targetStatus = input.status;
+
+    if (currentStatus === targetStatus) {
+      throw new AppError('VALIDATION_ERROR', `Incident is already in status ${targetStatus}`, 400);
+    }
+
+    // Check valid transitions
+    let isValid = false;
+    if (currentStatus === 'OPEN') {
+      isValid = ['IN_REVIEW', 'RESOLVED', 'DISMISSED', 'ESCALATED'].includes(targetStatus);
+    } else if (currentStatus === 'IN_REVIEW') {
+      isValid = ['RESOLVED', 'DISMISSED', 'ESCALATED'].includes(targetStatus);
+    } else if (currentStatus === 'ESCALATED') {
+      isValid = ['IN_REVIEW', 'RESOLVED', 'DISMISSED'].includes(targetStatus);
+    } else if (currentStatus === 'RESOLVED' || currentStatus === 'DISMISSED') {
+      isValid = ['OPEN', 'IN_REVIEW'].includes(targetStatus);
+    }
+
+    if (!isValid) {
+      throw new AppError(
+        'VALIDATION_ERROR',
+        `Invalid status transition from ${currentStatus} to ${targetStatus}`,
+        400,
+      );
+    }
+
     let actionType: AssessmentProctoringIncidentReviewActionType;
-    switch (input.status) {
+    switch (targetStatus) {
       case 'OPEN':
         actionType = 'REOPENED';
         break;
@@ -701,35 +747,36 @@ export class UpdateProctoringIncidentStatusUseCase {
         throw new AppError('VALIDATION_ERROR', 'invalid status value', 400);
     }
 
-    const isTerminal = input.status === 'RESOLVED' || input.status === 'DISMISSED';
+    const isTerminal = targetStatus === 'RESOLVED' || targetStatus === 'DISMISSED';
     const now = new Date();
 
-    await this.prisma.$transaction(async (tx: any) => {
-      await tx.assessmentProctoringIncident.update({
+    return this.transactionRunner.run(async (tx) => {
+      const txClient = getPrismaClient(this.prisma, tx);
+      await txClient.assessmentProctoringIncident.update({
         where: { id: incidentId },
         data: {
-          status: input.status as any,
+          status: targetStatus as AssessmentProctoringIncidentStatus,
           reviewedAt: now,
-          reviewedByPrincipalId: workspace.actorId,
+          reviewedByPrincipalId: workspace.actorId!,
           ...(isTerminal
-            ? { resolvedAt: now, resolution: input.note ?? `Status changed to ${input.status}` }
+            ? { resolvedAt: now, resolution: input.note ?? `Status changed to ${targetStatus}` }
             : { resolvedAt: null, resolution: null }),
         },
       });
 
-      await tx.assessmentProctoringIncidentReviewAction.create({
+      await txClient.assessmentProctoringIncidentReviewAction.create({
         data: {
-          tenantId: workspace.tenantId,
-          workspaceId: workspace.workspaceId,
+          tenantId: workspace.tenantId!,
+          workspaceId: workspace.workspaceId!,
           incidentId,
           actionType,
-          actorPrincipalId: workspace.actorId,
+          actorPrincipalId: workspace.actorId!,
           note: input.note ?? null,
         },
       });
-    });
 
-    return this.getIncident.execute(context, incidentId);
+      return this.getIncident.execute(context, incidentId, tx);
+    });
   }
 }
 
@@ -740,6 +787,7 @@ export class AddProctoringIncidentNoteUseCase {
     @Inject(GetProctoringIncidentUseCase)
     private readonly getIncident: GetProctoringIncidentUseCase,
     @Inject(PERMISSION_EVALUATOR) private readonly permissions: PermissionEvaluator,
+    @Inject(TRANSACTION_RUNNER) private readonly transactionRunner: TransactionRunner,
   ) {}
 
   async execute(
@@ -765,6 +813,10 @@ export class AddProctoringIncidentNoteUseCase {
       throw new AppError('VALIDATION_ERROR', 'note text is required', 400);
     }
 
+    if (input.note.length > 2000) {
+      throw new AppError('VALIDATION_ERROR', 'note text must not exceed 2000 characters', 400);
+    }
+
     const client = getPrismaClient(this.prisma);
     const incident = await client.assessmentProctoringIncident.findUnique({
       where: { id: incidentId },
@@ -774,27 +826,28 @@ export class AddProctoringIncidentNoteUseCase {
       throw new AppError('NOT_FOUND', 'incident not found', 404);
     }
 
-    await this.prisma.$transaction(async (tx: any) => {
-      await tx.assessmentProctoringIncidentReviewAction.create({
+    return this.transactionRunner.run(async (tx) => {
+      const txClient = getPrismaClient(this.prisma, tx);
+      await txClient.assessmentProctoringIncidentReviewAction.create({
         data: {
-          tenantId: workspace.tenantId,
-          workspaceId: workspace.workspaceId,
+          tenantId: workspace.tenantId!,
+          workspaceId: workspace.workspaceId!,
           incidentId,
           actionType: 'NOTE_ADDED',
-          actorPrincipalId: workspace.actorId,
+          actorPrincipalId: workspace.actorId!,
           note: input.note,
         },
       });
 
-      await tx.assessmentProctoringIncident.update({
+      await txClient.assessmentProctoringIncident.update({
         where: { id: incidentId },
         data: {
           updatedAt: new Date(),
         },
       });
-    });
 
-    return this.getIncident.execute(context, incidentId);
+      return this.getIncident.execute(context, incidentId, tx);
+    });
   }
 }
 
@@ -805,6 +858,7 @@ export class CreateManualProctoringIncidentUseCase {
     @Inject(GetProctoringIncidentUseCase)
     private readonly getIncident: GetProctoringIncidentUseCase,
     @Inject(PERMISSION_EVALUATOR) private readonly permissions: PermissionEvaluator,
+    @Inject(TRANSACTION_RUNNER) private readonly transactionRunner: TransactionRunner,
   ) {}
 
   async execute(
@@ -825,6 +879,10 @@ export class CreateManualProctoringIncidentUseCase {
       throw new AppError('FORBIDDEN', 'permission denied', 403);
     }
 
+    if (input.note && (typeof input.note !== 'string' || input.note.length > 2000)) {
+      throw new AppError('VALIDATION_ERROR', 'note text must not exceed 2000 characters', 400);
+    }
+
     const client = getPrismaClient(this.prisma);
 
     const session = await client.assessmentProctoringSession.findUnique({
@@ -835,19 +893,42 @@ export class CreateManualProctoringIncidentUseCase {
       throw new AppError('NOT_FOUND', 'proctoring session not found', 404);
     }
 
+    if (session.attemptId !== input.attemptId) {
+      throw new AppError(
+        'VALIDATION_ERROR',
+        'attemptId does not match the proctoring session',
+        400,
+      );
+    }
+    if (session.assessmentId !== input.assessmentId) {
+      throw new AppError(
+        'VALIDATION_ERROR',
+        'assessmentId does not match the proctoring session',
+        400,
+      );
+    }
+    if (session.learnerPrincipalId !== input.learnerPrincipalId) {
+      throw new AppError(
+        'VALIDATION_ERROR',
+        'learnerPrincipalId does not match the proctoring session',
+        400,
+      );
+    }
+
     const now = new Date();
 
-    const incident = await this.prisma.$transaction(async (tx: any) => {
-      const created = await tx.assessmentProctoringIncident.create({
+    return this.transactionRunner.run(async (tx) => {
+      const txClient = getPrismaClient(this.prisma, tx);
+      const created = await txClient.assessmentProctoringIncident.create({
         data: {
-          tenantId: workspace.tenantId,
-          workspaceId: workspace.workspaceId,
+          tenantId: workspace.tenantId!,
+          workspaceId: workspace.workspaceId!,
           sessionId: input.sessionId,
           attemptId: input.attemptId,
           assessmentId: input.assessmentId,
           learnerPrincipalId: input.learnerPrincipalId,
-          incidentType: input.incidentType as any,
-          severity: input.severity as any,
+          incidentType: input.incidentType as AssessmentProctoringIncidentType,
+          severity: input.severity as AssessmentProctoringIncidentSeverity,
           status: 'OPEN',
           title: input.title,
           summary: input.summary,
@@ -857,20 +938,18 @@ export class CreateManualProctoringIncidentUseCase {
         },
       });
 
-      await tx.assessmentProctoringIncidentReviewAction.create({
+      await txClient.assessmentProctoringIncidentReviewAction.create({
         data: {
-          tenantId: workspace.tenantId,
-          workspaceId: workspace.workspaceId,
+          tenantId: workspace.tenantId!,
+          workspaceId: workspace.workspaceId!,
           incidentId: created.id,
           actionType: 'OPENED',
-          actorPrincipalId: workspace.actorId,
+          actorPrincipalId: workspace.actorId!,
           note: input.note ?? 'Manual incident opened by teacher',
         },
       });
 
-      return created;
+      return this.getIncident.execute(context, created.id, tx);
     });
-
-    return this.getIncident.execute(context, incident.id);
   }
 }

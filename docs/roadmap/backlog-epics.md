@@ -122,3 +122,7 @@
 
 - Added a proctoring foundation epic covering safe session lifecycle, metadata-only monitoring ingestion, learner disclosure, and teacher timeline review.
 - Live monitoring incident triage remains the next follow-up epic slice rather than part of this foundation task.
+
+## Task 014F Additions
+
+- Hardened backend proctoring incident triage, including transaction runner typings, validation rules, note length rules, and strict status machine validation.
