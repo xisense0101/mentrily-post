@@ -9,6 +9,7 @@ const navItems = [
   { href: '/content', label: 'Content Studio' },
   { href: '/assessments', label: 'Assessments' },
   { href: '/grading/manual-review', label: 'Grading' },
+  { href: '/proctoring/incidents', label: 'Proctoring' },
   { href: '/media', label: 'Media' },
   { href: '/settings/notifications', label: 'Notification Settings' },
 ];

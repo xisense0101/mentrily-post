@@ -2,6 +2,167 @@
 
 This document serves as a permanent continuity/backtrace system for the Mentrily SaaS codebase. Every task must record its progress here to ensure a reliable audit trail and clear path forward.
 
+### Task 014G — Live Monitoring Review Workflow and Proctoring Incident Triage Frontend Dashboard
+
+- **Task ID**: 014G
+- **Previous Task**: Task 014F — Live Monitoring Review Workflow and Proctoring Incident Triage
+- **Implementation Status**: Complete, full validation matrix passed (package-level)
+- **Baseline Validation Discipline**:
+  - `git status --short`: clean (only untracked `stremio_4.4.168-1_amd64.deb`)
+  - `pnpm --filter @mentrily/portal test`: ✅ PASS (62 test files, 248 tests) — green before any changes
+  - `pnpm --filter @mentrily/portal typecheck`: ✅ PASS — green before any changes
+  - `pnpm --filter @mentrily/platform-api test`: ✅ PASS (92 files, 467 tests)
+  - `pnpm --filter @mentrily/platform-api typecheck`: ✅ PASS
+- **Phase 1 — Inspection Findings**:
+  - All 014F incident backend routes confirmed at `/workspace/proctoring/incidents/**`
+  - Contract catalog and domain contracts already contained full incident type definitions (added in 014F)
+  - Existing portal API client had no incident methods — identified as implementation gap for 014G
+  - `MonitoringTimeline` component existed but had no incident badge support
+  - `AttemptMonitoringPage` fetched timeline/active summary but not incidents
+  - No incident list/detail routes existed in the portal
+  - Nav layout had no Proctoring link
+- **Frontend Incident Dashboard Model Decision**:
+  - Consume existing 014F backend routes directly — no backend changes required
+  - Incident list page with status/severity filters
+  - Incident detail page with review actions, note form, and linked event timeline
+  - Monitoring timeline incident badges as safe frontend composition (event-to-incident map)
+  - Incident summary cards on both incident list page and attempt monitoring page
+  - No WebSocket/realtime transport added (future work)
+  - No learner-facing triage exposed
+- **Work Completed**:
+  - Inspected 014F incident backend and portal proctoring boundaries
+  - Updated `proctoring-api-client.ts` with 6 new incident methods:
+    - `listProctoringIncidents(query?)` — GET with status/severity/assessment/attempt filters
+    - `getProctoringIncidentSummary()` — GET aggregate counts
+    - `getProctoringIncidentDetail(incidentId)` — GET full incident detail
+    - `updateProctoringIncidentStatus(incidentId, request)` — POST status transition
+    - `addProctoringIncidentNote(incidentId, request)` — POST note
+    - `createManualProctoringIncident(request)` — POST manual flag
+  - Added `incident-status-badge.tsx` — color-coded status badge for all 5 statuses
+  - Added `incident-severity-badge.tsx` — color-coded severity badge for all 4 severities
+  - Added `incident-summary-cards.tsx` — aggregate count cards (workspace-scoped, no raw data)
+  - Added `incident-list.tsx` — table with safe fields only, links to detail
+  - Added `incident-linked-events.tsx` — safe event summary list (no raw payload)
+  - Added `incident-review-actions.tsx` — action buttons + review history (disable current-status, disable while submitting)
+  - Added `incident-note-form.tsx` — note input with 2000-char limit, validation, char counter
+  - Added `incident-detail.tsx` — full detail component composing all sub-components
+  - Added `proctoring-incidents-page.tsx` — list page route with filters, summary cards, loading/error/empty states
+  - Added `proctoring-incident-detail-page.tsx` — detail page route with breadcrumb
+  - Added App Router pages: `/proctoring/incidents/page.tsx` and `/proctoring/incidents/[incidentId]/page.tsx`
+  - Updated `monitoring-timeline.tsx` — added optional `incidentsByEventId` map for incident badges
+  - Updated `attempt-monitoring-page.tsx` — fetches incidents for attempt, shows summary cards when open incidents exist
+  - Updated workspace layout nav — added Proctoring link pointing to `/proctoring/incidents`
+  - Added portal tests: `proctoring-api-client.spec.ts` (9 tests), `incident-list.spec.tsx` (9 tests), `incident-badges.spec.tsx` (9 tests), `incident-review-actions.spec.tsx` (18 tests — review actions + note form), `monitoring-timeline.spec.tsx` (8 tests)
+  - Preserved learner disclosure/status behavior (unchanged)
+  - Preserved 014D attempt reliability behavior (unchanged)
+  - Preserved 014E proctoring event ingestion safety (unchanged)
+  - Preserved 014F backend incident policy (unchanged — no backend changes)
+- **Backend/Contract Compatibility**:
+  - No backend changes required. Frontend consumed existing 014F routes directly.
+  - No contract-catalog changes required. Domain contracts already had all incident types.
+- **Exact Files Created/Changed**:
+  - `frontend/apps/portal/src/modules/proctoring/api/proctoring-api-client.ts` (updated — added 6 incident methods)
+  - `frontend/apps/portal/src/modules/proctoring/components/incident-status-badge.tsx` (new)
+  - `frontend/apps/portal/src/modules/proctoring/components/incident-severity-badge.tsx` (new)
+  - `frontend/apps/portal/src/modules/proctoring/components/incident-summary-cards.tsx` (new)
+  - `frontend/apps/portal/src/modules/proctoring/components/incident-list.tsx` (new)
+  - `frontend/apps/portal/src/modules/proctoring/components/incident-linked-events.tsx` (new)
+  - `frontend/apps/portal/src/modules/proctoring/components/incident-review-actions.tsx` (new)
+  - `frontend/apps/portal/src/modules/proctoring/components/incident-note-form.tsx` (new)
+  - `frontend/apps/portal/src/modules/proctoring/components/incident-detail.tsx` (new)
+  - `frontend/apps/portal/src/modules/proctoring/components/monitoring-timeline.tsx` (updated — incident badge support)
+  - `frontend/apps/portal/src/modules/proctoring/routes/proctoring-incidents-page.tsx` (new)
+  - `frontend/apps/portal/src/modules/proctoring/routes/proctoring-incident-detail-page.tsx` (new)
+  - `frontend/apps/portal/src/modules/proctoring/routes/attempt-monitoring-page.tsx` (updated — incident summary + list fetch)
+  - `frontend/apps/portal/src/app/(workspace)/proctoring/incidents/page.tsx` (new)
+  - `frontend/apps/portal/src/app/(workspace)/proctoring/incidents/[incidentId]/page.tsx` (new)
+  - `frontend/apps/portal/src/app/(workspace)/layout.tsx` (updated — Proctoring nav link)
+  - `frontend/apps/portal/src/modules/proctoring/tests/proctoring-api-client.spec.ts` (updated — 9 tests)
+  - `frontend/apps/portal/src/modules/proctoring/tests/incident-list.spec.tsx` (new — 9 tests)
+  - `frontend/apps/portal/src/modules/proctoring/tests/incident-badges.spec.tsx` (new — 9 tests)
+  - `frontend/apps/portal/src/modules/proctoring/tests/incident-review-actions.spec.tsx` (new — 18 tests)
+  - `frontend/apps/portal/src/modules/proctoring/tests/monitoring-timeline.spec.tsx` (updated — 8 tests)
+- **Validation Performed**:
+  - ✅ `git status --short` (baseline): **PASS** (clean)
+  - ✅ `pnpm --filter @mentrily/portal typecheck` (baseline): **PASS**
+  - ✅ `pnpm --filter @mentrily/portal test` (baseline): **PASS** (62 files, 248 tests)
+  - ✅ `pnpm --filter @mentrily/portal typecheck` (post-implementation): **PASS**
+  - ✅ `pnpm --filter @mentrily/portal test` (post-implementation): **PASS** (65 files, 296 tests)
+  - ✅ `pnpm --filter @mentrily/platform-api test`: **PASS** (92 files, 467 tests)
+  - ✅ `pnpm --filter @mentrily/platform-api typecheck`: **PASS**
+  - ✅ `pnpm --filter @mentrily/platform-api test:integration`: **PASS** (1 file, 8 tests — proctoring-incident-api.integration.spec.ts)
+  - ✅ `pnpm --filter @mentrily/platform-worker test`: **PASS** (7 files, 20 tests)
+  - ✅ `pnpm --filter @mentrily/platform-worker typecheck`: **PASS**
+  - ✅ `pnpm --filter @mentrily/data-platform prisma:validate`: **PASS** (schema valid 🚀)
+  - ✅ `pnpm --filter @mentrily/data-platform prisma:generate`: **PASS** (Prisma Client v6.19.3 generated)
+  - ✅ `pnpm --filter @mentrily/contract-catalog typecheck`: **PASS**
+  - ✅ `pnpm --filter @mentrily/domain-contracts typecheck`: **PASS**
+  - ✅ `pnpm --filter @mentrily/security-toolkit test`: **PASS** (1 file, 9 tests)
+  - ✅ `pnpm --filter @mentrily/portal build`: **PASS** (Next.js production build)
+  - ✅ `node automation/verify-env-examples.mjs`: **PASS** (all env example files structurally aligned)
+  - ✅ `pnpm lint`: **PASS** (13/13 tasks, 0 errors, warnings only)
+  - ✅ `pnpm typecheck`: **PASS** (20/20 tasks)
+  - ✅ `pnpm test`: **PASS** (13/13 tasks)
+  - ✅ `pnpm build`: **PASS** (13/13 tasks)
+  - ✅ `pnpm db:test:up`: **PASS** (container started)
+  - ✅ `pnpm --filter @mentrily/data-platform prisma:migrate:deploy`: **PASS** (21 migrations, none pending)
+  - ✅ `node --env-file=.env.test automation/run-integration-tests.mjs`: **PASS** (all integration tests passed)
+  - ✅ `pnpm test:integration`: **PASS**
+  - ✅ `pnpm test:e2e`: **PASS** (all suites)
+  - ✅ `pnpm e2e:content`: **PASS** (Content Studio E2E — 1 test, 32s)
+  - ✅ `pnpm e2e:learning`: **PASS** (Learning Delivery E2E — 1 test, 30s)
+  - ✅ `pnpm e2e:assessment`: **PASS** (Assessment Builder E2E — 1 test, 31s)
+  - ✅ `pnpm e2e:assessment-attempt`: **PASS** (Assessment Attempt E2E — 1 test, 47s)
+  - ✅ `pnpm e2e:assessment-grading`: **PASS** (Assessment Grading E2E — 1 test, 34s)
+  - ✅ `pnpm e2e:assessment-result`: **PASS** (Assessment Result E2E — 1 test, 36s)
+  - ✅ `pnpm e2e:assessment-reliability`: **PASS** (Assessment Reliability — 4 files, 9 tests)
+  - ✅ `pnpm db:test:down`: **PASS** (container stopped and removed)
+- **Static Safety Scan Results**:
+  - All grep hits for `tenantId`, `workspaceId`, `getUserMedia`, `getDisplayMedia`, `MediaRecorder`, `KeyboardEvent`, `storageKey`, `graderNotes`, `unreleasedScore`, `clipboardData`, `rawPayload`, `cheatingScore`, `riskScore`, `eval`, `new Function` in portal/proctoring source are exclusively inside test assertion bodies (`.not.toContain()` / `queryByText` guards), not in production implementation files.
+  - No surveillance APIs in implementation code.
+  - No private grading/result/storage data in implementation code.
+  - No raw proctoring event payload exposure in implementation code.
+- **Proof Command Outputs**:
+  - `find ...` confirms all incident frontend files exist: 19 matching files across components/routes/tests
+  - `grep listProctoringIncidents|getProctoringIncidentDetail|updateProctoringIncidentStatus|addProctoringIncidentNote` confirms client methods exist in `proctoring-api-client.ts`, used in `incident-detail.tsx` and `proctoring-incidents-page.tsx`, and tested in `proctoring-api-client.spec.ts`
+- **Data Safety / Privacy Confirmation**:
+  - No hidden monitoring or surveillance APIs
+  - No automatic cheating verdict or automatic grading/result penalty
+  - No raw webcam/screen/audio capture
+  - No raw clipboard content collection
+  - No raw keystroke logging
+  - No biometric/face recognition
+  - No tenantId/workspaceId trusted from frontend request bodies
+  - No cross-workspace incident access
+  - No storageKey/objectKey/private URL leak
+  - No unreleased score or private grading data leak
+  - No raw proctoring event payload leak
+  - Learner incident triage not exposed
+  - Teacher review notes visible only in teacher-facing incident detail
+- **Learner-Facing Behavior**:
+  - Learner proctoring disclosure/status UI unchanged
+  - Learner cannot access `/proctoring/incidents/**` routes (workspace layout is teacher/creator scoped by session/auth)
+  - Learner does not see teacher review notes
+  - No automatic penalty applied to learner based on incident status
+- **Permission / Security Decision**:
+  - All incident API calls require authenticated workspace session (enforced by backend `ASSESSMENT_MONITOR` permission on 014F routes)
+  - Frontend does not add or trust tenantId/workspaceId in request bodies
+  - Incident detail and action routes are behind the workspace-scoped layout
+- **Remaining Gaps**:
+  - Realtime WebSocket monitoring push for live incident alerts remains future work
+  - Webcam/screen/audio recording remains future work (never added)
+  - Biometric identity verification remains out of scope
+  - AI cheating detection remains future work
+  - External proctoring vendor integration remains future work
+  - Learner appeal/dispute workflow remains future work
+  - Automatic result withholding based on incidents remains future policy work
+  - Per-event-level incident badge links (requires backend to return eventId-to-incident mapping in timeline response) documented as future enhancement
+  - E2E for incident triage deferred: fixture setup overhead would require DB harness; backend integration + portal component tests provide sufficient coverage
+- **Next Recommended Task**:
+  - Task 014H — Assessment Security Policy Configuration and Proctoring Settings UI
+
+---
+
 ### Task 014F — Live Monitoring Review Workflow and Proctoring Incident Triage
 
 - **Task ID**: 014F

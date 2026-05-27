@@ -36,4 +36,117 @@ describe('proctoringApiClient', () => {
     const [, init] = fetchImpl.mock.calls[0] as unknown as [string, RequestInit];
     expect(String(init.body)).not.toContain('clipboardData');
   });
+
+  it('listProctoringIncidents calls correct URL without tenantId or workspaceId in body', async () => {
+    const fetchImpl = vi.fn(async () => createJsonResponse(200, { incidents: [] }));
+    const client = createProctoringApiClient({ fetchImpl });
+
+    await client.listProctoringIncidents({ status: 'OPEN', severity: 'HIGH' });
+
+    const [url, init] = fetchImpl.mock.calls[0] as unknown as [string, RequestInit];
+    expect(url).toContain('/workspace/proctoring/incidents');
+    expect(url).toContain('status=OPEN');
+    expect(url).toContain('severity=HIGH');
+    expect(init.method).toBeUndefined(); // GET (no method override)
+    expect(init.body).toBeUndefined();
+  });
+
+  it('listProctoringIncidents with no filters hits base incident path', async () => {
+    const fetchImpl = vi.fn(async () => createJsonResponse(200, { incidents: [] }));
+    const client = createProctoringApiClient({ fetchImpl });
+
+    await client.listProctoringIncidents();
+
+    const [url] = fetchImpl.mock.calls[0] as unknown as [string, RequestInit];
+    expect(url).toBe('/workspace/proctoring/incidents');
+  });
+
+  it('getProctoringIncidentSummary calls summary endpoint', async () => {
+    const fetchImpl = vi.fn(async () =>
+      createJsonResponse(200, {
+        openCount: 3,
+        highSeverityCount: 1,
+        inReviewCount: 0,
+        resolvedDismissedCount: 2,
+        attemptsWithIncidentsCount: 2,
+      }),
+    );
+    const client = createProctoringApiClient({ fetchImpl });
+
+    const result = await client.getProctoringIncidentSummary();
+
+    const [url] = fetchImpl.mock.calls[0] as unknown as [string, RequestInit];
+    expect(url).toBe('/workspace/proctoring/incidents/summary');
+    expect(result.openCount).toBe(3);
+  });
+
+  it('getProctoringIncidentDetail calls correct URL', async () => {
+    const fetchImpl = vi.fn(async () =>
+      createJsonResponse(200, { incident: { id: 'inc-1' }, events: [], reviewActions: [] }),
+    );
+    const client = createProctoringApiClient({ fetchImpl });
+
+    await client.getProctoringIncidentDetail('inc-1');
+
+    const [url] = fetchImpl.mock.calls[0] as unknown as [string, RequestInit];
+    expect(url).toBe('/workspace/proctoring/incidents/inc-1');
+  });
+
+  it('updateProctoringIncidentStatus POSTs without tenantId or workspaceId', async () => {
+    const fetchImpl = vi.fn(async () =>
+      createJsonResponse(200, { incident: {}, events: [], reviewActions: [] }),
+    );
+    const client = createProctoringApiClient({ fetchImpl });
+
+    await client.updateProctoringIncidentStatus('inc-1', { status: 'RESOLVED' });
+
+    const [url, init] = fetchImpl.mock.calls[0] as unknown as [string, RequestInit];
+    expect(url).toBe('/workspace/proctoring/incidents/inc-1/status');
+    expect(init.method).toBe('POST');
+    expect(String(init.body)).toContain('RESOLVED');
+    expect(String(init.body)).not.toContain('tenantId');
+    expect(String(init.body)).not.toContain('workspaceId');
+  });
+
+  it('addProctoringIncidentNote POSTs note without private fields', async () => {
+    const fetchImpl = vi.fn(async () =>
+      createJsonResponse(200, { incident: {}, events: [], reviewActions: [] }),
+    );
+    const client = createProctoringApiClient({ fetchImpl });
+
+    await client.addProctoringIncidentNote('inc-1', { note: 'Reviewed and noted.' });
+
+    const [url, init] = fetchImpl.mock.calls[0] as unknown as [string, RequestInit];
+    expect(url).toBe('/workspace/proctoring/incidents/inc-1/notes');
+    expect(init.method).toBe('POST');
+    expect(String(init.body)).toContain('Reviewed and noted.');
+    expect(String(init.body)).not.toContain('graderNotes');
+    expect(String(init.body)).not.toContain('unreleasedScore');
+    expect(String(init.body)).not.toContain('storageKey');
+  });
+
+  it('createManualProctoringIncident POSTs without webcam/screen/audio fields', async () => {
+    const fetchImpl = vi.fn(async () =>
+      createJsonResponse(200, { incident: {}, events: [], reviewActions: [] }),
+    );
+    const client = createProctoringApiClient({ fetchImpl });
+
+    await client.createManualProctoringIncident({
+      sessionId: 'sess-1',
+      attemptId: 'att-1',
+      assessmentId: 'assess-1',
+      learnerPrincipalId: 'learner-1',
+      incidentType: 'MANUAL_REVIEW_FLAG',
+      severity: 'MEDIUM',
+      title: 'Manual flag',
+      summary: 'Instructor flagged for review',
+    });
+
+    const [url, init] = fetchImpl.mock.calls[0] as unknown as [string, RequestInit];
+    expect(url).toBe('/workspace/proctoring/incidents/manual');
+    expect(init.method).toBe('POST');
+    expect(String(init.body)).not.toContain('getUserMedia');
+    expect(String(init.body)).not.toContain('MediaRecorder');
+    expect(String(init.body)).not.toContain('clipboardData');
+  });
 });

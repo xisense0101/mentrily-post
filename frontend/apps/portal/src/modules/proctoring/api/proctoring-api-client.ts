@@ -1,12 +1,18 @@
 import { buildE2ERequestHeaders } from '@/foundation/e2e/e2e-request-context';
 import type {
+  AddProctoringIncidentNoteRequestContract,
+  CreateManualProctoringIncidentRequestContract,
   ProctoringAttemptMonitoringSummaryContract,
   ProctoringAttemptMonitoringTimelineContract,
   ProctoringHeartbeatRequestContract,
+  ProctoringIncidentDetailContract,
+  ProctoringIncidentListResponseContract,
+  ProctoringIncidentSummaryContract,
   ProctoringSessionContract,
   RecordProctoringEventRequestContract,
   RecordProctoringEventResponseContract,
   StartProctoringSessionResponseContract,
+  UpdateProctoringIncidentStatusRequestContract,
 } from '@mentrily/domain-contracts';
 
 const PUBLIC_PLATFORM_API_URL =
@@ -20,6 +26,13 @@ interface ProctoringApiClientOptions {
 
 interface ErrorEnvelope {
   error?: { message?: string | undefined };
+}
+
+interface IncidentListQuery {
+  assessmentId?: string | undefined;
+  attemptId?: string | undefined;
+  status?: string | undefined;
+  severity?: string | undefined;
 }
 
 function resolveApiBaseUrl(baseUrl?: string, envSource?: NodeJS.ProcessEnv): string {
@@ -116,6 +129,55 @@ export function createProctoringApiClient({
       assessmentId: string,
     ): Promise<ProctoringAttemptMonitoringSummaryContract> {
       return request(`/workspace/proctoring/assessments/${assessmentId}/active`);
+    },
+
+    listProctoringIncidents(
+      query?: IncidentListQuery,
+    ): Promise<ProctoringIncidentListResponseContract> {
+      const params = new URLSearchParams();
+      if (query?.assessmentId) params.set('assessmentId', query.assessmentId);
+      if (query?.attemptId) params.set('attemptId', query.attemptId);
+      if (query?.status) params.set('status', query.status);
+      if (query?.severity) params.set('severity', query.severity);
+      const qs = params.toString();
+      return request(`/workspace/proctoring/incidents${qs ? `?${qs}` : ''}`);
+    },
+
+    getProctoringIncidentSummary(): Promise<ProctoringIncidentSummaryContract> {
+      return request('/workspace/proctoring/incidents/summary');
+    },
+
+    getProctoringIncidentDetail(incidentId: string): Promise<ProctoringIncidentDetailContract> {
+      return request(`/workspace/proctoring/incidents/${incidentId}`);
+    },
+
+    updateProctoringIncidentStatus(
+      incidentId: string,
+      input: UpdateProctoringIncidentStatusRequestContract,
+    ): Promise<ProctoringIncidentDetailContract> {
+      return request(`/workspace/proctoring/incidents/${incidentId}/status`, {
+        method: 'POST',
+        body: JSON.stringify(input),
+      });
+    },
+
+    addProctoringIncidentNote(
+      incidentId: string,
+      input: AddProctoringIncidentNoteRequestContract,
+    ): Promise<ProctoringIncidentDetailContract> {
+      return request(`/workspace/proctoring/incidents/${incidentId}/notes`, {
+        method: 'POST',
+        body: JSON.stringify(input),
+      });
+    },
+
+    createManualProctoringIncident(
+      input: CreateManualProctoringIncidentRequestContract,
+    ): Promise<ProctoringIncidentDetailContract> {
+      return request('/workspace/proctoring/incidents/manual', {
+        method: 'POST',
+        body: JSON.stringify(input),
+      });
     },
   };
 }
