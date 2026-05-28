@@ -57,14 +57,19 @@ export function useProctoringSession(attempt: AssessmentAttemptContract | null) 
       return undefined;
     }
 
+    const heartbeatIntervalMs = Math.max(
+      15_000,
+      (attempt?.proctoring?.policy?.heartbeatIntervalSeconds ?? 30) * 1000,
+    );
+
     const intervalId = window.setInterval(() => {
       void proctoringApiClient.recordProctoringHeartbeat(sessionId, {
         occurredAt: new Date().toISOString(),
       });
-    }, 20_000);
+    }, heartbeatIntervalMs);
 
     return () => window.clearInterval(intervalId);
-  }, [sessionId, status]);
+  }, [attempt?.proctoring?.policy?.heartbeatIntervalSeconds, sessionId, status]);
 
   async function recordEvent(input: RecordProctoringEventRequestContract): Promise<void> {
     if (!sessionId || status !== 'active') {

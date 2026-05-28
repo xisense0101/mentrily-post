@@ -17,6 +17,15 @@ export function ProctoringDisclosureCard({
       </p>
       <h3 className="mt-2 text-lg font-semibold">{summary.disclosure.title}</h3>
       <p className="mt-2 leading-6">{summary.disclosure.message}</p>
+      {summary.mode === 'BASIC_EVENT_MONITORING' ? (
+        <div className="mt-3 rounded-2xl border border-amber-200 bg-white/70 px-4 py-3 text-xs leading-6 text-amber-900">
+          <p>Metadata-only monitoring</p>
+          <p>No webcam, screen, or audio recording</p>
+          <p>No clipboard contents or keystrokes are collected</p>
+          <p>Incidents are review signals, not automatic cheating verdicts</p>
+          <p>Incidents do not automatically change scores or results</p>
+        </div>
+      ) : null}
       <div className="mt-4 grid gap-4 md:grid-cols-2">
         <div>
           <p className="font-medium">This can record</p>

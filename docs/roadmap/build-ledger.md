@@ -163,6 +163,53 @@ This document serves as a permanent continuity/backtrace system for the Mentrily
 
 ---
 
+### Task 014H — Assessment Security Policy Configuration and Proctoring Settings UI
+
+- **Task ID**: 014H
+- **Previous Task**: Task 014G — Live Monitoring Review Workflow and Proctoring Incident Triage Frontend Dashboard
+- **Implementation Status**: Complete, full validation matrix passed
+- **Baseline Validation Discipline**:
+  - `pnpm --filter @mentrily/platform-api test`: **PASS** (baseline already green)
+  - `pnpm --filter @mentrily/platform-api typecheck`: **PASS** (baseline already green)
+  - `pnpm --filter @mentrily/portal test`: **PASS** (baseline already green)
+  - `pnpm --filter @mentrily/portal typecheck`: **PASS** (baseline already green)
+- **Work Completed**:
+  - implemented workspace-scoped assessment security policy persistence and update/read APIs
+  - added creator-facing security settings UI for assessment proctoring configuration
+  - integrated learner-facing disclosure copy so the policy is visible before attempts
+  - kept proctoring metadata-only and preserved the no-webcam/no-screen/no-audio/no-biometric constraint
+  - added policy-aware backend/portal tests and compatibility fallback for legacy metadata-only assessments
+  - updated documentation and roadmap references to reflect the completed security policy layer
+- **Validation Performed**:
+  - `pnpm --filter @mentrily/platform-api test`: **PASS**
+  - `pnpm --filter @mentrily/platform-api test:integration`: **PASS**
+  - `pnpm --filter @mentrily/portal test`: **PASS**
+  - `pnpm --filter @mentrily/portal typecheck`: **PASS**
+  - `pnpm --filter @mentrily/portal build`: **PASS**
+  - `pnpm --filter @mentrily/data-platform prisma:validate`: **PASS**
+  - `pnpm --filter @mentrily/data-platform prisma:generate`: **PASS**
+  - `pnpm --filter @mentrily/platform-worker test`: **PASS**
+  - `pnpm --filter @mentrily/platform-worker typecheck`: **PASS**
+  - `pnpm --filter @mentrily/contract-catalog typecheck`: **PASS**
+  - `pnpm --filter @mentrily/domain-contracts typecheck`: **PASS**
+  - `pnpm --filter @mentrily/security-toolkit test`: **PASS**
+  - `pnpm lint`: **PASS** (warnings only)
+  - `pnpm typecheck`: **PASS**
+  - `pnpm test`: **PASS**
+  - `pnpm build`: **PASS**
+  - `pnpm test:integration`: **PASS**
+  - `pnpm test:e2e`: **PASS**
+  - `pnpm e2e:assessment-grading`: **PASS**
+  - `pnpm e2e:assessment-result`: **PASS**
+  - `node automation/verify-env-examples.mjs`: **PASS**
+  - `pnpm db:test:down`: **PASS**
+- **Remaining Gaps**:
+  - no webcam/screen/audio capture added
+  - no biometric or raw keystroke capture added
+  - no automatic cheating verdict or score penalty added
+  - no external proctoring vendor integration
+- **Next Recommended Task**: Pending prioritization
+
 ### Task 014F — Live Monitoring Review Workflow and Proctoring Incident Triage
 
 - **Task ID**: 014F

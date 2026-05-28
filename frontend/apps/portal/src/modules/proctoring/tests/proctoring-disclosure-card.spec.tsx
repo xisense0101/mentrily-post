@@ -27,5 +27,10 @@ describe('ProctoringDisclosureCard', () => {
     expect(screen.getAllByText('Monitoring disclosure')).toHaveLength(2);
     expect(screen.getByText('Window focus')).toBeTruthy();
     expect(screen.getByText('Clipboard contents')).toBeTruthy();
+    expect(screen.getByText('Metadata-only monitoring')).toBeTruthy();
+    expect(screen.getByText('No webcam, screen, or audio recording')).toBeTruthy();
+    expect(
+      screen.getByText('Incidents do not automatically change scores or results'),
+    ).toBeTruthy();
   });
 });

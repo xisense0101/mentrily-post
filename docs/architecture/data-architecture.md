@@ -310,6 +310,12 @@ Result release reuses the existing `AssessmentAttemptResult` record with `gradin
 - Proctoring events store only sanitized metadata summaries and indexed identifiers for workspace, attempt, assessment, learner, session, type, and time.
 - Duplicate event ingestion is bounded by a `(workspaceId, sessionId, eventId)` uniqueness rule when an idempotency key is provided.
 
+## Task 014H Additions
+
+- Added `AssessmentSecurityPolicy` as a narrow workspace-scoped model linked one-to-one with `Assessment`.
+- Assessment security policy persistence stores only safe policy configuration, disclosure text, and bounded incident threshold settings.
+- The schema keeps tenant/workspace isolation explicit and does not introduce raw media, clipboard, or keystroke storage.
+
 ## Task 014F Additions
 
 - Added `AssessmentProctoringIncident`, `AssessmentProctoringIncidentEvent`, and `AssessmentProctoringIncidentReviewAction` to the PostgreSQL schema.

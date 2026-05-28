@@ -67,12 +67,20 @@ export function AssessmentEditorPage({ assessmentId }: AssessmentEditorPageProps
         title={assessment.title}
         description="Edit sections and questions, save your draft, and manage publish, archive, or restore actions."
         actions={
-          <a
-            className="rounded-full border border-portal-border bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-sm"
-            href="/assessments"
-          >
-            Back to assessments
-          </a>
+          <div className="flex gap-3">
+            <a
+              className="rounded-full border border-portal-border bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-sm"
+              href={`/assessments/${assessmentId}/security`}
+            >
+              Security settings
+            </a>
+            <a
+              className="rounded-full border border-portal-border bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-sm"
+              href="/assessments"
+            >
+              Back to assessments
+            </a>
+          </div>
         }
       />
 

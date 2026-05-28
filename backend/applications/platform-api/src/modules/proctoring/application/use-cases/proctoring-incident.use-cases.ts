@@ -421,19 +421,46 @@ export async function processIncidentPolicyForEvent(
         },
       });
     } else {
-      const fiveMinutesAgo = new Date(occurredAt.getTime() - 5 * 60_000);
+      const policy = await client.assessmentSecurityPolicy.findUnique({
+        where: { assessmentId },
+        select: {
+          incidentThresholdFocusLossCount: true,
+          incidentThresholdFocusLossWindowSeconds: true,
+          incidentThresholdVisibilityHiddenCount: true,
+          incidentThresholdVisibilityHiddenWindowSeconds: true,
+          incidentThresholdNetworkOfflineCount: true,
+          incidentThresholdNetworkOfflineWindowSeconds: true,
+        },
+      });
+      const thresholdConfig =
+        eventType === 'VISIBILITY_HIDDEN'
+          ? {
+              count: policy?.incidentThresholdVisibilityHiddenCount ?? 3,
+              windowSeconds: policy?.incidentThresholdVisibilityHiddenWindowSeconds ?? 600,
+            }
+          : eventType === 'NETWORK_OFFLINE'
+            ? {
+                count: policy?.incidentThresholdNetworkOfflineCount ?? 3,
+                windowSeconds: policy?.incidentThresholdNetworkOfflineWindowSeconds ?? 600,
+              }
+            : {
+                count: policy?.incidentThresholdFocusLossCount ?? 3,
+                windowSeconds: policy?.incidentThresholdFocusLossWindowSeconds ?? 600,
+              };
+
+      const windowStart = new Date(occurredAt.getTime() - thresholdConfig.windowSeconds * 1000);
 
       const matchingEvents = await client.assessmentProctoringEvent.findMany({
         where: {
           sessionId,
           eventType: { in: getEventTypesForIncidentType(incidentType) },
-          occurredAt: { gte: fiveMinutesAgo, lte: occurredAt },
+          occurredAt: { gte: windowStart, lte: occurredAt },
           incidentEvents: { none: {} },
         },
         orderBy: { occurredAt: 'asc' },
       });
 
-      if (matchingEvents.length >= 3) {
+      if (matchingEvents.length >= thresholdConfig.count) {
         const title = getIncidentTitle(incidentType);
         const summary = getIncidentSummary(incidentType);
 

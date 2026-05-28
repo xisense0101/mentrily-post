@@ -111,3 +111,10 @@ Learners can read only their own released assessment results. Creators, admins, 
 - Learners can see a visible monitoring disclosure and status badge before and during monitored attempts.
 - Creators, teachers, admins, and workspace owners can view a safe monitoring timeline for workspace-scoped attempts they are allowed to monitor.
 - Monitoring never bypasses normal assessment ownership or workspace boundaries.
+
+## Task 014H Additions
+
+- Creators can configure assessment-level security policy settings for assessments they already manage.
+- Learners cannot edit policy configuration and only see the disclosure that matches the configured monitoring mode.
+- OFF remains the default mode; BASIC_EVENT_MONITORING stays metadata-only and never turns into webcam, screen, audio, or biometric monitoring.
+- Incident thresholds and disclosure copy are creator-controlled but remain bounded and workspace-scoped.

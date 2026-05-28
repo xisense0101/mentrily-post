@@ -294,3 +294,8 @@ The assessment delivery domain now emits `assessment.result.released`. A `assess
 
 - Proctoring monitoring events are persisted as product data rather than emitted as raw public outbox payloads in this foundation task.
 - Monitoring event metadata is allowlisted per event type and excludes clipboard contents, raw keystrokes, media payloads, and device-fingerprinting detail.
+
+## Task 014H Additions
+
+- Assessment security policy changes are configuration reads/writes, not public telemetry events.
+- Incident grouping may consult policy thresholds, but policy updates never retroactively rewrite existing incidents or inject raw event payloads.

@@ -1,5 +1,6 @@
 import { buildE2ERequestHeaders } from '@/foundation/e2e/e2e-request-context';
 import type {
+  AssessmentSecurityPolicyContract,
   AddProctoringIncidentNoteRequestContract,
   CreateManualProctoringIncidentRequestContract,
   ProctoringAttemptMonitoringSummaryContract,
@@ -12,6 +13,7 @@ import type {
   RecordProctoringEventRequestContract,
   RecordProctoringEventResponseContract,
   StartProctoringSessionResponseContract,
+  UpdateAssessmentSecurityPolicyRequestContract,
   UpdateProctoringIncidentStatusRequestContract,
 } from '@mentrily/domain-contracts';
 
@@ -92,6 +94,20 @@ export function createProctoringApiClient({
     startProctoringSession(attemptId: string): Promise<StartProctoringSessionResponseContract> {
       return request(`/workspace/proctoring/attempts/${attemptId}/session/start`, {
         method: 'POST',
+      });
+    },
+
+    getAssessmentSecurityPolicy(assessmentId: string): Promise<AssessmentSecurityPolicyContract> {
+      return request(`/workspace/proctoring/assessments/${assessmentId}/security-policy`);
+    },
+
+    updateAssessmentSecurityPolicy(
+      assessmentId: string,
+      input: UpdateAssessmentSecurityPolicyRequestContract,
+    ): Promise<AssessmentSecurityPolicyContract> {
+      return request(`/workspace/proctoring/assessments/${assessmentId}/security-policy`, {
+        method: 'POST',
+        body: JSON.stringify(input),
       });
     },
 

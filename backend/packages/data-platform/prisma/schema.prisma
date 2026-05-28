@@ -800,6 +800,7 @@ model Assessment {
   snapshots           AssessmentPublishedSnapshot[] @relation("AssessmentSnapshots")
   attempts            AssessmentAttempt[]
   learningLinks       LearningAssessmentLink[]
+  securityPolicy      AssessmentSecurityPolicy?
 
   @@index([tenantId])
   @@index([workspaceId])
@@ -810,6 +811,38 @@ model Assessment {
   @@index([createdAt])
   @@index([publishedAt])
   @@index([archivedAt])
+}
+
+model AssessmentSecurityPolicy {
+  id                                             String                    @id @default(uuid()) @db.Uuid
+  tenantId                                       String                    @db.Uuid
+  workspaceId                                    String                    @db.Uuid
+  assessmentId                                   String                    @unique @db.Uuid
+  proctoringMode                                 AssessmentProctoringMode  @default(OFF)
+  requireDisclosureAcknowledgement               Boolean                   @default(true)
+  requireFullscreen                              Boolean                   @default(false)
+  trackFocusChanges                              Boolean                   @default(true)
+  trackVisibilityChanges                         Boolean                   @default(true)
+  trackFullscreenChanges                         Boolean                   @default(true)
+  trackCopyPasteAttempts                         Boolean                   @default(true)
+  trackNetworkStatus                             Boolean                   @default(true)
+  heartbeatIntervalSeconds                       Int                       @default(30)
+  incidentThresholdFocusLossCount                Int                       @default(3)
+  incidentThresholdFocusLossWindowSeconds        Int                       @default(600)
+  incidentThresholdVisibilityHiddenCount         Int                       @default(3)
+  incidentThresholdVisibilityHiddenWindowSeconds Int                       @default(600)
+  incidentThresholdNetworkOfflineCount           Int                       @default(3)
+  incidentThresholdNetworkOfflineWindowSeconds   Int                       @default(600)
+  disclosureTitle                                String?
+  disclosureBody                                 String?
+  createdAt                                      DateTime                  @default(now())
+  updatedAt                                      DateTime                  @updatedAt
+
+  assessment Assessment @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@index([workspaceId])
+  @@index([workspaceId, proctoringMode])
 }
 
 model AssessmentVersion {

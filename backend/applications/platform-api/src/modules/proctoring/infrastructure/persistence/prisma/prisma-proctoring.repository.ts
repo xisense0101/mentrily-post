@@ -9,17 +9,19 @@ import {
 } from '@mentrily/data-platform';
 import { TransactionContext } from '@mentrily/service-core';
 import {
+  AssessmentSecurityPolicyRepository,
   ProctoringEventRepository,
   ProctoringSessionRepository,
 } from '../../../application/proctoring.repository.js';
 import type {
+  AssessmentSecurityPolicyRecord,
   ProctoringEventRecord,
   ProctoringSessionRecord,
 } from '../../../application/proctoring.types.js';
 
 type ProctoringPrismaClient = Pick<
   PrismaClient,
-  'assessmentProctoringSession' | 'assessmentProctoringEvent'
+  'assessmentProctoringSession' | 'assessmentProctoringEvent' | 'assessmentSecurityPolicy'
 >;
 
 function resolveClient(
@@ -48,6 +50,48 @@ function severityRank(severity: AssessmentProctoringEventSeverity): number {
       return 3;
   }
   return 0;
+}
+
+@Injectable()
+export class PrismaAssessmentSecurityPolicyRepository implements AssessmentSecurityPolicyRepository {
+  constructor(@Inject(PrismaService) private readonly prisma: PrismaService) {}
+
+  async findByAssessmentId(
+    workspaceId: string,
+    assessmentId: string,
+    transaction?: TransactionContext,
+  ): Promise<AssessmentSecurityPolicyRecord | null> {
+    try {
+      return await resolveClient(this.prisma, transaction).assessmentSecurityPolicy.findFirst({
+        where: { workspaceId, assessmentId },
+      });
+    } catch (error) {
+      throw mapPrismaError(error);
+    }
+  }
+
+  async upsert(
+    input: Parameters<AssessmentSecurityPolicyRepository['upsert']>[0],
+    transaction?: TransactionContext,
+  ): Promise<AssessmentSecurityPolicyRecord> {
+    try {
+      const { assessmentId: _assessmentId, ...config } = input.config;
+      return await resolveClient(this.prisma, transaction).assessmentSecurityPolicy.upsert({
+        where: { assessmentId: input.assessmentId },
+        create: {
+          tenantId: input.tenantId,
+          workspaceId: input.workspaceId,
+          assessmentId: input.assessmentId,
+          ...config,
+        },
+        update: {
+          ...config,
+        },
+      });
+    } catch (error) {
+      throw mapPrismaError(error);
+    }
+  }
 }
 
 @Injectable()

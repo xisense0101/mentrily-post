@@ -114,6 +114,15 @@ describe.sequential('Proctoring API (integration)', () => {
       },
     });
 
+    await prisma.assessmentSecurityPolicy.create({
+      data: {
+        tenantId: creatorHeaders['x-tenant-id'],
+        workspaceId: creatorHeaders['x-workspace-id'],
+        assessmentId: assessment.id,
+        proctoringMode: proctoringMode === 'OFF' ? 'OFF' : 'BASIC_EVENT_MONITORING',
+      },
+    });
+
     const version = await prisma.assessmentVersion.create({
       data: {
         assessmentId: assessment.id,

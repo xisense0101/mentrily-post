@@ -123,3 +123,9 @@ Learner result endpoints must never expose unreleased scores, correct answer key
 - Proctoring ingestion and monitoring routes must be authenticated, workspace-scoped, and attempt/session-scoped by server-side lookup only.
 - Proctoring request bodies must never accept trusted `tenantId` or `workspaceId` fields.
 - Proctoring responses must expose only learner-safe disclosure, session status, event type, severity, timestamps, and sanitized metadata summaries.
+
+## Task 014H Additions
+
+- Assessment security policy endpoints must remain workspace-scoped and permission-gated for creators/teachers/admins only.
+- Policy request bodies must exclude tenant/workspace identifiers and must validate bounded enum, boolean, text length, and numeric threshold values.
+- Policy responses may expose learner-safe disclosure and configuration only; they must not expose private grading, storage keys, or raw monitoring payloads.

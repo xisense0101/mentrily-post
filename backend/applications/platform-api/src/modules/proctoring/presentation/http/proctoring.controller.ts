@@ -2,6 +2,8 @@ import { Body, Controller, Get, Inject, Param, Post, Query, Req } from '@nestjs/
 import type { FastifyRequest } from 'fastify';
 import { AppError, RequestContext } from '@mentrily/service-core';
 import type {
+  AssessmentSecurityPolicyContract,
+  UpdateAssessmentSecurityPolicyRequestContract,
   ProctoringHeartbeatRequestContract,
   RecordProctoringEventRequestContract,
   ProctoringIncidentListQueryContract,
@@ -9,6 +11,10 @@ import type {
   AddProctoringIncidentNoteRequestContract,
   CreateManualProctoringIncidentRequestContract,
 } from '@mentrily/contract-catalog';
+import {
+  GetAssessmentSecurityPolicyUseCase,
+  UpdateAssessmentSecurityPolicyUseCase,
+} from '../../application/use-cases/assessment-security-policy.use-cases.js';
 import {
   EndProctoringSessionUseCase,
   GetActiveAttemptMonitoringUseCase,
@@ -38,6 +44,10 @@ function requestContext(request: FastifyRequest): RequestContext {
 @Controller('/workspace/proctoring')
 export class ProctoringController {
   constructor(
+    @Inject(GetAssessmentSecurityPolicyUseCase)
+    private readonly getAssessmentSecurityPolicy: GetAssessmentSecurityPolicyUseCase,
+    @Inject(UpdateAssessmentSecurityPolicyUseCase)
+    private readonly updateAssessmentSecurityPolicy: UpdateAssessmentSecurityPolicyUseCase,
     @Inject(StartProctoringSessionUseCase)
     private readonly startSession: StartProctoringSessionUseCase,
     @Inject(RecordProctoringHeartbeatUseCase)
@@ -69,6 +79,23 @@ export class ProctoringController {
   @Post('/attempts/:attemptId/session/start')
   async start(@Req() request: FastifyRequest, @Param('attemptId') attemptId: string) {
     return this.startSession.execute(requestContext(request), attemptId);
+  }
+
+  @Get('/assessments/:assessmentId/security-policy')
+  async getAssessmentPolicy(
+    @Req() request: FastifyRequest,
+    @Param('assessmentId') assessmentId: string,
+  ): Promise<AssessmentSecurityPolicyContract> {
+    return this.getAssessmentSecurityPolicy.execute(requestContext(request), assessmentId);
+  }
+
+  @Post('/assessments/:assessmentId/security-policy')
+  async updateAssessmentPolicy(
+    @Req() request: FastifyRequest,
+    @Param('assessmentId') assessmentId: string,
+    @Body() body: UpdateAssessmentSecurityPolicyRequestContract,
+  ): Promise<AssessmentSecurityPolicyContract> {
+    return this.updateAssessmentSecurityPolicy.execute(requestContext(request), assessmentId, body);
   }
 
   @Post('/sessions/:sessionId/heartbeat')

@@ -182,3 +182,8 @@ Deduplication rule:
 
 - Proctoring persistence must remain narrow and proctoring-specific: session lifecycle plus sanitized event metadata only.
 - Proctoring indexes must optimize workspace/attempt/assessment/session time-ordered monitoring reads without storing raw surveillance payloads.
+
+## Task 014H Additions
+
+- Assessment security policy persistence adds a narrow one-to-one model tied to `Assessment` with workspace and tenant boundaries preserved.
+- Policy storage keeps only safe configuration, disclosure, and threshold fields; it does not add media, clipboard, keystroke, or biometric storage.

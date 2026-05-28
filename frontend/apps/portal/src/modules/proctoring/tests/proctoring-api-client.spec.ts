@@ -24,6 +24,86 @@ describe('proctoringApiClient', () => {
     expect(String(init.body ?? '')).not.toContain('workspaceId');
   });
 
+  it('gets assessment security policy from the workspace-scoped route', async () => {
+    const fetchImpl = vi.fn(async () =>
+      createJsonResponse(200, {
+        assessmentId: 'assessment-1',
+        proctoringMode: 'OFF',
+        requireDisclosureAcknowledgement: true,
+        requireFullscreen: false,
+        trackFocusChanges: true,
+        trackVisibilityChanges: true,
+        trackFullscreenChanges: true,
+        trackCopyPasteAttempts: true,
+        trackNetworkStatus: true,
+        heartbeatIntervalSeconds: 30,
+        incidentThresholdFocusLossCount: 3,
+        incidentThresholdFocusLossWindowSeconds: 600,
+        incidentThresholdVisibilityHiddenCount: 3,
+        incidentThresholdVisibilityHiddenWindowSeconds: 600,
+        incidentThresholdNetworkOfflineCount: 3,
+        incidentThresholdNetworkOfflineWindowSeconds: 600,
+      }),
+    );
+    const client = createProctoringApiClient({ fetchImpl });
+
+    await client.getAssessmentSecurityPolicy('assessment-1');
+
+    const [url, init] = fetchImpl.mock.calls[0] as unknown as [string, RequestInit];
+    expect(url).toBe('/workspace/proctoring/assessments/assessment-1/security-policy');
+    expect(init.method).toBeUndefined();
+    expect(init.body).toBeUndefined();
+  });
+
+  it('updates assessment security policy without tenant or workspace ids in the body', async () => {
+    const fetchImpl = vi.fn(async () =>
+      createJsonResponse(200, {
+        assessmentId: 'assessment-1',
+        proctoringMode: 'BASIC_EVENT_MONITORING',
+        requireDisclosureAcknowledgement: true,
+        requireFullscreen: false,
+        trackFocusChanges: true,
+        trackVisibilityChanges: true,
+        trackFullscreenChanges: true,
+        trackCopyPasteAttempts: true,
+        trackNetworkStatus: true,
+        heartbeatIntervalSeconds: 30,
+        incidentThresholdFocusLossCount: 3,
+        incidentThresholdFocusLossWindowSeconds: 600,
+        incidentThresholdVisibilityHiddenCount: 3,
+        incidentThresholdVisibilityHiddenWindowSeconds: 600,
+        incidentThresholdNetworkOfflineCount: 3,
+        incidentThresholdNetworkOfflineWindowSeconds: 600,
+      }),
+    );
+    const client = createProctoringApiClient({ fetchImpl });
+
+    await client.updateAssessmentSecurityPolicy('assessment-1', {
+      proctoringMode: 'BASIC_EVENT_MONITORING',
+      requireDisclosureAcknowledgement: true,
+      requireFullscreen: false,
+      trackFocusChanges: true,
+      trackVisibilityChanges: true,
+      trackFullscreenChanges: true,
+      trackCopyPasteAttempts: true,
+      trackNetworkStatus: true,
+      heartbeatIntervalSeconds: 30,
+      incidentThresholdFocusLossCount: 3,
+      incidentThresholdFocusLossWindowSeconds: 600,
+      incidentThresholdVisibilityHiddenCount: 3,
+      incidentThresholdVisibilityHiddenWindowSeconds: 600,
+      incidentThresholdNetworkOfflineCount: 3,
+      incidentThresholdNetworkOfflineWindowSeconds: 600,
+    });
+
+    const [url, init] = fetchImpl.mock.calls[0] as unknown as [string, RequestInit];
+    expect(url).toBe('/workspace/proctoring/assessments/assessment-1/security-policy');
+    expect(init.method).toBe('POST');
+    expect(String(init.body)).toContain('BASIC_EVENT_MONITORING');
+    expect(String(init.body)).not.toContain('tenantId');
+    expect(String(init.body)).not.toContain('workspaceId');
+  });
+
   it('records metadata-only events', async () => {
     const fetchImpl = vi.fn(async () => createJsonResponse(200, { duplicate: false, event: {} }));
     const client = createProctoringApiClient({ fetchImpl });

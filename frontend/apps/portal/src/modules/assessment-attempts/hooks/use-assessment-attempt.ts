@@ -92,6 +92,21 @@ export function useAssessmentAttempt(attemptId: string) {
       attempt?.proctoring?.mode === 'BASIC_EVENT_MONITORING' &&
       attempt.status === 'IN_PROGRESS' &&
       proctoringSession.status === 'active',
+    ...(attempt?.proctoring?.policy?.trackFocusChanges !== undefined
+      ? { trackFocusChanges: attempt.proctoring.policy.trackFocusChanges }
+      : {}),
+    ...(attempt?.proctoring?.policy?.trackVisibilityChanges !== undefined
+      ? { trackVisibilityChanges: attempt.proctoring.policy.trackVisibilityChanges }
+      : {}),
+    ...(attempt?.proctoring?.policy?.trackFullscreenChanges !== undefined
+      ? { trackFullscreenChanges: attempt.proctoring.policy.trackFullscreenChanges }
+      : {}),
+    ...(attempt?.proctoring?.policy?.trackCopyPasteAttempts !== undefined
+      ? { trackCopyPasteAttempts: attempt.proctoring.policy.trackCopyPasteAttempts }
+      : {}),
+    ...(attempt?.proctoring?.policy?.trackNetworkStatus !== undefined
+      ? { trackNetworkStatus: attempt.proctoring.policy.trackNetworkStatus }
+      : {}),
     onRecord: ({ eventType, metadata }) => {
       void proctoringSession.recordEvent({
         eventType: eventType as

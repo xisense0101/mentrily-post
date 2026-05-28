@@ -87,6 +87,7 @@ describe('AssessmentEditorPage', () => {
       rendered.container.querySelector('[data-testid="assessment-editor-shell"]'),
     ).toBeTruthy();
     expect(rendered.container.querySelector('[data-testid="assessment-editor-page"]')).toBeTruthy();
+    expect(getByText(rendered.container, 'Security settings')).toBeTruthy();
   });
 
   it('renders empty question state', async () => {

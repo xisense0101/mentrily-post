@@ -246,3 +246,8 @@ Assessment result release depends on assessment attempts, published snapshots, a
 
 - Proctoring depends directly on workspace governance context, assessment delivery attempts, portal attempt runtime hooks, and safe monitoring read APIs.
 - Dashboard and grading consume only safe proctoring summaries or timelines; they do not depend on media-processing or communication provider stacks.
+
+## Task 014H Additions
+
+- Assessment security policy depends on assessment delivery, workspace governance, proctoring policy services, and portal creator settings surfaces.
+- The policy layer feeds learner disclosure and proctoring session behavior without introducing new media-processing or vendor dependencies.

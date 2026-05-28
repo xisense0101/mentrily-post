@@ -226,3 +226,10 @@ Creators and admins can release graded assessment results to learners. Learners 
 - Assessment attempts now support an optional metadata-only proctoring gateway foundation with explicit learner disclosure.
 - The current monitoring mode records only safe browser activity metadata such as focus, visibility, fullscreen, online/offline, and copy/paste attempt markers.
 - The product still does not capture webcam, screen, audio, clipboard contents, raw keystrokes, biometric data, or hidden background surveillance.
+
+## Task 014H Additions
+
+- Assessment security policy configuration is now persisted per assessment in the workspace scope.
+- Proctoring defaults to OFF unless a creator explicitly enables metadata-only BASIC_EVENT_MONITORING.
+- Creators can safely configure disclosure copy, heartbeat cadence, and bounded incident thresholds without enabling webcam, screen, audio, biometric, or raw keystroke capture.
+- Learner disclosures reflect the configured policy and still do not expose private grading data, unreleased scores, or raw event payloads.

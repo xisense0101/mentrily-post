@@ -74,3 +74,8 @@
 
 - The system now includes a proctoring gateway foundation for assessment attempts with explicit learner disclosure and safe monitoring summaries.
 - The current system overview still excludes webcam capture, screen capture, audio capture, biometric recognition, hidden monitoring, and vendor integrations.
+
+## Task 014H Additions
+
+- The system now includes creator-managed assessment security policy configuration that defaults to OFF and can enable metadata-only BASIC_EVENT_MONITORING.
+- Assessment security policy configuration remains workspace-scoped and does not introduce hidden monitoring or automatic cheating decisions.

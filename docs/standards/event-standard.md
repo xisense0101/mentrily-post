@@ -190,3 +190,8 @@ When payload structure changes:
 
 - Proctoring event ingestion must be idempotent when an `eventId` key is supplied and defensively bounded even when it is not.
 - Proctoring event payloads must stay metadata-only and must not include clipboard contents, raw key data, media frames, provider secrets, or private URLs.
+
+## Task 014H Additions
+
+- Assessment security policy changes are configuration updates rather than public event emissions.
+- Incident thresholds may be configured per assessment, but event payload handling stays metadata-only and continues to exclude raw browser input or media capture.

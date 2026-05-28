@@ -167,9 +167,6 @@ export class StartAssessmentAttemptUseCase {
         ...(expiresAt !== undefined ? { expiresAt } : {}),
         metadata: {
           ...(input?.metadata ?? {}),
-          ...(typeof assessment.metadata?.proctoringMode === 'string'
-            ? { proctoringMode: assessment.metadata.proctoringMode }
-            : {}),
         },
       });
 

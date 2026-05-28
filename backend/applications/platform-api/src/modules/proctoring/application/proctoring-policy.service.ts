@@ -1,12 +1,16 @@
 import { Injectable } from '@nestjs/common';
 import { AppError } from '@mentrily/service-core';
 import type {
+  AssessmentSecurityPolicyContract,
   ProctoringAttemptSummaryContract,
   ProctoringEventContract,
   ProctoringLearnerDisclosureContract,
   ProctoringSessionContract,
+  UpdateAssessmentSecurityPolicyRequestContract,
 } from '@mentrily/contract-catalog';
 import type {
+  AssessmentSecurityPolicyConfig,
+  AssessmentSecurityPolicyRecord,
   ProctoringEventRecord,
   ProctoringEventSeverity,
   ProctoringEventType,
@@ -61,6 +65,35 @@ const ALLOWED_METADATA_KEYS: Readonly<Record<ProctoringEventType, ReadonlySet<st
 export class ProctoringPolicyService {
   readonly maxMetadataBytes = 512;
   readonly maxEventsPerMinute = 40;
+  readonly minHeartbeatIntervalSeconds = 15;
+  readonly maxHeartbeatIntervalSeconds = 120;
+  readonly minIncidentThresholdCount = 1;
+  readonly maxIncidentThresholdCount = 10;
+  readonly minIncidentThresholdWindowSeconds = 60;
+  readonly maxIncidentThresholdWindowSeconds = 3600;
+  readonly maxDisclosureTitleLength = 120;
+  readonly maxDisclosureBodyLength = 1200;
+
+  createDefaultPolicy(assessmentId: string): AssessmentSecurityPolicyConfig {
+    return {
+      assessmentId,
+      proctoringMode: 'OFF',
+      requireDisclosureAcknowledgement: true,
+      requireFullscreen: false,
+      trackFocusChanges: true,
+      trackVisibilityChanges: true,
+      trackFullscreenChanges: true,
+      trackCopyPasteAttempts: true,
+      trackNetworkStatus: true,
+      heartbeatIntervalSeconds: 30,
+      incidentThresholdFocusLossCount: 3,
+      incidentThresholdFocusLossWindowSeconds: 600,
+      incidentThresholdVisibilityHiddenCount: 3,
+      incidentThresholdVisibilityHiddenWindowSeconds: 600,
+      incidentThresholdNetworkOfflineCount: 3,
+      incidentThresholdNetworkOfflineWindowSeconds: 600,
+    };
+  }
 
   getModeFromAssessmentMetadata(
     metadata: Record<string, unknown> | null | undefined,
@@ -72,26 +105,183 @@ export class ProctoringPolicyService {
     return 'OFF';
   }
 
-  buildDisclosure(mode: ProctoringMode): ProctoringLearnerDisclosureContract {
+  fromRecord(record: AssessmentSecurityPolicyRecord): AssessmentSecurityPolicyConfig {
+    return {
+      assessmentId: record.assessmentId,
+      proctoringMode: record.proctoringMode,
+      requireDisclosureAcknowledgement: record.requireDisclosureAcknowledgement,
+      requireFullscreen: record.requireFullscreen,
+      trackFocusChanges: record.trackFocusChanges,
+      trackVisibilityChanges: record.trackVisibilityChanges,
+      trackFullscreenChanges: record.trackFullscreenChanges,
+      trackCopyPasteAttempts: record.trackCopyPasteAttempts,
+      trackNetworkStatus: record.trackNetworkStatus,
+      heartbeatIntervalSeconds: record.heartbeatIntervalSeconds,
+      incidentThresholdFocusLossCount: record.incidentThresholdFocusLossCount,
+      incidentThresholdFocusLossWindowSeconds: record.incidentThresholdFocusLossWindowSeconds,
+      incidentThresholdVisibilityHiddenCount: record.incidentThresholdVisibilityHiddenCount,
+      incidentThresholdVisibilityHiddenWindowSeconds:
+        record.incidentThresholdVisibilityHiddenWindowSeconds,
+      incidentThresholdNetworkOfflineCount: record.incidentThresholdNetworkOfflineCount,
+      incidentThresholdNetworkOfflineWindowSeconds:
+        record.incidentThresholdNetworkOfflineWindowSeconds,
+      disclosureTitle: record.disclosureTitle,
+      disclosureBody: record.disclosureBody,
+      updatedAt: record.updatedAt,
+    };
+  }
+
+  validateUpdate(
+    assessmentId: string,
+    input: UpdateAssessmentSecurityPolicyRequestContract,
+  ): AssessmentSecurityPolicyConfig {
+    const base = this.createDefaultPolicy(assessmentId);
+    const mode = input.proctoringMode;
+    if (
+      mode !== 'OFF' &&
+      mode !== 'BASIC_EVENT_MONITORING' &&
+      mode !== 'RESERVED_LIVE_MONITORING'
+    ) {
+      throw new AppError('VALIDATION_ERROR', 'invalid proctoring mode', 400);
+    }
+
+    const heartbeatIntervalSeconds = this.validateBoundedNumber(
+      input.heartbeatIntervalSeconds,
+      this.minHeartbeatIntervalSeconds,
+      this.maxHeartbeatIntervalSeconds,
+      'invalid heartbeat interval',
+    );
+    const incidentThresholdFocusLossCount = this.validateBoundedNumber(
+      input.incidentThresholdFocusLossCount,
+      this.minIncidentThresholdCount,
+      this.maxIncidentThresholdCount,
+      'invalid focus loss threshold count',
+    );
+    const incidentThresholdFocusLossWindowSeconds = this.validateBoundedNumber(
+      input.incidentThresholdFocusLossWindowSeconds,
+      this.minIncidentThresholdWindowSeconds,
+      this.maxIncidentThresholdWindowSeconds,
+      'invalid focus loss threshold window',
+    );
+    const incidentThresholdVisibilityHiddenCount = this.validateBoundedNumber(
+      input.incidentThresholdVisibilityHiddenCount,
+      this.minIncidentThresholdCount,
+      this.maxIncidentThresholdCount,
+      'invalid visibility threshold count',
+    );
+    const incidentThresholdVisibilityHiddenWindowSeconds = this.validateBoundedNumber(
+      input.incidentThresholdVisibilityHiddenWindowSeconds,
+      this.minIncidentThresholdWindowSeconds,
+      this.maxIncidentThresholdWindowSeconds,
+      'invalid visibility threshold window',
+    );
+    const incidentThresholdNetworkOfflineCount = this.validateBoundedNumber(
+      input.incidentThresholdNetworkOfflineCount,
+      this.minIncidentThresholdCount,
+      this.maxIncidentThresholdCount,
+      'invalid network threshold count',
+    );
+    const incidentThresholdNetworkOfflineWindowSeconds = this.validateBoundedNumber(
+      input.incidentThresholdNetworkOfflineWindowSeconds,
+      this.minIncidentThresholdWindowSeconds,
+      this.maxIncidentThresholdWindowSeconds,
+      'invalid network threshold window',
+    );
+
+    const disclosureTitle = this.normalizeDisclosureText(
+      input.disclosureTitle,
+      this.maxDisclosureTitleLength,
+      'invalid disclosure title',
+    );
+    const disclosureBody = this.normalizeDisclosureText(
+      input.disclosureBody,
+      this.maxDisclosureBodyLength,
+      'invalid disclosure body',
+    );
+
+    return {
+      ...base,
+      proctoringMode: mode,
+      requireDisclosureAcknowledgement: input.requireDisclosureAcknowledgement,
+      requireFullscreen: input.requireFullscreen,
+      trackFocusChanges: input.trackFocusChanges,
+      trackVisibilityChanges: input.trackVisibilityChanges,
+      trackFullscreenChanges: input.trackFullscreenChanges,
+      trackCopyPasteAttempts: input.trackCopyPasteAttempts,
+      trackNetworkStatus: input.trackNetworkStatus,
+      heartbeatIntervalSeconds,
+      incidentThresholdFocusLossCount,
+      incidentThresholdFocusLossWindowSeconds,
+      incidentThresholdVisibilityHiddenCount,
+      incidentThresholdVisibilityHiddenWindowSeconds,
+      incidentThresholdNetworkOfflineCount,
+      incidentThresholdNetworkOfflineWindowSeconds,
+      ...(disclosureTitle !== undefined ? { disclosureTitle } : {}),
+      ...(disclosureBody !== undefined ? { disclosureBody } : {}),
+    };
+  }
+
+  toContract(policy: AssessmentSecurityPolicyConfig): AssessmentSecurityPolicyContract {
+    return {
+      assessmentId: policy.assessmentId,
+      proctoringMode: policy.proctoringMode,
+      requireDisclosureAcknowledgement: policy.requireDisclosureAcknowledgement,
+      requireFullscreen: policy.requireFullscreen,
+      trackFocusChanges: policy.trackFocusChanges,
+      trackVisibilityChanges: policy.trackVisibilityChanges,
+      trackFullscreenChanges: policy.trackFullscreenChanges,
+      trackCopyPasteAttempts: policy.trackCopyPasteAttempts,
+      trackNetworkStatus: policy.trackNetworkStatus,
+      heartbeatIntervalSeconds: policy.heartbeatIntervalSeconds,
+      incidentThresholdFocusLossCount: policy.incidentThresholdFocusLossCount,
+      incidentThresholdFocusLossWindowSeconds: policy.incidentThresholdFocusLossWindowSeconds,
+      incidentThresholdVisibilityHiddenCount: policy.incidentThresholdVisibilityHiddenCount,
+      incidentThresholdVisibilityHiddenWindowSeconds:
+        policy.incidentThresholdVisibilityHiddenWindowSeconds,
+      incidentThresholdNetworkOfflineCount: policy.incidentThresholdNetworkOfflineCount,
+      incidentThresholdNetworkOfflineWindowSeconds:
+        policy.incidentThresholdNetworkOfflineWindowSeconds,
+      ...(policy.disclosureTitle ? { disclosureTitle: policy.disclosureTitle } : {}),
+      ...(policy.disclosureBody ? { disclosureBody: policy.disclosureBody } : {}),
+      ...(policy.updatedAt ? { updatedAt: policy.updatedAt.toISOString() } : {}),
+    };
+  }
+
+  buildDisclosure(
+    input: AssessmentSecurityPolicyConfig | ProctoringMode,
+  ): ProctoringLearnerDisclosureContract {
+    const policy =
+      typeof input === 'string'
+        ? {
+            ...this.createDefaultPolicy('default'),
+            proctoringMode: input,
+          }
+        : input;
+    const mode = policy.proctoringMode;
+    const captures =
+      mode === 'OFF'
+        ? []
+        : [
+            ...(policy.trackFocusChanges ? ['Window and tab focus changes'] : []),
+            ...(policy.trackVisibilityChanges ? ['Page visibility changes'] : []),
+            ...(policy.trackFullscreenChanges ? ['Fullscreen entry and exit'] : []),
+            ...(policy.trackNetworkStatus ? ['Online and offline state'] : []),
+            ...(policy.trackCopyPasteAttempts ? ['Copy and paste attempt metadata'] : []),
+          ];
+
     return {
       mode,
       required: mode !== 'OFF',
-      title: mode === 'OFF' ? 'Monitoring disabled' : 'Monitoring disclosure',
+      title:
+        policy.disclosureTitle?.trim() ||
+        (mode === 'OFF' ? 'Monitoring disabled' : 'Metadata-only monitoring disclosure'),
       message:
-        mode === 'OFF'
+        policy.disclosureBody?.trim() ||
+        (mode === 'OFF'
           ? 'This attempt does not use monitoring.'
-          : 'This attempt records limited browser activity metadata during the assessment. Monitoring is visible and never hidden.',
+          : 'Metadata-only monitoring is enabled for this attempt. No webcam, screen, or audio recording is used, and monitoring is always visible.'),
       visible: true,
-      captures:
-        mode === 'OFF'
-          ? []
-          : [
-              'Window and tab focus changes',
-              'Page visibility changes',
-              'Fullscreen entry and exit',
-              'Online and offline state',
-              'Copy and paste attempt metadata',
-            ],
+      captures,
       doesNotCapture: [
         'Clipboard contents',
         'Raw keystrokes',
@@ -221,15 +411,44 @@ export class ProctoringPolicyService {
   }
 
   toAttemptSummary(
-    mode: ProctoringMode,
+    policy: AssessmentSecurityPolicyConfig,
     session?: ProctoringSessionRecord | null,
   ): ProctoringAttemptSummaryContract {
     return {
-      enabled: mode !== 'OFF',
-      mode,
-      required: mode !== 'OFF',
-      disclosure: this.buildDisclosure(mode),
+      enabled: policy.proctoringMode !== 'OFF',
+      mode: policy.proctoringMode,
+      required: policy.proctoringMode !== 'OFF',
+      disclosure: this.buildDisclosure(policy),
+      policy: this.toContract(policy),
       ...(session ? { session: this.toSessionContract(session) } : {}),
     };
+  }
+
+  private validateBoundedNumber(value: number, min: number, max: number, message: string): number {
+    if (!Number.isInteger(value) || value < min || value > max) {
+      throw new AppError('VALIDATION_ERROR', message, 400);
+    }
+    return value;
+  }
+
+  private normalizeDisclosureText(
+    value: string | null | undefined,
+    maxLength: number,
+    message: string,
+  ): string | undefined {
+    if (value === null || value === undefined) {
+      return undefined;
+    }
+    if (typeof value !== 'string') {
+      throw new AppError('VALIDATION_ERROR', message, 400);
+    }
+    const normalized = value.trim();
+    if (normalized.length === 0) {
+      return undefined;
+    }
+    if (normalized.length > maxLength) {
+      throw new AppError('VALIDATION_ERROR', message, 400);
+    }
+    return normalized;
   }
 }

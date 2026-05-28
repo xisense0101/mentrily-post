@@ -74,6 +74,11 @@ Each ticket includes:
 - Added proctoring gateway and metadata-only attempt monitoring foundation after 014D attempt reliability hardening.
 - Deferred live monitoring triage, realtime supervision, media capture, and vendor integrations to the follow-up task stream.
 
+## Task 014H Additions
+
+- Added assessment security policy configuration and creator-facing proctoring settings on top of the existing metadata-only monitoring foundation.
+- Deferred any webcam, screen, audio, biometric, AI-cheating, or automatic penalty behavior to later work.
+
 ## Task 014F Additions
 
 - Hardened backend proctoring incident triage use cases, contracts, and schema migrations.

@@ -86,3 +86,8 @@ Provider integrations (Clerk, WorkOS, Stripe, email providers, telemetry provide
 
 - Portal attempt runtime now integrates with backend proctoring routes for explicit session start, heartbeat, and safe metadata-only event recording.
 - Teacher monitoring views reuse authenticated workspace APIs and do not introduce any direct browser media integrations or external vendor dependencies.
+
+## Task 014H Additions
+
+- Portal assessment builder now links to a creator-facing security settings route that reads and updates workspace-scoped assessment policy.
+- Learner attempt UI consumes the resolved policy disclosure and event flags, while creator policy APIs remain separate from learner attempt APIs.

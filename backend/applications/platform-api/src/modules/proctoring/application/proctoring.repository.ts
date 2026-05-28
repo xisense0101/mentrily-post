@@ -1,5 +1,7 @@
 import { TransactionContext } from '@mentrily/service-core';
 import {
+  AssessmentSecurityPolicyConfig,
+  AssessmentSecurityPolicyRecord,
   ProctoringEventRecord,
   ProctoringEventSeverity,
   ProctoringEventType,
@@ -7,6 +9,24 @@ import {
   ProctoringSessionRecord,
   ProctoringSessionStatus,
 } from './proctoring.types.js';
+
+export abstract class AssessmentSecurityPolicyRepository {
+  abstract findByAssessmentId(
+    workspaceId: string,
+    assessmentId: string,
+    transaction?: TransactionContext,
+  ): Promise<AssessmentSecurityPolicyRecord | null>;
+
+  abstract upsert(
+    input: {
+      tenantId: string;
+      workspaceId: string;
+      assessmentId: string;
+      config: AssessmentSecurityPolicyConfig;
+    },
+    transaction?: TransactionContext,
+  ): Promise<AssessmentSecurityPolicyRecord>;
+}
 
 export abstract class ProctoringSessionRepository {
   abstract create(

@@ -4,9 +4,19 @@ import { useEffect } from 'react';
 
 export function useBasicProctoringEvents({
   enabled,
+  trackFocusChanges,
+  trackVisibilityChanges,
+  trackFullscreenChanges,
+  trackCopyPasteAttempts,
+  trackNetworkStatus,
   onRecord,
 }: {
   enabled: boolean;
+  trackFocusChanges?: boolean;
+  trackVisibilityChanges?: boolean;
+  trackFullscreenChanges?: boolean;
+  trackCopyPasteAttempts?: boolean;
+  trackNetworkStatus?: boolean;
   onRecord: (event: { eventType: string; metadata?: Record<string, unknown> }) => void;
 }) {
   useEffect(() => {
@@ -38,14 +48,24 @@ export function useBasicProctoringEvents({
     const onCopy = () => onRecord({ eventType: 'COPY_ATTEMPTED', metadata: nextMetadata() });
     const onPaste = () => onRecord({ eventType: 'PASTE_ATTEMPTED', metadata: nextMetadata() });
 
-    window.addEventListener('blur', onBlur);
-    window.addEventListener('focus', onFocus);
-    window.addEventListener('online', onOnline);
-    window.addEventListener('offline', onOffline);
-    document.addEventListener('visibilitychange', onVisibility);
-    document.addEventListener('fullscreenchange', onFullscreen);
-    document.addEventListener('copy', onCopy);
-    document.addEventListener('paste', onPaste);
+    if (trackFocusChanges !== false) {
+      window.addEventListener('blur', onBlur);
+      window.addEventListener('focus', onFocus);
+    }
+    if (trackNetworkStatus !== false) {
+      window.addEventListener('online', onOnline);
+      window.addEventListener('offline', onOffline);
+    }
+    if (trackVisibilityChanges !== false) {
+      document.addEventListener('visibilitychange', onVisibility);
+    }
+    if (trackFullscreenChanges !== false) {
+      document.addEventListener('fullscreenchange', onFullscreen);
+    }
+    if (trackCopyPasteAttempts !== false) {
+      document.addEventListener('copy', onCopy);
+      document.addEventListener('paste', onPaste);
+    }
 
     return () => {
       window.removeEventListener('blur', onBlur);
@@ -57,5 +77,13 @@ export function useBasicProctoringEvents({
       document.removeEventListener('copy', onCopy);
       document.removeEventListener('paste', onPaste);
     };
-  }, [enabled, onRecord]);
+  }, [
+    enabled,
+    onRecord,
+    trackCopyPasteAttempts,
+    trackFocusChanges,
+    trackFullscreenChanges,
+    trackNetworkStatus,
+    trackVisibilityChanges,
+  ]);
 }

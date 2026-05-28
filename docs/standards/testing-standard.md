@@ -232,3 +232,8 @@ Assessment result release requires backend unit/integration coverage, frontend u
 
 - Proctoring changes require backend tests for metadata sanitization, idempotent ingestion, and workspace/ownership checks.
 - Portal tests must cover learner disclosure rendering, visible monitoring status, safe event timeline rendering, and the absence of raw private fields.
+
+## Task 014H Additions
+
+- Assessment security policy changes require backend tests for policy persistence, workspace isolation, and permission enforcement.
+- Portal tests must cover the creator security settings UI, policy API client routes, and the learner disclosure copy that reflects the configured monitoring mode.

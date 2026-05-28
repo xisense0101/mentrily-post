@@ -1,4 +1,5 @@
 import type {
+  AssessmentSecurityPolicy as PrismaAssessmentSecurityPolicy,
   AssessmentProctoringEventSeverity,
   AssessmentProctoringEventType,
   AssessmentProctoringMode,
@@ -9,6 +10,7 @@ export type ProctoringMode = AssessmentProctoringMode;
 export type ProctoringSessionStatus = AssessmentProctoringSessionStatus;
 export type ProctoringEventType = AssessmentProctoringEventType;
 export type ProctoringEventSeverity = AssessmentProctoringEventSeverity;
+export type AssessmentSecurityPolicyRecord = PrismaAssessmentSecurityPolicy;
 
 export interface ProctoringSessionRecord {
   id: string;
@@ -40,4 +42,26 @@ export interface ProctoringEventRecord {
   occurredAt: Date;
   receivedAt: Date;
   metadata: Record<string, unknown>;
+}
+
+export interface AssessmentSecurityPolicyConfig {
+  assessmentId: string;
+  proctoringMode: ProctoringMode;
+  requireDisclosureAcknowledgement: boolean;
+  requireFullscreen: boolean;
+  trackFocusChanges: boolean;
+  trackVisibilityChanges: boolean;
+  trackFullscreenChanges: boolean;
+  trackCopyPasteAttempts: boolean;
+  trackNetworkStatus: boolean;
+  heartbeatIntervalSeconds: number;
+  incidentThresholdFocusLossCount: number;
+  incidentThresholdFocusLossWindowSeconds: number;
+  incidentThresholdVisibilityHiddenCount: number;
+  incidentThresholdVisibilityHiddenWindowSeconds: number;
+  incidentThresholdNetworkOfflineCount: number;
+  incidentThresholdNetworkOfflineWindowSeconds: number;
+  disclosureTitle?: string | null;
+  disclosureBody?: string | null;
+  updatedAt?: Date;
 }

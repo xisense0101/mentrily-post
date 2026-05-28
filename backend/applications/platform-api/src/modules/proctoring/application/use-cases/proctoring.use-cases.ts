@@ -21,6 +21,7 @@ import {
 import { PrismaService, getPrismaClient } from '@mentrily/data-platform';
 import { PermissionCatalog } from '@mentrily/security-toolkit';
 import {
+  AssessmentSecurityPolicyRepository,
   ProctoringEventRepository,
   ProctoringSessionRepository,
 } from '../proctoring.repository.js';
@@ -66,6 +67,8 @@ export class StartProctoringSessionUseCase {
     @Inject(PrismaService) private readonly prisma: PrismaService,
     @Inject(ProctoringSessionRepository)
     private readonly sessions: ProctoringSessionRepository,
+    @Inject(AssessmentSecurityPolicyRepository)
+    private readonly policyRepository: AssessmentSecurityPolicyRepository,
     @Inject(ProctoringPolicyService)
     private readonly policy: ProctoringPolicyService,
     @Inject(ProctoringReadService)
@@ -95,12 +98,21 @@ export class StartProctoringSessionUseCase {
       throw new AppError('CONFLICT', 'attempt is not active', 409);
     }
 
-    const mode = this.policy.getModeFromAssessmentMetadata(
-      (attempt.metadata as Record<string, unknown> | null | undefined) ?? undefined,
+    const configuredPolicyRecord = await this.policyRepository.findByAssessmentId(
+      workspace.workspaceId,
+      attempt.assessmentId,
     );
+    const configuredPolicy = configuredPolicyRecord
+      ? this.policy.fromRecord(configuredPolicyRecord)
+      : {
+          ...this.policy.createDefaultPolicy(attempt.assessmentId),
+          proctoringMode: this.policy.getModeFromAssessmentMetadata(
+            (attempt.metadata as Record<string, unknown> | null | undefined) ?? undefined,
+          ),
+        };
 
-    if (mode === 'OFF') {
-      return { summary: this.policy.toAttemptSummary(mode, null) };
+    if (configuredPolicy.proctoringMode === 'OFF') {
+      return { summary: this.policy.toAttemptSummary(configuredPolicy, null) };
     }
 
     const session = await this.transactionRunner.run<ProctoringSessionRecord>(async (tx) => {
@@ -123,7 +135,7 @@ export class StartProctoringSessionUseCase {
           assessmentId: attempt.assessmentId,
           attemptId: attempt.id,
           learnerPrincipalId: attempt.learnerPrincipalId,
-          mode,
+          mode: configuredPolicy.proctoringMode,
           status: 'ACTIVE',
           startedAt: now,
           lastHeartbeatAt: now,
@@ -132,7 +144,7 @@ export class StartProctoringSessionUseCase {
       );
     });
 
-    return { summary: this.policy.toAttemptSummary(mode, session) };
+    return { summary: this.policy.toAttemptSummary(configuredPolicy, session) };
   }
 }
 

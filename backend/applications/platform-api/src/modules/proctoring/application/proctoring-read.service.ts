@@ -6,7 +6,11 @@ import type {
 } from '@mentrily/contract-catalog';
 import { AppError, TransactionContext } from '@mentrily/service-core';
 import { PrismaService, getPrismaClient } from '@mentrily/data-platform';
-import { ProctoringEventRepository, ProctoringSessionRepository } from './proctoring.repository.js';
+import {
+  AssessmentSecurityPolicyRepository,
+  ProctoringEventRepository,
+  ProctoringSessionRepository,
+} from './proctoring.repository.js';
 import { ProctoringPolicyService } from './proctoring-policy.service.js';
 
 @Injectable()
@@ -17,6 +21,8 @@ export class ProctoringReadService {
     private readonly sessionRepository: ProctoringSessionRepository,
     @Inject(ProctoringEventRepository)
     private readonly eventRepository: ProctoringEventRepository,
+    @Inject(AssessmentSecurityPolicyRepository)
+    private readonly policyRepository: AssessmentSecurityPolicyRepository,
     @Inject(ProctoringPolicyService)
     private readonly policy: ProctoringPolicyService,
   ) {}
@@ -31,17 +37,15 @@ export class ProctoringReadService {
       select: {
         id: true,
         workspaceId: true,
-        metadata: true,
+        assessmentId: true,
       },
     });
     if (!attempt || attempt.workspaceId !== workspaceId) {
       throw new AppError('NOT_FOUND', 'attempt not found', 404);
     }
-    const mode = this.policy.getModeFromAssessmentMetadata(
-      (attempt.metadata as Record<string, unknown> | null | undefined) ?? undefined,
-    );
+    const configuredPolicy = await this.getPolicy(attempt.assessmentId, workspaceId, transaction);
     const session = await this.sessionRepository.findLatestByAttempt(attemptId, transaction);
-    return this.policy.toAttemptSummary(mode, session);
+    return this.policy.toAttemptSummary(configuredPolicy, session);
   }
 
   async getAttemptTimeline(
@@ -55,23 +59,19 @@ export class ProctoringReadService {
         id: true,
         workspaceId: true,
         assessmentId: true,
-        metadata: true,
       },
     });
     if (!attempt || attempt.workspaceId !== workspaceId) {
       throw new AppError('NOT_FOUND', 'attempt not found', 404);
     }
-
-    const mode = this.policy.getModeFromAssessmentMetadata(
-      (attempt.metadata as Record<string, unknown> | null | undefined) ?? undefined,
-    );
+    const configuredPolicy = await this.getPolicy(attempt.assessmentId, workspaceId, transaction);
     const session = await this.sessionRepository.findLatestByAttempt(attemptId, transaction);
     const events = await this.eventRepository.listByAttempt(workspaceId, attemptId, transaction);
 
     return {
       attemptId,
       assessmentId: attempt.assessmentId,
-      disclosure: this.policy.buildDisclosure(mode),
+      disclosure: this.policy.buildDisclosure(configuredPolicy),
       ...(session ? { session: this.policy.toSessionContract(session) } : {}),
       events: events.map((event) => this.policy.toEventContract(event)),
     };
@@ -113,6 +113,36 @@ export class ProctoringReadService {
         highSeverityEvents: highSeverity.get(session.id) ?? 0,
         warningEvents: warningSeverity.get(session.id) ?? 0,
       })),
+    };
+  }
+
+  private async getPolicy(
+    assessmentId: string,
+    workspaceId: string,
+    transaction?: TransactionContext,
+  ) {
+    const policyRecord = await this.policyRepository.findByAssessmentId(
+      workspaceId,
+      assessmentId,
+      transaction,
+    );
+    if (policyRecord) {
+      return this.policy.fromRecord(policyRecord);
+    }
+
+    const assessment = await getPrismaClient(this.prisma, transaction).assessment.findUnique({
+      where: { id: assessmentId },
+      select: { workspaceId: true, metadata: true },
+    });
+    if (!assessment || assessment.workspaceId !== workspaceId) {
+      return this.policy.createDefaultPolicy(assessmentId);
+    }
+
+    return {
+      ...this.policy.createDefaultPolicy(assessmentId),
+      proctoringMode: this.policy.getModeFromAssessmentMetadata(
+        (assessment.metadata as Record<string, unknown> | null | undefined) ?? undefined,
+      ),
     };
   }
 }

@@ -112,6 +112,11 @@
 - Dashboard analytics remains a foundation epic with richer analytics deferred.
 - Campaign management remains a staged epic: draft and preview foundation now, delivery automation later.
 
+## Task 014H Additions
+
+- Added assessment security policy configuration as the creator-controlled policy layer for metadata-only monitoring.
+- Proctoring mode defaults to OFF, BASIC_EVENT_MONITORING remains metadata-only, and incident thresholds stay bounded and workspace-scoped.
+
 ## Task 014C Additions
 
 - Analytics epic updated to reflect creator dashboard read models and outbox-based activity normalization.

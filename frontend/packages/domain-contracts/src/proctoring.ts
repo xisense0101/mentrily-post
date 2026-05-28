@@ -36,6 +36,48 @@ export interface ProctoringLearnerDisclosureContract {
   doesNotCapture: string[];
 }
 
+export interface AssessmentSecurityPolicyContract {
+  assessmentId: string;
+  proctoringMode: ProctoringModeContract;
+  requireDisclosureAcknowledgement: boolean;
+  requireFullscreen: boolean;
+  trackFocusChanges: boolean;
+  trackVisibilityChanges: boolean;
+  trackFullscreenChanges: boolean;
+  trackCopyPasteAttempts: boolean;
+  trackNetworkStatus: boolean;
+  heartbeatIntervalSeconds: number;
+  incidentThresholdFocusLossCount: number;
+  incidentThresholdFocusLossWindowSeconds: number;
+  incidentThresholdVisibilityHiddenCount: number;
+  incidentThresholdVisibilityHiddenWindowSeconds: number;
+  incidentThresholdNetworkOfflineCount: number;
+  incidentThresholdNetworkOfflineWindowSeconds: number;
+  disclosureTitle?: string | undefined;
+  disclosureBody?: string | undefined;
+  updatedAt?: string | undefined;
+}
+
+export interface UpdateAssessmentSecurityPolicyRequestContract {
+  proctoringMode: ProctoringModeContract;
+  requireDisclosureAcknowledgement: boolean;
+  requireFullscreen: boolean;
+  trackFocusChanges: boolean;
+  trackVisibilityChanges: boolean;
+  trackFullscreenChanges: boolean;
+  trackCopyPasteAttempts: boolean;
+  trackNetworkStatus: boolean;
+  heartbeatIntervalSeconds: number;
+  incidentThresholdFocusLossCount: number;
+  incidentThresholdFocusLossWindowSeconds: number;
+  incidentThresholdVisibilityHiddenCount: number;
+  incidentThresholdVisibilityHiddenWindowSeconds: number;
+  incidentThresholdNetworkOfflineCount: number;
+  incidentThresholdNetworkOfflineWindowSeconds: number;
+  disclosureTitle?: string | null | undefined;
+  disclosureBody?: string | null | undefined;
+}
+
 export interface ProctoringSessionContract {
   sessionId: string;
   attemptId: string;
@@ -52,6 +94,7 @@ export interface ProctoringAttemptSummaryContract {
   mode: ProctoringModeContract;
   required: boolean;
   disclosure: ProctoringLearnerDisclosureContract;
+  policy?: AssessmentSecurityPolicyContract | undefined;
   session?: ProctoringSessionContract | undefined;
 }
 

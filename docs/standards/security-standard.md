@@ -77,3 +77,10 @@
 - Monitoring must never be hidden from learners and must never bypass browser permission prompts.
 - The 014E foundation must not capture webcam, screen, audio, clipboard contents, raw keystrokes, biometric data, or face recognition signals.
 - Monitoring reads and writes must remain cross-workspace safe and must not expose unreleased scores, private grading notes, storage keys, object keys, or private URLs.
+
+## Task 014H Additions
+
+- Assessment security policy reads and writes must remain workspace-scoped and permission-gated.
+- The policy default is OFF, and BASIC_EVENT_MONITORING remains metadata-only with bounded thresholds and disclosure text limits.
+- Learners must never be able to update policy configuration or infer private grading data from disclosure or monitoring summaries.
+- Policy configuration must never add webcam, screen, audio, raw keystroke, clipboard content, biometric, or face-recognition capture.

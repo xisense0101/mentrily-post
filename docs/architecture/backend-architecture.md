@@ -317,6 +317,12 @@ The platform API now exposes result release and result read use cases inside the
 - Assessment attempt responses now include a learner-safe proctoring summary and disclosure without embedding raw monitoring payloads.
 - Proctoring integrates with attempt terminal transitions by ending or expiring the latest monitoring session without weakening 014D attempt reliability rules.
 
+## Task 014H Additions
+
+- Added assessment security policy persistence, read/update use cases, and workspace-scoped routes for creator-managed monitoring configuration.
+- Proctoring session start and attempt summary reads now resolve the persisted assessment policy rather than trusting frontend-supplied mode fields.
+- Policy validation stays bounded and metadata-only, and incident grouping can read policy thresholds without introducing media capture or automatic verdict logic.
+
 ## Task 014F Additions
 
 - Added an incident triage system to the `proctoring` module for identifying and managing integrity events.
