@@ -45,7 +45,7 @@ This document serves as a permanent continuity/backtrace system for the Mentrily
   - No webcam/screen/audio recording remains future work.
   - No biometric/face recognition or raw keystroke/clipboard capture.
 - **Next Recommended Task**:
-  - Pending prioritization
+  - Task 015A — Coding Question Execution Runtime Foundation
 
 ---
 
