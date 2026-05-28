@@ -20,7 +20,7 @@
     "includeFullDirectoryStructure": false,
     "tokenCountTree": false,
     "git": {
-      "sortByChanges": true,
+      "sortByChanges": false,
       "sortByChangesMaxCommits": 100,
       "includeDiffs": false,
       "includeLogs": false,
@@ -32,7 +32,21 @@
     "useGitignore": true,
     "useDotIgnore": true,
     "useDefaultPatterns": true,
-    "customPatterns": []
+    "customPatterns": [
+      "pnpm-lock.yaml",
+      "package-lock.json",
+      "yarn.lock",
+      "**/*.png",
+      "**/*.jpg",
+      "**/*.jpeg",
+      "**/*.gif",
+      "**/*.svg",
+      "**/*.ico",
+      "**/*.webp",
+      "**/*.pdf",
+      "**/*.zip",
+      "**/*.tar.gz"
+    ]
   },
   "security": {
     "enableSecurityCheck": false
