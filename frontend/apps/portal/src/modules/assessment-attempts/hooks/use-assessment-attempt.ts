@@ -28,6 +28,10 @@ export function useAssessmentAttempt(attemptId: string) {
   const [isOffline, setIsOffline] = useState(false);
   const [wasOffline, setWasOffline] = useState(false);
 
+  // Security gate state — managed by learner interaction (acknowledgement + fullscreen)
+  const [gateAcknowledgeDisclosure, setGateAcknowledgeDisclosure] = useState(false);
+  const [gateFullscreenSatisfied, setGateFullscreenSatisfied] = useState(false);
+
   useEffect(() => {
     if (typeof window === 'undefined') {
       return undefined;
@@ -85,28 +89,22 @@ export function useAssessmentAttempt(attemptId: string) {
     void refresh();
   }, [refresh]);
 
-  const proctoringSession = useProctoringSession(attempt);
+  const proctoringSession = useProctoringSession(attempt, {
+    acknowledgeDisclosure: gateAcknowledgeDisclosure,
+    fullscreenSatisfied: gateFullscreenSatisfied,
+  });
 
   useBasicProctoringEvents({
     enabled:
       attempt?.proctoring?.mode === 'BASIC_EVENT_MONITORING' &&
       attempt.status === 'IN_PROGRESS' &&
       proctoringSession.status === 'active',
-    ...(attempt?.proctoring?.policy?.trackFocusChanges !== undefined
-      ? { trackFocusChanges: attempt.proctoring.policy.trackFocusChanges }
-      : {}),
-    ...(attempt?.proctoring?.policy?.trackVisibilityChanges !== undefined
-      ? { trackVisibilityChanges: attempt.proctoring.policy.trackVisibilityChanges }
-      : {}),
-    ...(attempt?.proctoring?.policy?.trackFullscreenChanges !== undefined
-      ? { trackFullscreenChanges: attempt.proctoring.policy.trackFullscreenChanges }
-      : {}),
-    ...(attempt?.proctoring?.policy?.trackCopyPasteAttempts !== undefined
-      ? { trackCopyPasteAttempts: attempt.proctoring.policy.trackCopyPasteAttempts }
-      : {}),
-    ...(attempt?.proctoring?.policy?.trackNetworkStatus !== undefined
-      ? { trackNetworkStatus: attempt.proctoring.policy.trackNetworkStatus }
-      : {}),
+    // Strict === true checks — only attach listeners when policy explicitly enables the category
+    trackFocusChanges: attempt?.proctoring?.policy?.trackFocusChanges === true,
+    trackVisibilityChanges: attempt?.proctoring?.policy?.trackVisibilityChanges === true,
+    trackFullscreenChanges: attempt?.proctoring?.policy?.trackFullscreenChanges === true,
+    trackCopyPasteAttempts: attempt?.proctoring?.policy?.trackCopyPasteAttempts === true,
+    trackNetworkStatus: attempt?.proctoring?.policy?.trackNetworkStatus === true,
     onRecord: ({ eventType, metadata }) => {
       void proctoringSession.recordEvent({
         eventType: eventType as
@@ -242,6 +240,11 @@ export function useAssessmentAttempt(attemptId: string) {
     isOffline,
     wasOffline,
     proctoringSession,
+    securityGateState: proctoringSession.securityState,
+    gateAcknowledgeDisclosure,
+    gateFullscreenSatisfied,
+    setGateAcknowledgeDisclosure,
+    setGateFullscreenSatisfied,
     timerSeverity: attempt ? getTimerSeverity(attempt) : null,
     refresh,
     saveAnswer,

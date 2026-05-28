@@ -7,6 +7,7 @@ import type {
   ProctoringSessionContract,
   RecordProctoringEventRequestContract,
   RecordProctoringEventResponseContract,
+  StartProctoringSessionRequestContract,
   StartProctoringSessionResponseContract,
 } from '@mentrily/contract-catalog';
 import {
@@ -80,6 +81,7 @@ export class StartProctoringSessionUseCase {
   async execute(
     context: RequestContext,
     attemptId: string,
+    request?: StartProctoringSessionRequestContract,
   ): Promise<StartProctoringSessionResponseContract> {
     const workspace = requireWorkspaceActor(context);
     const permission = await this.permissions.evaluate(
@@ -111,8 +113,51 @@ export class StartProctoringSessionUseCase {
           ),
         };
 
+    // OFF mode — return no-op summary and disabled security state
     if (configuredPolicy.proctoringMode === 'OFF') {
-      return { summary: this.policy.toAttemptSummary(configuredPolicy, null) };
+      const offSecurityState = this.policy.buildSecurityRuntimeState({
+        policy: configuredPolicy,
+        disclosureAcknowledged: false,
+        fullscreenSatisfied: false,
+      });
+      return {
+        summary: this.policy.toAttemptSummary(configuredPolicy, null),
+        securityState: offSecurityState,
+      };
+    }
+
+    // Resolve acknowledgement and fullscreen gate inputs
+    const acknowledgeDisclosure = request?.acknowledgeDisclosure === true;
+    const fullscreenSatisfied = request?.fullscreenSatisfied === true;
+
+    // Enforce disclosure acknowledgement gate
+    if (configuredPolicy.requireDisclosureAcknowledgement && !acknowledgeDisclosure) {
+      const blockedState = this.policy.buildSecurityRuntimeState({
+        policy: configuredPolicy,
+        disclosureAcknowledged: false,
+        fullscreenSatisfied,
+      });
+      throw new AppError(
+        'VALIDATION_ERROR',
+        'disclosure acknowledgement required before starting monitoring session',
+        400,
+        { securityState: blockedState },
+      );
+    }
+
+    // Enforce fullscreen gate
+    if (configuredPolicy.requireFullscreen && !fullscreenSatisfied) {
+      const blockedState = this.policy.buildSecurityRuntimeState({
+        policy: configuredPolicy,
+        disclosureAcknowledged: acknowledgeDisclosure,
+        fullscreenSatisfied: false,
+      });
+      throw new AppError(
+        'VALIDATION_ERROR',
+        'fullscreen required before starting monitoring session',
+        400,
+        { securityState: blockedState },
+      );
     }
 
     const session = await this.transactionRunner.run<ProctoringSessionRecord>(async (tx) => {
@@ -144,7 +189,16 @@ export class StartProctoringSessionUseCase {
       );
     });
 
-    return { summary: this.policy.toAttemptSummary(configuredPolicy, session) };
+    const securityState = this.policy.buildSecurityRuntimeState({
+      policy: configuredPolicy,
+      disclosureAcknowledged: acknowledgeDisclosure,
+      fullscreenSatisfied,
+    });
+
+    return {
+      summary: this.policy.toAttemptSummary(configuredPolicy, session),
+      securityState,
+    };
   }
 }
 
@@ -226,6 +280,8 @@ export class RecordProctoringEventUseCase {
     private readonly sessions: ProctoringSessionRepository,
     @Inject(ProctoringEventRepository)
     private readonly events: ProctoringEventRepository,
+    @Inject(AssessmentSecurityPolicyRepository)
+    private readonly policyRepository: AssessmentSecurityPolicyRepository,
     @Inject(ProctoringPolicyService)
     private readonly policy: ProctoringPolicyService,
     @Inject(PERMISSION_EVALUATOR) private readonly permissions: PermissionEvaluator,
@@ -258,6 +314,27 @@ export class RecordProctoringEventUseCase {
     if (!this.policy.isEventTypeAllowed(input.eventType)) {
       throw new AppError('VALIDATION_ERROR', 'unsupported proctoring event type', 400);
     }
+
+    // Load policy to enforce category-level event filtering
+    const configuredPolicyRecord = await this.policyRepository.findByAssessmentId(
+      workspace.workspaceId,
+      session.assessmentId,
+    );
+    const configuredPolicy = configuredPolicyRecord
+      ? this.policy.fromRecord(configuredPolicyRecord)
+      : {
+          ...this.policy.createDefaultPolicy(session.assessmentId),
+          proctoringMode: session.mode,
+        };
+
+    if (!this.policy.isEventTypeAllowedByPolicy(input.eventType, configuredPolicy)) {
+      throw new AppError(
+        'VALIDATION_ERROR',
+        `event type ${input.eventType} is disabled by assessment security policy`,
+        400,
+      );
+    }
+
     const severity = input.severity ?? 'INFO';
     if (!this.policy.isSeverityAllowed(severity)) {
       throw new AppError('VALIDATION_ERROR', 'unsupported proctoring event severity', 400);

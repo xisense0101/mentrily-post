@@ -3,6 +3,7 @@
 import { AttemptPageHeader, AttemptErrorState } from '../components/shared';
 import { AttemptRunnerShell } from '../components/attempt';
 import { useAssessmentAttempt } from '../hooks';
+import { ProctoringSecurityGate } from '@/modules/proctoring/components/proctoring-security-gate';
 
 interface AssessmentAttemptRunnerPageProps {
   attemptId: string;
@@ -25,12 +26,24 @@ export function AssessmentAttemptRunnerPage({ attemptId }: AssessmentAttemptRunn
     isOffline,
     wasOffline,
     proctoringSession,
+    securityGateState,
+    setGateAcknowledgeDisclosure,
+    setGateFullscreenSatisfied,
     timerSeverity,
     refresh,
     saveAnswer,
     submitAttempt,
     cancelAttempt,
   } = useAssessmentAttempt(attemptId);
+
+  // Show the security gate if the session is blocked by policy gates
+  const showSecurityGate =
+    !loading &&
+    !error &&
+    attempt?.status === 'IN_PROGRESS' &&
+    attempt?.proctoring?.mode === 'BASIC_EVENT_MONITORING' &&
+    proctoringSession.status === 'blocked' &&
+    securityGateState !== null;
 
   return (
     <div className="portal-page space-y-8" data-testid="attempt-runner-page">
@@ -62,7 +75,17 @@ export function AssessmentAttemptRunnerPage({ attemptId }: AssessmentAttemptRunn
         />
       ) : null}
 
-      {!loading && !error && attempt && snapshot ? (
+      {showSecurityGate && securityGateState ? (
+        <ProctoringSecurityGate
+          securityState={securityGateState}
+          onAcknowledge={({ acknowledgeDisclosure, fullscreenSatisfied }) => {
+            setGateAcknowledgeDisclosure(acknowledgeDisclosure);
+            setGateFullscreenSatisfied(fullscreenSatisfied);
+          }}
+        />
+      ) : null}
+
+      {!loading && !error && !showSecurityGate && attempt && snapshot ? (
         <AttemptRunnerShell
           attempt={attempt}
           cancelling={cancelling}

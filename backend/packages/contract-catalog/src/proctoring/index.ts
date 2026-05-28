@@ -111,12 +111,40 @@ export interface ProctoringEventContract {
   metadataSummary: Record<string, unknown>;
 }
 
+export type SecurityBlockedReasonContract =
+  | 'DISCLOSURE_ACKNOWLEDGEMENT_REQUIRED'
+  | 'FULLSCREEN_REQUIRED'
+  | 'MONITORING_POLICY_DISABLED'
+  | 'ATTEMPT_NOT_EDITABLE'
+  | 'ATTEMPT_EXPIRED'
+  | 'ATTEMPT_ALREADY_SUBMITTED';
+
+export interface SecurityPolicyRuntimeStateContract {
+  proctoringMode: ProctoringModeContract;
+  disclosureRequired: boolean;
+  disclosureAcknowledged: boolean;
+  fullscreenRequired: boolean;
+  fullscreenSatisfied: boolean;
+  canStartAttempt: boolean;
+  canStartMonitoring: boolean;
+  blockedReasons: SecurityBlockedReasonContract[];
+  enabledEventCategories: string[];
+  disclosureTitle: string;
+  disclosureBody: string;
+}
+
 export interface StartProctoringSessionRequestContract {
   attemptId?: string | undefined;
+  /** Learner acknowledgement of monitoring disclosure. Required when policy requireDisclosureAcknowledgement is true. */
+  acknowledgeDisclosure?: boolean | undefined;
+  /** Learner declaration that fullscreen is active. Required when policy requireFullscreen is true. */
+  fullscreenSatisfied?: boolean | undefined;
 }
 
 export interface StartProctoringSessionResponseContract {
   summary: ProctoringAttemptSummaryContract;
+  /** Runtime gate state. Present when policy is BASIC_EVENT_MONITORING. */
+  securityState?: SecurityPolicyRuntimeStateContract | undefined;
 }
 
 export interface ProctoringHeartbeatRequestContract {

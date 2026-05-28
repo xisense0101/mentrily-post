@@ -98,7 +98,11 @@ describe.sequential('Proctoring API (integration)', () => {
     }
   }
 
-  async function setupAssessmentAndAttempt(proctoringMode: string = 'BASIC_EVENT_MONITORING') {
+  async function setupAssessmentAndAttempt(
+    proctoringMode: string = 'BASIC_EVENT_MONITORING',
+    requireDisclosureAcknowledgement: boolean = false,
+    requireFullscreen: boolean = false,
+  ) {
     const assessment = await prisma.assessment.create({
       data: {
         tenantId: creatorHeaders['x-tenant-id'],
@@ -120,6 +124,8 @@ describe.sequential('Proctoring API (integration)', () => {
         workspaceId: creatorHeaders['x-workspace-id'],
         assessmentId: assessment.id,
         proctoringMode: proctoringMode === 'OFF' ? 'OFF' : 'BASIC_EVENT_MONITORING',
+        requireDisclosureAcknowledgement,
+        requireFullscreen,
       },
     });
 
@@ -238,6 +244,69 @@ describe.sequential('Proctoring API (integration)', () => {
       });
       expect(dbSession.status).toBe('ENDED');
       expect(dbSession.endedAt).not.toBeNull();
+    });
+
+    it('gating: blocks session start if disclosure acknowledgement is required but not provided', async () => {
+      const { attempt } = await setupAssessmentAndAttempt('BASIC_EVENT_MONITORING', true, false);
+
+      const startRes = await app.inject({
+        method: 'POST',
+        url: `/workspace/proctoring/attempts/${attempt.id}/session/start`,
+        headers: learnerHeaders,
+      });
+
+      expectHttpStatus(startRes, 400);
+      const body = startRes.json<{
+        error: { code: string; message: string; details?: { securityState?: any } };
+      }>();
+      expect(body.error.code).toBe('VALIDATION_ERROR');
+      expect(body.error.message).toContain('disclosure acknowledgement required');
+      expect(body.error.details?.securityState.canStartMonitoring).toBe(false);
+      expect(body.error.details?.securityState.blockedReasons).toContain(
+        'DISCLOSURE_ACKNOWLEDGEMENT_REQUIRED',
+      );
+    });
+
+    it('gating: blocks session start if fullscreen is required but not satisfied', async () => {
+      const { attempt } = await setupAssessmentAndAttempt('BASIC_EVENT_MONITORING', false, true);
+
+      const startRes = await app.inject({
+        method: 'POST',
+        url: `/workspace/proctoring/attempts/${attempt.id}/session/start`,
+        headers: learnerHeaders,
+      });
+
+      expectHttpStatus(startRes, 400);
+      const body = startRes.json<{
+        error: { code: string; message: string; details?: { securityState?: any } };
+      }>();
+      expect(body.error.code).toBe('VALIDATION_ERROR');
+      expect(body.error.message).toContain('fullscreen required');
+      expect(body.error.details?.securityState.canStartMonitoring).toBe(false);
+      expect(body.error.details?.securityState.blockedReasons).toContain('FULLSCREEN_REQUIRED');
+    });
+
+    it('gating: allows starting session when required gates are satisfied in request body', async () => {
+      const { attempt } = await setupAssessmentAndAttempt('BASIC_EVENT_MONITORING', true, true);
+
+      const startRes = await app.inject({
+        method: 'POST',
+        url: `/workspace/proctoring/attempts/${attempt.id}/session/start`,
+        headers: learnerHeaders,
+        payload: {
+          acknowledgeDisclosure: true,
+          fullscreenSatisfied: true,
+        },
+      });
+
+      expectHttpStatus(startRes, 201);
+      const body = startRes.json<{
+        summary: { session: { sessionId: string } };
+        securityState: any;
+      }>();
+      expect(body.summary.session.sessionId).toBeDefined();
+      expect(body.securityState.canStartMonitoring).toBe(true);
+      expect(body.securityState.blockedReasons).toHaveLength(0);
     });
   });
 

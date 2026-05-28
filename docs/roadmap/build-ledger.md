@@ -2,6 +2,53 @@
 
 This document serves as a permanent continuity/backtrace system for the Mentrily SaaS codebase. Every task must record its progress here to ensure a reliable audit trail and clear path forward.
 
+### Task 014I — Assessment Security Policy Enforcement and Attempt Gating
+
+- **Task ID**: 014I
+- **Previous Task**: Task 014H — Assessment Security Policy Configuration and Proctoring Settings UI
+- **Implementation Status**: Complete, full validation matrix passed
+- **Baseline Validation Discipline**:
+  - `pnpm --filter @mentrily/platform-api test`: **PASS**
+  - `pnpm --filter @mentrily/portal test`: **PASS**
+- **Work Completed**:
+  - Transitioned proctoring configuration to an authoritatively enforced, runtime-validated security model.
+  - Hardened backend session starting (`StartProctoringSessionUseCase`) to strictly check and enforce disclosure acknowledgement and fullscreen status gating inputs.
+  - Implemented `ProctoringSecurityGate` component in the frontend portal to force disclosure acknowledgement and fullscreen verification prior to starting a session.
+  - Hooked security state feedback into the attempt runner layout to block learners from continuing assessments when security gates are not satisfied.
+  - Added strict policy event filtering (`isEventTypeAllowedByPolicy`) to reject events on the backend that are disabled by policy, preventing unauthorized telemetry monitoring.
+  - Added comprehensive backend unit tests (`assessment-security-policy-enforcement.spec.ts`) and frontend portal unit tests.
+  - Remedied the API integration tests in `proctoring-api.integration.spec.ts` to reflect security gating logic (gating sessions start with 400 when requirements are unmet, passing when satisfied).
+- **Validation Performed**:
+  - ✅ `pnpm --filter @mentrily/platform-api test`: **PASS**
+  - ✅ `pnpm --filter @mentrily/platform-api test:integration`: **PASS**
+  - ✅ `pnpm --filter @mentrily/portal test`: **PASS**
+  - ✅ `pnpm --filter @mentrily/portal typecheck`: **PASS**
+  - ✅ `pnpm --filter @mentrily/portal build`: **PASS**
+  - ✅ `pnpm --filter @mentrily/data-platform prisma:validate`: **PASS**
+  - ✅ `pnpm --filter @mentrily/data-platform prisma:generate`: **PASS**
+  - ✅ `pnpm --filter @mentrily/platform-worker test`: **PASS**
+  - ✅ `pnpm --filter @mentrily/platform-worker typecheck`: **PASS**
+  - ✅ `pnpm --filter @mentrily/contract-catalog typecheck`: **PASS**
+  - ✅ `pnpm --filter @mentrily/domain-contracts typecheck`: **PASS**
+  - ✅ `pnpm --filter @mentrily/security-toolkit test`: **PASS**
+  - ✅ `pnpm lint`: **PASS** (warnings only)
+  - ✅ `pnpm typecheck`: **PASS**
+  - ✅ `pnpm test`: **PASS**
+  - ✅ `pnpm build`: **PASS**
+  - ✅ `pnpm test:integration`: **PASS**
+  - ✅ `pnpm test:e2e`: **PASS**
+  - ✅ `pnpm e2e:assessment-grading`: **PASS**
+  - ✅ `pnpm e2e:assessment-result`: **PASS**
+  - ✅ `node automation/verify-env-examples.mjs`: **PASS**
+  - ✅ `pnpm db:test:down`: **PASS**
+- **Remaining Gaps**:
+  - No webcam/screen/audio recording remains future work.
+  - No biometric/face recognition or raw keystroke/clipboard capture.
+- **Next Recommended Task**:
+  - Pending prioritization
+
+---
+
 ### Task 014G — Live Monitoring Review Workflow and Proctoring Incident Triage Frontend Dashboard
 
 - **Task ID**: 014G

@@ -4,6 +4,7 @@ import { AppError, RequestContext } from '@mentrily/service-core';
 import type {
   AssessmentSecurityPolicyContract,
   UpdateAssessmentSecurityPolicyRequestContract,
+  StartProctoringSessionRequestContract,
   ProctoringHeartbeatRequestContract,
   RecordProctoringEventRequestContract,
   ProctoringIncidentListQueryContract,
@@ -77,8 +78,12 @@ export class ProctoringController {
   ) {}
 
   @Post('/attempts/:attemptId/session/start')
-  async start(@Req() request: FastifyRequest, @Param('attemptId') attemptId: string) {
-    return this.startSession.execute(requestContext(request), attemptId);
+  async start(
+    @Req() request: FastifyRequest,
+    @Param('attemptId') attemptId: string,
+    @Body() body: StartProctoringSessionRequestContract,
+  ) {
+    return this.startSession.execute(requestContext(request), attemptId, body);
   }
 
   @Get('/assessments/:assessmentId/security-policy')

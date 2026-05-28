@@ -32,7 +32,7 @@ interface AttemptRunnerShellProps {
   cancelling: boolean;
   isOffline: boolean;
   wasOffline: boolean;
-  proctoringSessionStatus?: 'idle' | 'starting' | 'active' | 'error';
+  proctoringSessionStatus?: 'idle' | 'starting' | 'active' | 'blocked' | 'error';
   timerSeverity?: 'normal' | 'warning' | 'urgent' | 'expired' | null | undefined;
   onSaveAnswer: (
     questionId: string,

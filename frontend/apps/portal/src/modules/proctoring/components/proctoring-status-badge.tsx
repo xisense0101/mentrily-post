@@ -7,7 +7,7 @@ export function ProctoringStatusBadge({
   status,
 }: {
   summary: ProctoringAttemptSummaryContract;
-  status?: 'idle' | 'starting' | 'active' | 'error';
+  status?: 'idle' | 'starting' | 'active' | 'blocked' | 'error';
 }) {
   const label =
     summary.mode === 'OFF'
@@ -16,14 +16,18 @@ export function ProctoringStatusBadge({
         ? 'Monitoring issue'
         : status === 'starting'
           ? 'Monitoring starting'
-          : 'Monitoring visible';
+          : status === 'blocked'
+            ? 'Monitoring gated'
+            : 'Monitoring visible';
 
   const tones =
     summary.mode === 'OFF'
       ? 'border-slate-200 bg-slate-50 text-slate-700'
       : status === 'error'
         ? 'border-rose-200 bg-rose-50 text-rose-700'
-        : 'border-emerald-200 bg-emerald-50 text-emerald-700';
+        : status === 'blocked'
+          ? 'border-amber-200 bg-amber-50 text-amber-700'
+          : 'border-emerald-200 bg-emerald-50 text-emerald-700';
 
   return (
     <span

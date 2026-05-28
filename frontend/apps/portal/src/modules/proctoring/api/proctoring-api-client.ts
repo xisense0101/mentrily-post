@@ -12,6 +12,7 @@ import type {
   ProctoringSessionContract,
   RecordProctoringEventRequestContract,
   RecordProctoringEventResponseContract,
+  StartProctoringSessionRequestContract,
   StartProctoringSessionResponseContract,
   UpdateAssessmentSecurityPolicyRequestContract,
   UpdateProctoringIncidentStatusRequestContract,
@@ -91,9 +92,13 @@ export function createProctoringApiClient({
   }
 
   return {
-    startProctoringSession(attemptId: string): Promise<StartProctoringSessionResponseContract> {
+    startProctoringSession(
+      attemptId: string,
+      body?: StartProctoringSessionRequestContract,
+    ): Promise<StartProctoringSessionResponseContract> {
       return request(`/workspace/proctoring/attempts/${attemptId}/session/start`, {
         method: 'POST',
+        body: JSON.stringify(body ?? {}),
       });
     },
 

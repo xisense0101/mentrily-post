@@ -2,19 +2,39 @@
 
 import { useEffect, useState } from 'react';
 import type { AssessmentAttemptContract } from '@/modules/assessment-attempts/types';
-import type { RecordProctoringEventRequestContract } from '@mentrily/domain-contracts';
+import type {
+  RecordProctoringEventRequestContract,
+  SecurityPolicyRuntimeStateContract,
+} from '@mentrily/domain-contracts';
 import { proctoringApiClient } from '../api/proctoring-api-client';
 
-export function useProctoringSession(attempt: AssessmentAttemptContract | null) {
-  const [status, setStatus] = useState<'idle' | 'starting' | 'active' | 'error'>('idle');
+export function useProctoringSession(
+  attempt: AssessmentAttemptContract | null,
+  options?: {
+    /** Set to true when the learner has acknowledged the monitoring disclosure */
+    acknowledgeDisclosure?: boolean;
+    /** Set to true when the learner has declared fullscreen is active */
+    fullscreenSatisfied?: boolean;
+  },
+) {
+  const [status, setStatus] = useState<'idle' | 'starting' | 'active' | 'blocked' | 'error'>(
+    'idle',
+  );
   const [sessionId, setSessionId] = useState<string | null>(
     attempt?.proctoring?.session?.sessionId ?? null,
   );
+  const [securityState, setSecurityState] = useState<SecurityPolicyRuntimeStateContract | null>(
+    null,
+  );
+
+  const acknowledgeDisclosure = options?.acknowledgeDisclosure ?? false;
+  const fullscreenSatisfied = options?.fullscreenSatisfied ?? false;
 
   useEffect(() => {
     if (!attempt?.proctoring || attempt.proctoring.mode === 'OFF') {
       setStatus('idle');
       setSessionId(null);
+      setSecurityState(null);
       return;
     }
 
@@ -33,10 +53,20 @@ export function useProctoringSession(attempt: AssessmentAttemptContract | null) 
     let cancelled = false;
     setStatus('starting');
     void proctoringApiClient
-      .startProctoringSession(attempt.id)
+      .startProctoringSession(attempt.id, {
+        acknowledgeDisclosure,
+        fullscreenSatisfied,
+      })
       .then((response) => {
         if (cancelled) {
           return;
+        }
+        if (response.securityState) {
+          setSecurityState(response.securityState);
+          if (!response.securityState.canStartMonitoring) {
+            setStatus('blocked');
+            return;
+          }
         }
         setSessionId(response.summary.session?.sessionId ?? null);
         setStatus(response.summary.session?.sessionId ? 'active' : 'idle');
@@ -50,7 +80,7 @@ export function useProctoringSession(attempt: AssessmentAttemptContract | null) 
     return () => {
       cancelled = true;
     };
-  }, [attempt]);
+  }, [attempt, acknowledgeDisclosure, fullscreenSatisfied]);
 
   useEffect(() => {
     if (!sessionId || status !== 'active') {
@@ -78,5 +108,5 @@ export function useProctoringSession(attempt: AssessmentAttemptContract | null) 
     await proctoringApiClient.recordProctoringEvent(sessionId, input);
   }
 
-  return { status, sessionId, recordEvent };
+  return { status, sessionId, securityState, recordEvent };
 }

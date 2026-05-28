@@ -6,6 +6,7 @@ import type {
   ProctoringEventContract,
   ProctoringLearnerDisclosureContract,
   ProctoringSessionContract,
+  SecurityPolicyRuntimeStateContract,
   UpdateAssessmentSecurityPolicyRequestContract,
 } from '@mentrily/contract-catalog';
 import type {
@@ -422,6 +423,117 @@ export class ProctoringPolicyService {
       policy: this.toContract(policy),
       ...(session ? { session: this.toSessionContract(session) } : {}),
     };
+  }
+
+  /**
+   * Build the learner-safe runtime security state for a given policy and attempt/acknowledgement context.
+   * disclosureAcknowledged: true when the learner has sent acknowledgeDisclosure=true in the current request
+   * fullscreenSatisfied: true when the learner has sent fullscreenSatisfied=true in the current request
+   */
+  buildSecurityRuntimeState({
+    policy,
+    disclosureAcknowledged,
+    fullscreenSatisfied,
+  }: {
+    policy: AssessmentSecurityPolicyConfig;
+    disclosureAcknowledged: boolean;
+    fullscreenSatisfied: boolean;
+  }): SecurityPolicyRuntimeStateContract {
+    const mode = policy.proctoringMode;
+    const monitoringEnabled = mode !== 'OFF';
+    const disclosureRequired = monitoringEnabled && policy.requireDisclosureAcknowledgement;
+    const fullscreenRequired = monitoringEnabled && policy.requireFullscreen;
+
+    const blockedReasons: SecurityPolicyRuntimeStateContract['blockedReasons'] = [];
+    if (!monitoringEnabled) {
+      blockedReasons.push('MONITORING_POLICY_DISABLED');
+    }
+    if (disclosureRequired && !disclosureAcknowledged) {
+      blockedReasons.push('DISCLOSURE_ACKNOWLEDGEMENT_REQUIRED');
+    }
+    if (fullscreenRequired && !fullscreenSatisfied) {
+      blockedReasons.push('FULLSCREEN_REQUIRED');
+    }
+
+    const canStartMonitoring = blockedReasons.length === 0;
+    const disclosure = this.buildDisclosure(policy);
+
+    return {
+      proctoringMode: mode,
+      disclosureRequired,
+      disclosureAcknowledged,
+      fullscreenRequired,
+      fullscreenSatisfied,
+      canStartAttempt: true, // attempt start is not gated by proctoring policy
+      canStartMonitoring,
+      blockedReasons,
+      enabledEventCategories: this.getEnabledEventCategories(policy),
+      disclosureTitle: disclosure.title,
+      disclosureBody: disclosure.message,
+    };
+  }
+
+  /**
+   * Returns the list of enabled event category names based on policy flags.
+   */
+  getEnabledEventCategories(policy: AssessmentSecurityPolicyConfig): string[] {
+    if (policy.proctoringMode === 'OFF') {
+      return [];
+    }
+    const categories: string[] = ['heartbeat'];
+    if (policy.trackFocusChanges) categories.push('trackFocusChanges');
+    if (policy.trackVisibilityChanges) categories.push('trackVisibilityChanges');
+    if (policy.trackFullscreenChanges) categories.push('trackFullscreenChanges');
+    if (policy.trackCopyPasteAttempts) categories.push('trackCopyPasteAttempts');
+    if (policy.trackNetworkStatus) categories.push('trackNetworkStatus');
+    return categories;
+  }
+
+  /**
+   * Checks whether a given proctoring event type is allowed by the active policy.
+   * In addition to the global allowlist, category-specific flags must be enabled.
+   */
+  isEventTypeAllowedByPolicy(
+    eventType: ProctoringEventType,
+    policy: AssessmentSecurityPolicyConfig,
+  ): boolean {
+    if (!this.isEventTypeAllowed(eventType)) {
+      return false;
+    }
+    if (policy.proctoringMode === 'OFF') {
+      return false;
+    }
+    // Session lifecycle and heartbeat events are always allowed when mode is not OFF
+    if (
+      eventType === 'SESSION_STARTED' ||
+      eventType === 'SESSION_ENDED' ||
+      eventType === 'HEARTBEAT' ||
+      eventType === 'SUSPICIOUS_ACTIVITY_REPORTED' ||
+      eventType === 'SYSTEM_WARNING'
+    ) {
+      return true;
+    }
+    // Focus-change events
+    if (eventType === 'WINDOW_BLUR' || eventType === 'WINDOW_FOCUS') {
+      return policy.trackFocusChanges;
+    }
+    // Visibility events
+    if (eventType === 'VISIBILITY_HIDDEN' || eventType === 'VISIBILITY_VISIBLE') {
+      return policy.trackVisibilityChanges;
+    }
+    // Fullscreen events
+    if (eventType === 'FULLSCREEN_EXITED' || eventType === 'FULLSCREEN_ENTERED') {
+      return policy.trackFullscreenChanges;
+    }
+    // Copy/paste events
+    if (eventType === 'COPY_ATTEMPTED' || eventType === 'PASTE_ATTEMPTED') {
+      return policy.trackCopyPasteAttempts;
+    }
+    // Network events
+    if (eventType === 'NETWORK_OFFLINE' || eventType === 'NETWORK_ONLINE') {
+      return policy.trackNetworkStatus;
+    }
+    return false;
   }
 
   private validateBoundedNumber(value: number, min: number, max: number, message: string): number {
