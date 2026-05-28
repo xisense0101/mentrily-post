@@ -2,6 +2,66 @@
 
 This document serves as a permanent continuity/backtrace system for the Mentrily SaaS codebase. Every task must record its progress here to ensure a reliable audit trail and clear path forward.
 
+### Task 015A — Coding Question Execution Runtime Foundation
+
+- **Task ID**: 015A
+- **Previous Task**: Task 014I — Assessment Security Policy Enforcement and Attempt Gating
+- **Implementation Status**: Complete, full validation matrix passed
+- **Baseline Validation Discipline**:
+  - `pnpm --filter @mentrily/platform-api test`: **PASS**
+  - `pnpm --filter @mentrily/platform-api typecheck`: **PASS**
+- **Work Completed**:
+  - Established a dedicated `code-execution` module in `platform-api` to orchestrate secure and decoupled code execution.
+  - Defined supported languages (`javascript`, `python`, `cpp`, `java`) and their metadata in the domain layer.
+  - Set hard resource limits (max CPU time 5s, max memory 128MB, max output size 64KB, max source code size 64KB, max stdin size 16KB) to prevent resource exhaustion and denial of service.
+  - Implemented the `CodeExecutionPolicyService` to validate requests against limits/allowlist and safely sanitize/truncate execution output.
+  - Built a provider-based architecture with ports (`CodeExecutionProvider`) and adapters:
+    - `FixtureCodeExecutionProvider`: A deterministic simulator for testing success and error scenarios (compile error, runtime error, limits exceeded, provider unavailable).
+    - `Judge0CodeExecutionProvider` & `PistonCodeExecutionProvider`: Integration shells for future production runners.
+  - Implemented use cases:
+    - `GetCodeExecutionLanguagesUseCase`: Lists supported languages under workspace authorization checks.
+    - `RunCodeSampleUseCase`: Runs a source code sample, manages optional public test cases mapping input to expected output, handles provider errors, and sanitizes outcomes without leaking internal trace details.
+  - Exposed endpoints via `CodeExecutionController`:
+    - `GET /workspace/code-execution/languages`
+    - `POST /workspace/code-execution/sample-run`
+  - Secured endpoints under NestJS `permissionEvaluator` and workspace extraction helpers (`requireAssessmentActor`), gating requests on the `WORKSPACE_READ` permission.
+  - Resolved TypeScript `exactOptionalPropertyTypes` violations in use cases using strict conditional property spreading.
+  - Created comprehensive Vitest coverage:
+    - Unit tests (`code-execution-policy.service.spec.ts`) verifying language metadata, request limits, and output truncation.
+    - Integration tests (`code-execution-api.integration.spec.ts`) covering all endpoint routing, authorization gating, fixture simulation modes, and test case mapping.
+- **Validation Performed**:
+  - ✅ `pnpm --filter @mentrily/platform-api test`: **PASS**
+  - ✅ `pnpm --filter @mentrily/platform-api test:integration`: **PASS**
+  - ✅ `pnpm --filter @mentrily/platform-api typecheck`: **PASS**
+  - ✅ `pnpm --filter @mentrily/platform-api build`: **PASS**
+  - ✅ `pnpm --filter @mentrily/portal test`: **PASS**
+  - ✅ `pnpm --filter @mentrily/portal typecheck`: **PASS**
+  - ✅ `pnpm --filter @mentrily/portal build`: **PASS**
+  - ✅ `pnpm --filter @mentrily/data-platform prisma:validate`: **PASS**
+  - ✅ `pnpm --filter @mentrily/data-platform prisma:generate`: **PASS**
+  - ✅ `pnpm --filter @mentrily/platform-worker test`: **PASS**
+  - ✅ `pnpm --filter @mentrily/platform-worker typecheck`: **PASS**
+  - ✅ `pnpm --filter @mentrily/contract-catalog typecheck`: **PASS**
+  - ✅ `pnpm --filter @mentrily/domain-contracts typecheck`: **PASS**
+  - ✅ `pnpm --filter @mentrily/security-toolkit test`: **PASS**
+  - ✅ `pnpm lint`: **PASS** (warnings only, 0 errors in code-execution module)
+  - ✅ `pnpm typecheck`: **PASS**
+  - ✅ `pnpm test`: **PASS**
+  - ✅ `pnpm build`: **PASS**
+  - ✅ `pnpm test:integration`: **PASS**
+  - ✅ `pnpm test:e2e`: **PASS**
+  - ✅ `pnpm e2e:assessment-grading`: **PASS**
+  - ✅ `pnpm e2e:assessment-result`: **PASS**
+  - ✅ `node automation/verify-env-examples.mjs`: **PASS**
+  - ✅ `pnpm db:test:down`: **PASS**
+- **Remaining Gaps**:
+  - Integration with actual live Judge0 and Piston execution endpoints (currently shell implementations).
+  - Frontend runner interface (Task 015B).
+- **Next Recommended Task**:
+  - Task 015B — Frontend Coding Question Execution Runner Integration
+
+---
+
 ### Task 014I — Assessment Security Policy Enforcement and Attempt Gating
 
 - **Task ID**: 014I

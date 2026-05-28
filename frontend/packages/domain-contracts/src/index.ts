@@ -7,3 +7,4 @@ export * from './analytics.js';
 export * from './dashboard.js';
 export * from './campaign-management.js';
 export * from './proctoring.js';
+export * from './code-execution.js';

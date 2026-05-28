@@ -12,6 +12,7 @@ import { DashboardModule } from './dashboard/dashboard.module.js';
 import { CampaignManagementModule } from './campaign-management/campaign-management.module.js';
 import { AnalyticsModule } from './analytics/analytics.module.js';
 import { ProctoringModule } from './proctoring/proctoring.module.js';
+import { CodeExecutionModule } from './code-execution/code-execution.module.js';
 
 @Module({
   imports: [
@@ -28,6 +29,7 @@ import { ProctoringModule } from './proctoring/proctoring.module.js';
     ProctoringModule,
     DashboardModule,
     CampaignManagementModule,
+    CodeExecutionModule,
   ],
 })
 export class AppModule {}
