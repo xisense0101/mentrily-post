@@ -3,6 +3,8 @@ import { DataPlatformModule } from '@mentrily/data-platform';
 import { FoundationModule } from '../../foundation/foundation.module.js';
 import { MediaLibraryModule } from '../media-library/media-library.module.js';
 import { ProctoringModule } from '../proctoring/proctoring.module.js';
+import { CodeExecutionModule } from '../code-execution/code-execution.module.js';
+import { CodingAnswerGradingService } from './application/services/coding-answer-grading.service.js';
 import {
   AssessmentPublishPolicyService,
   AssessmentVersioningPolicyService,
@@ -69,7 +71,13 @@ import {
 } from './presentation/index.js';
 
 @Module({
-  imports: [FoundationModule, DataPlatformModule, MediaLibraryModule, ProctoringModule],
+  imports: [
+    FoundationModule,
+    DataPlatformModule,
+    MediaLibraryModule,
+    ProctoringModule,
+    CodeExecutionModule,
+  ],
   controllers: [
     AssessmentDeliveryController,
     AssessmentAttemptController,
@@ -87,6 +95,7 @@ import {
     AssessmentResultReleasePolicyService,
     AssessmentAutoGradingService,
     AssessmentGradingPolicyService,
+    CodingAnswerGradingService,
 
     // Infrastructure / Repositories
     {

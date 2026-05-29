@@ -2,6 +2,67 @@
 
 This document serves as a permanent continuity/backtrace system for the Mentrily SaaS codebase. Every task must record its progress here to ensure a reliable audit trail and clear path forward.
 
+### Task 015C2 — Coding Grading Pipeline Final Privacy Remediation
+
+- **Task ID**: 015C2
+- **Previous Task**: Task 015C1 — Coding Grading Pipeline Remediation
+- **Implementation Status**: Complete, all tests passed and validation matrix green
+- **Work Completed**:
+  - Removed hidden test case ID leakage (`failedTestCaseId`) from `metadata` returned under the `PROVIDER_UNAVAILABLE` verdict path of `CodingAnswerGradingService`.
+  - Added internal warning logging containing the test case ID to ensure proper telemetry and debugging without exposing the identifier to the learner feedback or domain response layers.
+  - Added unit test `provider unavailable on hidden test does not expose hidden test id` to verify that no hidden test case IDs are leaked during provider unavailability errors.
+- **Validation Performed**:
+  - `pnpm lint`: **PASS**
+  - `pnpm typecheck`: **PASS**
+  - `pnpm test`: **PASS (501 tests green)**
+  - `pnpm build`: **PASS**
+- **Next Recommended Task**: Task 015D — Code Execution Reliability, Limits, and Abuse Protection
+
+---
+
+### Task 015C1 — Coding Grading Pipeline Remediation
+
+- **Task ID**: 015C1
+- **Previous Task**: Task 015C — Coding Grading Pipeline Integration
+- **Implementation Status**: Complete, all tests passed and validation matrix green
+- **Work Completed**:
+  - Eliminated all production-level `any` and `Record<string, any>` types in `CodingAnswerGradingService`. Replaced with `Record<string, unknown>` and safe typing constructs.
+  - Refactored input narrowing for `question.metadata` and resolved `exactOptionalPropertyTypes: true` assignment compatibility by conditionally building the test case objects.
+  - Sealed security and privacy checks: completely excluded all hidden test case identifiers, inputs, expected outputs, stdout, and stderr from both `feedback` and `metadata` structures passed to the domain layers.
+  - Sanitized provider and internal execution error messages: raw system messages/stack traces are logged internally using the NestJS Logger, returning a generic error string ("Execution provider error. Manual review required.") to prevent data leaks.
+  - Handled array indexing safely for score weight calculation to prevent potential undefined dereferencing.
+  - Updated service unit tests to rigorously assert that hidden test case details are not present anywhere in the stringified result payload and verified proper error sanitization.
+- **Validation Performed**:
+  - `pnpm lint`: **PASS**
+  - `pnpm typecheck`: **PASS**
+  - `pnpm test`: **PASS (all unit tests green)**
+  - `pnpm build`: **PASS**
+  - `pnpm test:integration`: **PASS**
+  - `pnpm test:e2e`: **PASS**
+- **Next Recommended Task**: Task 015D — Code Execution Reliability, Limits, and Abuse Protection
+
+---
+
+### Task 015C — Coding Grading Pipeline Integration
+
+- **Task ID**: 015C
+- **Previous Task**: Task 015B — Frontend Coding Question Execution Runner Integration
+- **Implementation Status**: Complete, all tests passed
+- **Work Completed**:
+  - Implemented `CodingAnswerGradingService` to execute learner code submissions against hidden and public test cases using the `CodeExecutionProvider`.
+  - Normalizes code execution verdicts (e.g. ACCEPTED, WRONG_ANSWER, COMPILE_ERROR) into attempt grading outcomes.
+  - Secures test case visibility strictly: strips hidden test case inputs, outputs, stdout, and stderr from learner feedback payloads to prevent leakage.
+  - Refactored `GradeAssessmentAttemptUseCase` to execute coding answer grading synchronously outside of database transactions, protecting the transactional integrity of attempt finalization from external provider latencies/timeouts.
+  - Updated transactional state transitions to be idempotent and cleanly isolate external execution logic.
+  - Exported and registered `CodingAnswerGradingService` and `CodeExecutionModule` dependencies correctly.
+  - Created comprehensive unit tests for `CodingAnswerGradingService` and updated test suites for `GradeAssessmentAttemptUseCase`.
+- **Validation Performed**:
+  - `npm run test` (including new tests for coding grading service and use case): **PASS (215/215 unit tests)**
+  - `npm run test:integration`: **PASS**
+- **Next Recommended Task**: Task 015D — Coding Assessment Dashboard and Statistics
+
+---
+
 ### Task 015B — Frontend Coding Question Execution Runner Integration
 
 - **Task ID**: 015B

@@ -26,6 +26,7 @@ import {
 import {
   AssessmentEventPublisherService,
   AssessmentExecutionReservationService,
+  CodingAnswerGradingService,
 } from '../application/services/index.js';
 import { GradeAssessmentAttemptUseCase } from '../application/use-cases/index.js';
 import {
@@ -50,9 +51,9 @@ function createAuditRecorder(): AuditRecorder {
 
 function createAttemptAndSnapshot() {
   const question = AssessmentQuestion.create({
-      id: 'question-1',
-      assessmentId: 'assessment-1',
-      kind: QuestionKindEnum.MCQ,
+    id: 'question-1',
+    assessmentId: 'assessment-1',
+    kind: QuestionKindEnum.MCQ,
     title: 'Question',
     prompt: { text: 'Question' },
     options: [
@@ -98,6 +99,15 @@ function createAttemptAndSnapshot() {
 }
 
 describe('GradeAssessmentAttemptUseCase', () => {
+  const mockCodingAnswerGrading = {
+    gradeAnswer: vi.fn(async () => ({
+      status: 'AUTO_GRADED',
+      score: 5,
+      feedback: { success: true },
+      metadata: { runId: 'run-1' },
+    })),
+  } as unknown as CodingAnswerGradingService;
+
   it('requires actor context', async () => {
     const attemptRepo = {} as AssessmentAttemptRepository;
     const snapshotRepo = {} as AssessmentSnapshotRepository;
@@ -109,13 +119,16 @@ describe('GradeAssessmentAttemptUseCase', () => {
       new AssessmentAutoGradingService(),
       new AssessmentGradingPolicyService(),
       new AssessmentExecutionReservationService(),
+      mockCodingAnswerGrading,
       createPermissionEvaluator(true),
       createTransactionRunner({ transactionId: 'tx-1', client: {} }),
       createAuditRecorder(),
       new AssessmentEventPublisherService({ publish: vi.fn(async () => undefined) }),
     );
 
-    await expect(useCase.execute(createAssessmentRequestContextWithoutWorkspace(), 'attempt-1')).rejects.toMatchObject({
+    await expect(
+      useCase.execute(createAssessmentRequestContextWithoutWorkspace(), 'attempt-1'),
+    ).rejects.toMatchObject({
       code: 'UNAUTHORIZED',
     });
   });
@@ -129,13 +142,16 @@ describe('GradeAssessmentAttemptUseCase', () => {
       new AssessmentAutoGradingService(),
       new AssessmentGradingPolicyService(),
       new AssessmentExecutionReservationService(),
+      mockCodingAnswerGrading,
       createPermissionEvaluator(false),
       txRunner,
       createAuditRecorder(),
       new AssessmentEventPublisherService({ publish: vi.fn(async () => undefined) }),
     );
 
-    await expect(useCase.execute(createAssessmentRequestContext(), 'attempt-1')).rejects.toMatchObject({
+    await expect(
+      useCase.execute(createAssessmentRequestContext(), 'attempt-1'),
+    ).rejects.toMatchObject({
       code: 'FORBIDDEN',
     });
     expect(txRunner.run).not.toHaveBeenCalled();
@@ -156,13 +172,16 @@ describe('GradeAssessmentAttemptUseCase', () => {
       new AssessmentAutoGradingService(),
       new AssessmentGradingPolicyService(),
       new AssessmentExecutionReservationService(),
+      mockCodingAnswerGrading,
       createPermissionEvaluator(true),
       createTransactionRunner({ transactionId: 'tx-1', client: {} }),
       createAuditRecorder(),
       new AssessmentEventPublisherService({ publish: vi.fn(async () => undefined) }),
     );
 
-    await expect(useCase.execute(createAssessmentRequestContext(), attempt.id)).rejects.toMatchObject({
+    await expect(
+      useCase.execute(createAssessmentRequestContext(), attempt.id),
+    ).rejects.toMatchObject({
       code: 'VALIDATION_ERROR',
     });
   });
@@ -192,6 +211,7 @@ describe('GradeAssessmentAttemptUseCase', () => {
       new AssessmentAutoGradingService(),
       new AssessmentGradingPolicyService(),
       new AssessmentExecutionReservationService(),
+      mockCodingAnswerGrading,
       createPermissionEvaluator(true),
       createTransactionRunner(tx),
       audit,
@@ -227,14 +247,100 @@ describe('GradeAssessmentAttemptUseCase', () => {
       new AssessmentAutoGradingService(),
       new AssessmentGradingPolicyService(),
       new AssessmentExecutionReservationService(),
+      mockCodingAnswerGrading,
       createPermissionEvaluator(true),
       createTransactionRunner({ transactionId: 'tx-1', client: {} }),
       createAuditRecorder(),
       new AssessmentEventPublisherService({ publish: vi.fn(async () => undefined) }),
     );
 
-    await expect(useCase.execute(createAssessmentRequestContext(), crossWorkspaceAttempt.id)).rejects.toMatchObject({
+    await expect(
+      useCase.execute(createAssessmentRequestContext(), crossWorkspaceAttempt.id),
+    ).rejects.toMatchObject({
       code: 'NOT_FOUND',
     });
+  });
+
+  it('delegates grading to CodingAnswerGradingService for CODE questions', async () => {
+    const tx: TransactionContext = { transactionId: 'tx-1', client: {} };
+    const codeQuestion = AssessmentQuestion.create({
+      id: 'question-code-1',
+      assessmentId: 'assessment-1',
+      kind: QuestionKindEnum.CODE,
+      title: 'Coding Question',
+      prompt: { text: 'Write code' },
+      options: [],
+      answerKey: null,
+      points: QuestionPoints.create(10),
+      gradingMode: GradingModeEnum.AUTO,
+      position: 0,
+      metadata: {
+        gradingTestCases: [
+          { id: 'tc-1', input: '1', expectedOutput: '2', visibility: 'HIDDEN_GRADED' },
+        ],
+      },
+    });
+
+    const snapshot = AssessmentPublishedSnapshot.restore({
+      id: 'snapshot-1',
+      assessmentId: 'assessment-1',
+      versionId: 'version-1',
+      versionNumber: 1,
+      sections: [],
+      looseQuestions: [codeQuestion],
+      publishedByPrincipalId: TEST_ACTOR_ID,
+      publishedAt: new Date(),
+      createdAt: new Date(),
+    });
+
+    const attempt = AssessmentAttempt.start({
+      id: 'attempt-code-1',
+      tenantId: TEST_TENANT_ID,
+      workspaceId: TEST_WORKSPACE_ID,
+      assessmentId: 'assessment-1',
+      snapshotId: snapshot.id,
+      snapshotVersionId: snapshot.versionId,
+      snapshotVersionNumber: 1,
+      learnerPrincipalId: TEST_ACTOR_ID,
+      sessionId: 'session-1',
+    });
+    attempt.saveAnswer({
+      answerId: 'answer-code-1',
+      questionId: codeQuestion.id,
+      questionKind: codeQuestion.kind,
+      answer: { sourceCode: 'print(1)', language: 'python3' },
+    });
+    attempt.submit('result-1');
+
+    const attemptRepo = {
+      findById: vi.fn(async () => attempt),
+      save: vi.fn(async (value) => value),
+      listByLearner: vi.fn(async () => []),
+      listByAssessmentAndLearner: vi.fn(async () => []),
+    } as unknown as AssessmentAttemptRepository;
+
+    const gradingRepo = {
+      saveRun: vi.fn(async (run) => run),
+    } as unknown as AssessmentGradingRepository;
+
+    const useCase = new GradeAssessmentAttemptUseCase(
+      attemptRepo,
+      { findById: vi.fn(async () => snapshot) } as unknown as AssessmentSnapshotRepository,
+      gradingRepo,
+      new AssessmentAutoGradingService(),
+      new AssessmentGradingPolicyService(),
+      new AssessmentExecutionReservationService(),
+      mockCodingAnswerGrading,
+      createPermissionEvaluator(true),
+      createTransactionRunner(tx),
+      createAuditRecorder(),
+      new AssessmentEventPublisherService({ publish: vi.fn(async () => undefined) }),
+    );
+
+    const response = await useCase.execute(createAssessmentRequestContext(), attempt.id);
+    expect(mockCodingAnswerGrading.gradeAnswer).toHaveBeenCalled();
+    expect(response.totalScore).toBe(5);
+    expect(response.maxScore).toBe(10);
+    expect(response.answerGrades[0]?.status).toBe('AUTO_GRADED');
   });
 });

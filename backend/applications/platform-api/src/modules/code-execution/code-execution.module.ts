@@ -44,6 +44,11 @@ import { CodeExecutionController } from './presentation/http/code-execution.cont
     Judge0CodeExecutionProvider,
     PistonCodeExecutionProvider,
   ],
-  exports: [CodeExecutionPolicyService, GetCodeExecutionLanguagesUseCase, RunCodeSampleUseCase],
+  exports: [
+    CodeExecutionPolicyService,
+    GetCodeExecutionLanguagesUseCase,
+    RunCodeSampleUseCase,
+    'CODE_EXECUTION_PROVIDER',
+  ],
 })
 export class CodeExecutionModule {}

@@ -23,6 +23,7 @@ import {
 import {
   AssessmentAttemptScore,
   AssessmentAttemptGradingStatusEnum,
+  AssessmentGradeScore,
 } from '../../domain/value-objects/index.js';
 import {
   createAssessmentAnswerAutoGradedEvent,
@@ -32,12 +33,13 @@ import {
   createAssessmentGradingRunPartialEvent,
   createAssessmentGradingRunStartedEvent,
 } from '../../domain/events/index.js';
-import { AssessmentGradingRun } from '../../domain/entities/index.js';
+import { AssessmentGradingRun, AssessmentAnswerGrade } from '../../domain/entities/index.js';
 import { mapAssessmentGradingRunToResponse } from '../mappers/index.js';
 import { AssessmentGradingRunResponse } from '../dto/index.js';
 import {
   AssessmentEventPublisherService,
   AssessmentExecutionReservationService,
+  CodingAnswerGradingService,
 } from '../services/index.js';
 import { requireAssessmentActor } from '../support/index.js';
 
@@ -54,6 +56,8 @@ export class GradeAssessmentAttemptUseCase {
     private readonly gradingPolicy: AssessmentGradingPolicyService,
     @Inject(AssessmentExecutionReservationService)
     private readonly executionReservation: AssessmentExecutionReservationService,
+    @Inject(CodingAnswerGradingService)
+    private readonly codingAnswerGrading: CodingAnswerGradingService,
     @Inject(PERMISSION_EVALUATOR) private readonly permissionEvaluator: PermissionEvaluator,
     @Inject(TRANSACTION_RUNNER) private readonly transactionRunner: TransactionRunner,
     @Inject(AUDIT_RECORDER) private readonly auditRecorder: AuditRecorder,
@@ -72,33 +76,69 @@ export class GradeAssessmentAttemptUseCase {
       throw new AppError('FORBIDDEN', 'permission denied', 403);
     }
 
+    const attempt = await this.attemptRepo.findById(attemptId);
+    if (
+      !attempt ||
+      attempt.workspaceId !== workspace.workspaceId ||
+      attempt.tenantId !== workspace.tenantId
+    ) {
+      throw new AppError('NOT_FOUND', 'attempt not found', 404);
+    }
+
+    const policy = this.gradingPolicy.canGradeAttempt(attempt);
+    if (!policy.allowed) {
+      throw new AppError('VALIDATION_ERROR', policy.reason ?? 'Attempt cannot be graded', 400);
+    }
+
+    const snapshot = await this.snapshotRepo.findById(attempt.snapshotId);
+    if (!snapshot || snapshot.assessmentId !== attempt.assessmentId) {
+      throw new AppError('NOT_FOUND', 'attempt snapshot not found', 404);
+    }
+
+    const questionMap = new Map(
+      snapshot.getAllQuestions().map((question) => [question.id, question]),
+    );
+
+    const codingGrades = new Map<
+      string,
+      {
+        status: 'AUTO_GRADED' | 'PENDING_MANUAL_REVIEW' | 'GRADING_FAILED';
+        score?: number;
+        feedback?: Record<string, unknown>;
+        metadata?: Record<string, unknown>;
+      }
+    >();
+
+    for (const answer of attempt.answers.filter((item) => item.isSubmitted())) {
+      const question = questionMap.get(answer.questionId);
+      if (question && question.kind === 'CODE') {
+        const result = await this.codingAnswerGrading.gradeAnswer(answer, question);
+        codingGrades.set(answer.id, result);
+      }
+    }
+
     return this.transactionRunner.run(async (tx) => {
-      const attempt = await this.attemptRepo.findById(attemptId, tx);
+      const attemptTx = await this.attemptRepo.findById(attemptId, tx);
       if (
-        !attempt ||
-        attempt.workspaceId !== workspace.workspaceId ||
-        attempt.tenantId !== workspace.tenantId
+        !attemptTx ||
+        attemptTx.workspaceId !== workspace.workspaceId ||
+        attemptTx.tenantId !== workspace.tenantId
       ) {
         throw new AppError('NOT_FOUND', 'attempt not found', 404);
       }
 
-      const policy = this.gradingPolicy.canGradeAttempt(attempt);
-      if (!policy.allowed) {
-        throw new AppError('VALIDATION_ERROR', policy.reason ?? 'Attempt cannot be graded', 400);
-      }
-
-      const snapshot = await this.snapshotRepo.findById(attempt.snapshotId, tx);
-      if (!snapshot || snapshot.assessmentId !== attempt.assessmentId) {
-        throw new AppError('NOT_FOUND', 'attempt snapshot not found', 404);
+      const policyTx = this.gradingPolicy.canGradeAttempt(attemptTx);
+      if (!policyTx.allowed) {
+        throw new AppError('VALIDATION_ERROR', policyTx.reason ?? 'Attempt cannot be graded', 400);
       }
 
       const run = AssessmentGradingRun.start({
         id: randomUUID(),
-        tenantId: attempt.tenantId,
-        workspaceId: attempt.workspaceId,
-        attemptId: attempt.id,
-        assessmentId: attempt.assessmentId,
-        snapshotId: attempt.snapshotId,
+        tenantId: attemptTx.tenantId,
+        workspaceId: attemptTx.workspaceId,
+        attemptId: attemptTx.id,
+        assessmentId: attemptTx.assessmentId,
+        snapshotId: attemptTx.snapshotId,
         triggeredByPrincipalId: workspace.actorId,
       });
 
@@ -112,10 +152,7 @@ export class GradeAssessmentAttemptUseCase {
         tx,
       );
 
-      const questionMap = new Map(
-        snapshot.getAllQuestions().map((question) => [question.id, question]),
-      );
-      for (const answer of attempt.answers.filter((item) => item.isSubmitted())) {
+      for (const answer of attemptTx.answers.filter((item) => item.isSubmitted())) {
         const question = questionMap.get(answer.questionId);
         if (!question) {
           throw new AppError(
@@ -124,16 +161,45 @@ export class GradeAssessmentAttemptUseCase {
             400,
           );
         }
-        const grade = this.autoGrading.gradeAnswer({
-          attemptId: attempt.id,
-          answer,
-          question,
-          gradingRunId: run.id,
-        });
+
+        let grade: AssessmentAnswerGrade;
+        const codeResult = codingGrades.get(answer.id);
+
+        if (codeResult) {
+          const maxScore = AssessmentGradeScore.create(question.points.value());
+          grade = AssessmentAnswerGrade.createNotGraded({
+            id: randomUUID(),
+            attemptId: attemptTx.id,
+            answerId: answer.id,
+            questionId: question.id,
+            questionKind: question.kind,
+            maxScore,
+            metadata: run.id ? { gradingRunId: run.id } : {},
+          });
+
+          if (codeResult.status === 'AUTO_GRADED') {
+            grade.markAutoGraded(
+              AssessmentGradeScore.create(codeResult.score!, maxScore),
+              codeResult.feedback,
+              codeResult.metadata,
+            );
+          } else if (codeResult.status === 'PENDING_MANUAL_REVIEW') {
+            grade.markPendingManualReview(codeResult.metadata, codeResult.feedback);
+          } else {
+            grade.markFailed(codeResult.feedback, codeResult.metadata);
+          }
+        } else {
+          grade = this.autoGrading.gradeAnswer({
+            attemptId: attemptTx.id,
+            answer,
+            question,
+            gradingRunId: run.id,
+          });
+        }
 
         this.executionReservation.createReservedExecutionRequest({
           context,
-          attemptId: attempt.id,
+          attemptId: attemptTx.id,
           answerId: answer.id,
           questionId: question.id,
           questionKind: question.kind,
@@ -154,7 +220,7 @@ export class GradeAssessmentAttemptUseCase {
 
       const savedRun = await this.gradingRepo.saveRun(run, tx);
 
-      const result = attempt.result;
+      const result = attemptTx.result;
       if (!result) {
         throw new AppError('VALIDATION_ERROR', 'attempt result placeholder missing', 400);
       }
@@ -168,14 +234,14 @@ export class GradeAssessmentAttemptUseCase {
           AssessmentAttemptScore.create(savedRun.maxScore?.value ?? 0),
         );
       }
-      await this.attemptRepo.save(attempt, tx);
+      await this.attemptRepo.save(attemptTx, tx);
 
       await this.auditRecorder.record(
         {
           action: 'assessment.grading.run',
           actorId: workspace.actorId,
           targetType: 'assessment-attempt',
-          targetId: attempt.id,
+          targetId: attemptTx.id,
         },
         context,
         tx,
@@ -253,13 +319,13 @@ export class GradeAssessmentAttemptUseCase {
 
       await this.eventPublisher.publishDomainEvent(
         createAssessmentAttemptResultUpdatedEvent(
-          attempt.id,
-          attempt.tenantId,
-          attempt.workspaceId,
+          attemptTx.id,
+          attemptTx.tenantId,
+          attemptTx.workspaceId,
           {
-            attemptId: attempt.id,
-            assessmentId: attempt.assessmentId,
-            snapshotId: attempt.snapshotId,
+            attemptId: attemptTx.id,
+            assessmentId: attemptTx.assessmentId,
+            snapshotId: attemptTx.snapshotId,
             gradingStatus: hasPendingManualReview
               ? AssessmentAttemptGradingStatusEnum.PENDING_MANUAL_REVIEW
               : AssessmentAttemptGradingStatusEnum.GRADED,
