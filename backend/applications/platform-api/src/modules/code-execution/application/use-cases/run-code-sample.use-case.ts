@@ -40,7 +40,7 @@ export class RunCodeSampleUseCase {
 
     const mode = executionMode || 'SAMPLE_RUN';
     if (mode === 'RESERVED_GRADING_RUN') {
-      throw new AppError('INVALID_EXECUTION_MODE', 'GRADING_RUN_NOT_AVAILABLE', 400);
+      throw new AppError('VALIDATION_ERROR', 'GRADING_RUN_NOT_AVAILABLE', 400);
     }
     if (mode !== 'SAMPLE_RUN' && mode !== 'PUBLIC_TEST_RUN') {
       throw new AppError('VALIDATION_ERROR', 'Unsupported execution mode', 400);

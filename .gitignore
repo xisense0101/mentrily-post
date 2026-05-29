@@ -35,3 +35,7 @@ backend/packages/data-platform/scratch/
 
 # TypeScript build cache
 *.tsbuildinfo
+
+# AI Memory files
+task-changes-memory.xml
+mentrily-ai-memory.xml

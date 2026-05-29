@@ -61,7 +61,10 @@ test('learner starts, answers, saves, and submits an attempt through real fronte
   await cards.nth(4).locator('textarea').fill('Long answer value');
   await cards.nth(4).locator(assessmentAttemptE2ESelectors.attemptSaveAnswerButton).click();
 
-  await cards.nth(5).locator('textarea').fill('function solve() { return 42; }');
+  await cards
+    .nth(5)
+    .locator('textarea[data-testid="code-editor"]')
+    .fill('function solve() { return 42; }');
   await cards.nth(5).locator(assessmentAttemptE2ESelectors.attemptSaveAnswerButton).click();
 
   await page.locator(assessmentAttemptE2ESelectors.attemptSubmitButton).click();
@@ -142,7 +145,7 @@ test('submitted attempt is read-only after reload', async ({ page }) => {
 
   await expect(page.locator(assessmentAttemptE2ESelectors.attemptResultPlaceholder)).toBeVisible();
   await expect(page.locator('input[type="radio"]').first()).toBeDisabled();
-  await expect(page.locator('textarea').last()).toBeDisabled();
+  await expect(page.locator('textarea[data-testid="code-editor"]').last()).toBeDisabled();
 });
 
 test('missing context fails gracefully', async ({ page }) => {

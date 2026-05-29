@@ -370,7 +370,7 @@ describe.sequential('Code Execution API (integration)', () => {
 
       expectHttpStatus(res, 400);
       const data = res.json<any>();
-      expect(data.error.code).toBe('INVALID_EXECUTION_MODE');
+      expect(data.error.code).toBe('VALIDATION_ERROR');
       expect(data.error.message).toContain('GRADING_RUN_NOT_AVAILABLE');
     });
 

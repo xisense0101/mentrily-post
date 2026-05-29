@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import {
-  CodePlaceholderAnswer,
+  CodingQuestionRunner,
   FileUploadAnswer,
   LongAnswerInput,
   McqAnswerInput,
@@ -86,8 +86,13 @@ function getInitialValue(
     case 'SHORT_ANSWER':
     case 'LONG_ANSWER':
       return readStringField(payload, 'text') ?? '';
-    case 'CODE':
-      return readStringField(payload, 'sourceCode') ?? '';
+    case 'CODE': {
+      // Return object with language + sourceCode for CodingQuestionRunner
+      return {
+        language: readStringField(payload, 'language') ?? '',
+        sourceCode: readStringField(payload, 'sourceCode') ?? '',
+      };
+    }
     case 'FILE_UPLOAD':
       return Array.isArray(payload?.mediaAssetIds)
         ? payload.mediaAssetIds.filter((item): item is string => typeof item === 'string')
@@ -223,10 +228,20 @@ export function AttemptQuestionCard({
           />
         ) : null}
         {question.kind === 'CODE' ? (
-          <CodePlaceholderAnswer
-            disabled={readOnly}
-            onChange={setValue}
-            value={typeof value === 'string' ? value : ''}
+          <CodingQuestionRunner
+            assessmentId={assessmentId}
+            attemptId={attemptId}
+            answer={answer}
+            canEdit={!readOnly}
+            isSaving={isSaving}
+            question={question}
+            saveConflict={saveConflict}
+            saveError={saveError}
+            saveSucceeded={saveSucceeded}
+            onSave={(codingValue) => {
+              setValue(codingValue);
+              return onSave(codingValue);
+            }}
           />
         ) : null}
         {question.kind === 'FILE_UPLOAD' ? (
@@ -265,7 +280,8 @@ export function AttemptQuestionCard({
         ) : null}
       </div>
 
-      {answerable ? (
+      {/* CODE questions render their own save/run controls inside CodingQuestionRunner */}
+      {answerable && question.kind !== 'CODE' ? (
         <div className="mt-5 space-y-3">
           <button
             className="rounded-full border border-portal-border bg-white px-4 py-2 text-sm font-medium text-portal-text shadow-sm transition hover:bg-portal-surface-muted disabled:cursor-not-allowed disabled:opacity-60"

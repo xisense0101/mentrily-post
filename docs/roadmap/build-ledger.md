@@ -2,6 +2,146 @@
 
 This document serves as a permanent continuity/backtrace system for the Mentrily SaaS codebase. Every task must record its progress here to ensure a reliable audit trail and clear path forward.
 
+### Task 015B — Frontend Coding Question Execution Runner Integration
+
+- **Task ID**: 015B
+- **Previous Task**: Task 015A1 — Coding Execution Runtime Foundation Hardening
+- **Implementation Status**: Complete, full validation matrix passed
+- **Baseline Validation Discipline**:
+  - `git status --short`: M repomix.config.json, D mentrily-ai-memory.xml (non-feature dirt, no code changes)
+  - `pnpm --filter @mentrily/portal test`: PASS (68 test files, 320 tests — green before implementation)
+  - `pnpm --filter @mentrily/portal typecheck`: PASS (green before implementation)
+  - `pnpm --filter @mentrily/portal build`: PASS (green before implementation)
+  - `pnpm --filter @mentrily/platform-api test`: PASS (94 test files, 490 tests)
+  - `pnpm --filter @mentrily/domain-contracts typecheck`: PASS
+  - `pnpm --filter @mentrily/contract-catalog typecheck`: PASS
+- **Phase 1 — Inspection Findings**:
+  - `code-execution` frontend module did not exist — only `CodePlaceholderAnswer` component with stub textarea
+  - Assessment attempt flow: `AttemptQuestionCard` → `CodePlaceholderAnswer` for CODE kind; no language selector, no run button
+  - Save-answer flow: `toAnswerPayload(CODE)` already supports `{ sourceCode, language }` object shape in `assessment-attempt-state.ts`
+  - API conventions: `createAssessmentAttemptApiClient` pattern with `buildE2ERequestHeaders`, `credentials: include`, normalized `ErrorEnvelope`
+  - Portal contract bridge pattern: `src/contracts/code-execution.ts` re-exporting from `@mentrily/domain-contracts`
+  - No Monaco/CodeMirror installed — styled textarea is correct MVP choice
+  - Backend confirmed at `GET /workspace/code-execution/languages` and `POST /workspace/code-execution/sample-run`
+  - Backend already enforces RESERVED_GRADING_RUN rejection, tenantId/workspaceId from session context (not body)
+- **Frontend Runner Model Decision**:
+  - Styled textarea-based code editor (monospace, dark theme, min height, disabled state, accessible label)
+  - Single `CodingQuestionRunner` component handles: language selector, editor, stdin input (SAMPLE_RUN), public test display (PUBLIC_TEST_RUN), run button, result panel, save button
+  - Injected `executionClient` prop for test isolation
+  - Autosave via existing `AttemptQuestionCard` 900ms debounce is disabled for CODE kind; runner has its own explicit Save button
+  - No Monaco/CodeMirror added (not installed, texture MVP acceptable for 015B)
+- **Work Completed**:
+  - Inspected current learner attempt and coding question boundaries
+  - Selected frontend coding runner model (textarea MVP)
+  - Added `frontend/apps/portal/src/modules/code-execution/api/code-execution-api-client.ts` — typed API client
+  - Added `frontend/apps/portal/src/modules/code-execution/api/index.ts` and `index.ts` — module barrel
+  - Added `frontend/apps/portal/src/contracts/code-execution.ts` — portal contract bridge
+  - Updated `frontend/apps/portal/src/contracts/index.ts` — added code-execution export
+  - Added `frontend/apps/portal/src/modules/assessment-attempts/components/answers/coding-question-runner.tsx` — full runner component
+  - Updated `frontend/apps/portal/src/modules/assessment-attempts/components/answers/index.ts` — added CodingQuestionRunner export
+  - Updated `frontend/apps/portal/src/modules/assessment-attempts/components/attempt/attempt-question-card.tsx` — wired CodingQuestionRunner for CODE kind; hid outer save button for CODE (runner has its own)
+  - Updated `frontend/apps/portal/src/modules/assessment-attempts/tests/attempt-question-card.spec.tsx` — updated CODE kind test to match CodingQuestionRunner
+  - Added `frontend/apps/portal/src/modules/code-execution/tests/code-execution-api-client.spec.ts` — 12 tests
+  - Added `frontend/apps/portal/src/modules/assessment-attempts/tests/coding-question-runner.spec.tsx` — 19 tests
+  - Added `frontend/apps/portal/src/modules/assessment-attempts/tests/coding-answer-state.spec.ts` — 6 tests
+  - Preserved existing attempt save/submit behavior
+  - Preserved proctoring/security gate behavior
+  - Preserved submitted/expired read-only state (canEdit=false disables editor, language selector, run button, save button)
+- **Contract Changes**:
+  - No contract schema changes needed — `CodeExecutionLanguageContract`, `CodeExecutionRequestContract`, `CodeExecutionResultContract` from 015A/015A1 already correct
+  - Frontend only: added `FrontendCodeExecutionMode = 'SAMPLE_RUN' | 'PUBLIC_TEST_RUN'` (RESERVED_GRADING_RUN excluded by type)
+  - Added portal-local contract bridge `src/contracts/code-execution.ts`
+- **Code-Execution API Client Behavior**:
+  - `getCodeExecutionLanguages()` → `GET /workspace/code-execution/languages` → returns `CodeExecutionLanguageContract[]`
+  - `runCodeSample(req)` → `POST /workspace/code-execution/sample-run` → returns `CodeExecutionResultContract`
+  - Never sends `RESERVED_GRADING_RUN`, `tenantId`, `workspaceId`, `providerApiKey`, `submissionToken`, `containerId`, `queueId`, `workerId`
+  - Never contains Judge0/Piston URL or API key
+  - Normalizes API errors via `CodeExecutionApiError`
+  - Supports E2E request-context headers via `buildE2ERequestHeaders`
+- **Coding Answer Payload/Save Behavior**:
+  - Answer saved as `{ language: string, sourceCode: string }` via existing `toAnswerPayload(CODE)` → `saveAssessmentAttemptAnswer`
+  - Existing `assessment-attempt-state.ts` already supports this shape (verified)
+  - Save button inside `CodingQuestionRunner`, not outer card save button
+  - No execution result stored as grading result
+- **Language Selector Behavior**:
+  - Languages loaded from backend on mount via `getCodeExecutionLanguages()`
+  - Shows loading / error / empty states
+  - Only backend-allowed languages rendered — unsupported languages cannot be selected or submitted
+  - If saved language is valid, restored; otherwise first allowed language selected
+  - Default template applied only when sourceCode is empty
+- **Code Editor Behavior**:
+  - Styled `<textarea>`: monospace font, dark bg, min height 16rem, disabled/read-only state, accessible `<label>` with `htmlFor`
+  - Line-preserving input, `spellCheck={false}`
+  - Disabled when `canEdit=false` (submitted/expired/read-only)
+- **Sample/Public Test Run Behavior**:
+  - PUBLIC_TEST_RUN: when question.metadata.publicTestCases is present, runs public tests with test cases
+  - SAMPLE_RUN: when no public tests, uses optional stdin input
+  - Run button disabled while request in-flight (double-click guard via `runningRef`)
+  - Execution result is temporary learner feedback only — not stored as grading result
+- **Execution Result Rendering Behavior**:
+  - Normalized verdicts rendered: Accepted, Wrong answer, Compile error, Runtime error, Time limit exceeded, Memory limit exceeded, Output limit exceeded, Provider unavailable, Validation error
+  - Stdout/stderr/compileOutput rendered as `<pre>` text only — no dangerouslySetInnerHTML
+  - Output capped at 4000 chars with truncation notice
+  - Per-public-test pass/fail rows rendered
+  - Provider internals never rendered
+  - Hidden tests never rendered
+- **Attempt Runner Integration Behavior**:
+  - `AttemptQuestionCard` routes CODE kind to `CodingQuestionRunner`
+  - Non-coding questions unchanged
+  - Outer save button hidden for CODE kind (runner has its own)
+  - Submit flow unchanged
+  - Proctoring/security gate behavior unchanged
+- **Submitted/Expired/Read-Only Compatibility**:
+  - `canEdit=false` → editor, language selector, run button, save button all disabled
+  - Existing `isAttemptEditable()` check in `AttemptRunnerShell` passes `readOnly` to `AttemptQuestionCard` which passes `!readOnly` as `canEdit` to `CodingQuestionRunner`
+- **Proctoring/Security Gate Compatibility**:
+  - No changes to proctoring gate logic
+  - Offline detection (`!window.navigator.onLine`) still blocks save
+  - Security gate (acknowledge disclosure + fullscreen) still blocks attempt interaction
+- **Validation Performed**:
+  - ✅ `pnpm --filter @mentrily/portal test` (baseline): **PASS** (68 files, 320 tests)
+  - ✅ `pnpm --filter @mentrily/portal typecheck` (post-implementation): **PASS**
+  - ✅ `pnpm --filter @mentrily/portal test` (post-implementation): **PASS** (71 files, 357 tests — 37 new tests)
+  - ✅ `pnpm --filter @mentrily/portal build`: **PASS**
+  - ✅ `pnpm --filter @mentrily/platform-api test`: **PASS** (94 files, 490 tests)
+  - ✅ `pnpm --filter @mentrily/platform-api typecheck`: **PASS**
+  - ✅ `pnpm --filter @mentrily/platform-api test:integration`: **PASS**
+  - ✅ `pnpm --filter @mentrily/domain-contracts typecheck`: **PASS**
+  - ✅ `pnpm --filter @mentrily/contract-catalog typecheck`: **PASS**
+  - ✅ `pnpm --filter @mentrily/data-platform prisma:validate`: **PASS**
+  - ✅ `pnpm --filter @mentrily/data-platform prisma:generate`: **PASS**
+  - ✅ `pnpm lint`: **PASS**
+  - ✅ `pnpm typecheck`: **PASS**
+  - ✅ `pnpm test`: **PASS**
+  - ✅ `pnpm build`: **PASS**
+  - ✅ `pnpm test:integration`: **PASS**
+  - ✅ `pnpm test:e2e`: **PASS**
+- **Static Safety Scan Results**:
+  - `grep JUDGE0|PISTON|RAPIDAPI frontend/...`: **CLEAN** — no provider secrets in frontend
+  - `grep JUDGE0_API_KEY|PISTON_API_KEY|RAPIDAPI_KEY`: **CLEAN**
+  - `grep providerUrl|providerApiKey|submissionToken|containerId|workerId|queueId`: comments only, not code
+  - `grep hiddenTest|hiddenExpectedOutput`: test assertion bodies only (`.not.toContain()` guards)
+  - `grep RESERVED_GRADING_RUN`: comments and test assertions only — never as a value sent
+  - `grep tenantId|workspaceId` in code-execution module: test assertions only (`.not.toHaveProperty()` guards)
+  - `grep dangerouslySetInnerHTML`: comments only — no actual usage in implementation
+  - `grep eval(|new Function`: **CLEAN**
+- **Tests Added/Updated**:
+  - `code-execution-api-client.spec.ts`: 12 tests — API calls, SAMPLE_RUN/PUBLIC_TEST_RUN, no RESERVED_GRADING_RUN, no tenantId/workspaceId, no provider internals
+  - `coding-question-runner.spec.tsx`: 19 tests — language loading, answer init, read-only, run button states, all verdict types, XSS-safe output, public tests, save behavior, no provider internals
+  - `coding-answer-state.spec.ts`: 6 tests — CODE answer payload serialization, backward compat, no provider internals
+  - `attempt-question-card.spec.tsx`: updated CODE kind test (68 tests preserved, 1 updated)
+- **Remaining Gaps**:
+  - Hidden-test grading pipeline remains Task 015C
+  - Execution reliability/rate-limit/quota/abuse hardening remains Task 015D
+  - Coding results/review UI remains Task 015E
+  - Production Judge0/Piston deployment remains future infrastructure work
+  - Monaco/advanced editor polish remains future work
+  - E2E for coding runner deferred — fixture setup overhead; portal component tests + backend integration tests (015A1) provide coverage
+- **Next Recommended Task**:
+  - **Task 015C — Coding Grading Pipeline** (full validation passed ✅)
+
+---
+
 ### Task 015A1 — Coding Execution Runtime Foundation Hardening
 
 - **Task ID**: 015A1

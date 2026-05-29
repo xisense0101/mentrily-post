@@ -4,12 +4,12 @@
     "maxFileSize": 52428800
   },
   "output": {
-    "filePath": "mentrily-ai-memory.xml",
+    "filePath": "task-changes-memory.xml",
     "style": "xml",
     "parsableStyle": false,
     "fileSummary": true,
     "directoryStructure": true,
-    "files": true,
+    "files": false,
     "removeComments": false,
     "removeEmptyLines": false,
     "compress": false,
@@ -22,7 +22,7 @@
     "git": {
       "sortByChanges": false,
       "sortByChangesMaxCommits": 100,
-      "includeDiffs": false,
+      "includeDiffs": true,
       "includeLogs": false,
       "includeLogsCount": 50
     }

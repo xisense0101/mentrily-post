@@ -119,7 +119,7 @@ describe('AttemptQuestionCard', () => {
     expect(rendered.container.querySelector('textarea')).toBeTruthy();
   });
 
-  it('renders code placeholder input', async () => {
+  it('renders coding question runner for CODE kind', async () => {
     const rendered = await render(
       <AttemptQuestionCard
         {...baseProps}
@@ -130,7 +130,8 @@ describe('AttemptQuestionCard', () => {
       />,
     );
 
-    expect(rendered.container.textContent).toContain('Code execution is not available yet');
+    // CodingQuestionRunner renders language loading state initially
+    expect(rendered.container.querySelector('[data-testid="coding-question-runner"]')).toBeTruthy();
   });
 
   it('disables editing in read-only mode', async () => {
