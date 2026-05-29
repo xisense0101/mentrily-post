@@ -97,6 +97,7 @@ export function CodingAssessmentAnalyticsView({
           border: 'hsla(16, 90%, 50%, 0.3)',
         };
       case 'RUNTIME_ERROR':
+      case 'COMPILE_ERROR':
       case 'COMPILATION_ERROR':
         return {
           bg: 'hsla(350, 80%, 50%, 0.15)',

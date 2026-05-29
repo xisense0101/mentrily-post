@@ -121,5 +121,13 @@ describe('CodingAssessmentAnalyticsView', () => {
     expect(screen.getByText('q-1')).toBeInTheDocument();
     expect(screen.getByText('2 / 2')).toBeInTheDocument();
     expect(screen.getByText('3.5 / 4')).toBeInTheDocument();
+
+    // Verify privacy: frontend does not render code snippets, internal tokens, or hidden test cases details
+    const bodyText = document.body.textContent || '';
+    expect(bodyText).not.toContain('def two_sum');
+    expect(bodyText).not.toContain('testCaseId');
+    expect(bodyText).not.toContain('expectedOutput');
+    expect(bodyText).not.toContain('providerUrl');
+    expect(bodyText).not.toContain('token');
   });
 });

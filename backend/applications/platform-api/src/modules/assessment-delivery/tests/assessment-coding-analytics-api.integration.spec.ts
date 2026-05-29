@@ -242,5 +242,16 @@ describe.sequential('Assessment coding analytics API (integration)', () => {
       hiddenPassedCount: 2,
       hiddenTotalCount: 2,
     });
+
+    // 8. Assert strong privacy boundaries: no leakage of source code, hidden test parameters, or provider internals
+    const serialized = JSON.stringify(analytics);
+    expect(serialized).not.toContain('sourceCode');
+    expect(serialized).not.toContain('def sum'); // no raw code
+    expect(serialized).not.toContain('testCaseId');
+    expect(serialized).not.toContain('expectedOutput');
+    expect(serialized).not.toContain('stdout');
+    expect(serialized).not.toContain('stderr');
+    expect(serialized).not.toContain('providerUrl');
+    expect(serialized).not.toContain('token');
   });
 });

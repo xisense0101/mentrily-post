@@ -172,6 +172,18 @@ describe('GetCodingAssessmentAnalyticsUseCase', () => {
     expect(qPerf.publicTotalCount).toBe(2);
     expect(qPerf.hiddenPassedCount).toBe(2.5); // (3 + 2) / 2 = 2.5
     expect(qPerf.hiddenTotalCount).toBe(3);
+
+    // Verify strict privacy boundaries
+    const serialized = JSON.stringify(result);
+    expect(serialized).not.toContain('sourceCode');
+    expect(serialized).not.toContain('def two_sum'); // no source code
+    expect(serialized).not.toContain('function twoSum');
+    expect(serialized).not.toContain('testCaseId');
+    expect(serialized).not.toContain('expectedOutput');
+    expect(serialized).not.toContain('stdout');
+    expect(serialized).not.toContain('stderr');
+    expect(serialized).not.toContain('providerUrl');
+    expect(serialized).not.toContain('token');
   });
 
   it('fails if permission is denied', async () => {
