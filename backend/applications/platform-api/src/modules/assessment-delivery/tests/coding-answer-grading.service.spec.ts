@@ -7,6 +7,7 @@ import {
   AssessmentQuestion,
   QuestionKindEnum,
   QuestionPoints,
+  GradingModeEnum,
 } from '../domain/index.js';
 
 describe('CodingAnswerGradingService', () => {
@@ -34,9 +35,9 @@ describe('CodingAnswerGradingService', () => {
       title: 'Coding Question',
       prompt: { text: 'Prompt' },
       options: [],
-      answerKey: null,
+      answerKey: undefined,
       points: QuestionPoints.create(points),
-      gradingMode: 'AUTO',
+      gradingMode: GradingModeEnum.AUTO,
       position: 0,
       metadata: {
         gradingTestCases: testCases,

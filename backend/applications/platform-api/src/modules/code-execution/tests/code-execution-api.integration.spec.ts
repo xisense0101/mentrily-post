@@ -3,10 +3,30 @@ import { Test } from '@nestjs/testing';
 import { FastifyAdapter, type NestFastifyApplication } from '@nestjs/platform-fastify';
 import { PERMISSION_EVALUATOR, type PermissionEvaluator } from '@mentrily/service-core';
 import { PrismaService } from '@mentrily/data-platform';
+import { Prisma } from '@prisma/client';
 import { truncatePublicSchema } from '@mentrily/testing-toolkit';
 import { AppModule } from '../../app.module.js';
 import { registerCorrelationIdHook } from '../../../foundation/correlation-id.hook.js';
 import { CodeExecutionTrackerService } from '../application/code-execution-tracker.service.js';
+
+interface ExecutionResultResponse {
+  status: string;
+  verdict: string;
+  stdout?: string | null;
+  stderr?: string | null;
+  compileOutput?: string | null;
+  testResults?: Array<{
+    passed: boolean;
+    verdict: string;
+  }>;
+}
+
+interface ErrorResponse {
+  error: {
+    code: string;
+    message: string;
+  };
+}
 
 describe.sequential('Code Execution API (integration)', () => {
   let app: NestFastifyApplication;
@@ -87,7 +107,7 @@ describe.sequential('Code Execution API (integration)', () => {
             gradingMode: 'AUTO',
             position: 0,
           },
-        ] as unknown as unknown[],
+        ] as Prisma.InputJsonValue,
         publishedByPrincipalId: creatorHeaders['x-actor-id'],
         publishedAt: new Date(),
       },
@@ -349,12 +369,12 @@ describe.sequential('Code Execution API (integration)', () => {
       });
 
       expectHttpStatus(res, 201);
-      const data = res.json<Record<string, unknown>>();
+      const data = res.json<ExecutionResultResponse>();
       expect(data.testResults).toBeDefined();
       expect(data.testResults).toHaveLength(2);
-      expect(data.testResults[0].passed).toBe(true);
-      expect(data.testResults[1].passed).toBe(false);
-      expect(data.testResults[1].verdict).toBe('WRONG_ANSWER');
+      expect(data.testResults![0].passed).toBe(true);
+      expect(data.testResults![1].passed).toBe(false);
+      expect(data.testResults![1].verdict).toBe('WRONG_ANSWER');
       // Overall verdict should be WRONG_ANSWER because one test case failed
       expect(data.verdict).toBe('WRONG_ANSWER');
     });
@@ -373,7 +393,7 @@ describe.sequential('Code Execution API (integration)', () => {
       });
 
       expectHttpStatus(res, 400);
-      const data = res.json<Record<string, unknown>>();
+      const data = res.json<ErrorResponse>();
       expect(data.error.code).toBe('VALIDATION_ERROR');
       expect(data.error.message).toContain('Unsupported language');
     });
@@ -392,7 +412,7 @@ describe.sequential('Code Execution API (integration)', () => {
       });
 
       expectHttpStatus(res, 400);
-      const data = res.json<Record<string, unknown>>();
+      const data = res.json<ErrorResponse>();
       expect(data.error.code).toBe('VALIDATION_ERROR');
       expect(data.error.message).toContain('Source code exceeds limit');
     });
@@ -412,7 +432,7 @@ describe.sequential('Code Execution API (integration)', () => {
       });
 
       expectHttpStatus(res, 400);
-      const data = res.json<Record<string, unknown>>();
+      const data = res.json<ErrorResponse>();
       expect(data.error.code).toBe('VALIDATION_ERROR');
       expect(data.error.message).toContain('Public test cases exceed limit');
     });
@@ -432,7 +452,7 @@ describe.sequential('Code Execution API (integration)', () => {
       });
 
       expectHttpStatus(res, 400);
-      const data = res.json<Record<string, unknown>>();
+      const data = res.json<ErrorResponse>();
       expect(data.error.code).toBe('VALIDATION_ERROR');
       expect(data.error.message).toContain('Public test case input exceeds limit');
     });
@@ -452,7 +472,7 @@ describe.sequential('Code Execution API (integration)', () => {
       });
 
       expectHttpStatus(res, 400);
-      const data = res.json<Record<string, unknown>>();
+      const data = res.json<ErrorResponse>();
       expect(data.error.code).toBe('VALIDATION_ERROR');
       expect(data.error.message).toContain('Public test case expected output exceeds limit');
     });
@@ -472,7 +492,7 @@ describe.sequential('Code Execution API (integration)', () => {
       });
 
       expectHttpStatus(res, 400);
-      const data = res.json<Record<string, unknown>>();
+      const data = res.json<ErrorResponse>();
       expect(data.error.code).toBe('VALIDATION_ERROR');
       expect(data.error.message).toContain('GRADING_RUN_NOT_AVAILABLE');
     });
@@ -507,7 +527,7 @@ describe.sequential('Code Execution API (integration)', () => {
       });
 
       expectHttpStatus(res, 400);
-      const data = res.json<Record<string, unknown>>();
+      const data = res.json<ErrorResponse>();
       expect(data.error.code).toBe('VALIDATION_ERROR');
       expect(data.error.message).toContain('attemptId and questionId are required');
     });
