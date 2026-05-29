@@ -4,6 +4,7 @@ import type {
   AssessmentAttemptStatusContract,
   AssessmentGradingMethodContract,
   AssessmentQuestionKindContract,
+  CodingResultSummaryContract,
 } from '@mentrily/contract-catalog';
 
 export interface AssessmentResultSummaryResponse {
@@ -24,8 +25,11 @@ export interface AssessmentAnswerResultResponse {
   questionKind: AssessmentQuestionKindContract;
   score?: number;
   maxScore?: number;
+  /** Raw feedback — do not render generically; codingResult is the safe surface for CODE questions */
   feedback?: Record<string, unknown>;
   answerStatus: AssessmentAttemptAnswerStatusContract;
+  /** Safe coding result summary — present only for CODE questions */
+  codingResult?: CodingResultSummaryContract;
 }
 
 export interface AssessmentLearnerResultResponse extends AssessmentResultSummaryResponse {

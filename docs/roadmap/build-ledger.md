@@ -2,6 +2,76 @@
 
 This document serves as a permanent continuity/backtrace system for the Mentrily SaaS codebase. Every task must record its progress here to ensure a reliable audit trail and clear path forward.
 
+### Task 015E — Coding Results and Review UI
+
+- **Task ID**: 015E
+- **Previous Task**: Task 015D2 — Code Execution Reliability Final Cleanup
+- **Implementation Status**: Complete, full validation matrix passed
+- **Work Completed**:
+  - Inspected assessment result and grading review boundaries in frontend/apps/portal, backend/applications/platform-api, and domain contracts
+  - Added safe coding result summary contracts (`CodingVerdictContract`, `CodingGradeStatusContract`, `CodingPublicTestResultContract`, `CodingResultSummaryContract`) to both frontend and backend domain contracts
+  - Created comprehensive coding result summary component (`CodingResultSummary`) with safe rendering of:
+    - Score and max score
+    - Grading status and verdict badges
+    - Public test results with 1-based index display (no test IDs exposed)
+    - Hidden test aggregate counts only
+    - Manual review and provider unavailable states
+    - Safe output rendering via `<pre>` blocks (no HTML interpretation)
+  - Added helper functions in `coding-result-view-model.ts` for verdict/status label mapping and state detection
+  - Integrated coding result display into learner result page via `LearnerAnswerResultCard` component
+  - Integrated coding result display into instructor result review panel via `InstructorResultPanel` component
+  - Implemented backend result mapper (`assessment-result-response.mapper.ts`) with strict allowlisting:
+    - Filters public test results to safe verdict/input/output fields
+    - Strips hidden test IDs, inputs, expected outputs, and provider internals
+    - Converts verdict/status through safe enums only
+    - Caps output length at 4096 chars for safety
+  - Updated DTOs (`AssessmentAnswerResultResponse`, `AssessmentLearnerResultResponse`, `AssessmentInstructorAnswerResultResponse`) to support coding result summary
+  - Added 39 frontend tests covering:
+    - 18 tests in `coding-result-summary.spec.tsx` (verdict badges, status labels, hidden/public test display, output rendering, no HTML injection)
+    - 21 tests in `coding-result-view-model.spec.ts` (all verdict/status label mappings, helper function behavior)
+  - Added 13 backend mapper tests in `assessment-result-mapper-coding.spec.ts` covering:
+    - Safe coding result extraction from grades
+    - Hidden test ID/input/output filtering
+    - Provider internals filtering
+    - Manual review state preservation
+    - Result release policy compatibility
+    - Non-CODE question handling
+  - Updated `LearnerAnswerResultCard` and `InstructorResultPanel` integration tests
+  - Verified no hidden test details, provider secrets, or unsafe code execution in frontend/backend
+  - All imports and exports properly updated in index.ts files
+- **Static Safety Scans Performed**:
+  - dangerouslySetInnerHTML: **0 usages** (only in comments)
+  - eval: **0 usages**
+  - new Function: **0 usages** (only in comment)
+  - hiddenTest/hiddenExpectedOutput/failedTestCaseId fields: **0 exposures**
+  - Provider secrets (JUDGE0_API_KEY, PISTON_API_KEY, etc): **0 frontend exposures**
+  - Hidden test privacy: **enforced** (only aggregate counts shown)
+  - Result release policy: **preserved** (no unreleased content exposed)
+- **Validation Performed**:
+  - `pnpm --filter @mentrily/portal test`: **PASS (73 test files, 396 tests)**
+  - `pnpm --filter @mentrily/portal typecheck`: **PASS**
+  - `pnpm --filter @mentrily/portal build`: **PASS**
+  - `pnpm --filter @mentrily/platform-api test`: **PASS (97 test files, 519 tests)**
+  - `pnpm --filter @mentrily/platform-api typecheck`: **PASS**
+  - `pnpm --filter @mentrily/domain-contracts typecheck`: **PASS**
+  - `pnpm --filter @mentrily/contract-catalog typecheck`: **PASS**
+  - `pnpm lint`: **PASS (0 errors, only pre-existing warnings)**
+  - `pnpm typecheck`: **PASS**
+  - `pnpm test`: **PASS (all unit tests green)**
+  - `pnpm test:integration`: **PASS (all integration tests green)**
+  - `pnpm build`: **PASS (monorepo build green)**
+- **Remaining Gaps**:
+  - Coding dashboard/statistics remains Task 015F
+  - Hidden-test authoring UI remains future work
+  - Teacher manual coding review/regrade workflow remains future work if not already present
+  - Production Judge0/Piston deployment remains future infrastructure work
+  - Go high-concurrency runner remains future infrastructure work
+  - Plagiarism detection remains future work
+  - AI code feedback remains future work
+- **Next Recommended Task**: Task 015F — Coding Assessment Dashboard and Statistics
+
+---
+
 ### Task 015D1 — Code Execution Reliability and Abuse Protection Remediation
 
 - **Task ID**: 015D1

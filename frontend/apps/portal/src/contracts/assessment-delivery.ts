@@ -64,4 +64,9 @@ export type {
   SubmitAssessmentAttemptRequest,
   CancelAssessmentExecutionRequest,
   UpdateAssessmentRequest,
+  // Task 015E — Coding Result Summary
+  CodingVerdictContract,
+  CodingGradeStatusContract,
+  CodingPublicTestResultContract,
+  CodingResultSummaryContract,
 } from '@mentrily/domain-contracts';

@@ -501,13 +501,57 @@ export interface AssessmentResultSummaryContract {
   submittedAt?: string | undefined;
 }
 
+// --- Coding Result Summary (Task 015E) ---
+
+export type CodingVerdictContract =
+  | 'ACCEPTED'
+  | 'WRONG_ANSWER'
+  | 'COMPILE_ERROR'
+  | 'RUNTIME_ERROR'
+  | 'TIME_LIMIT_EXCEEDED'
+  | 'MEMORY_LIMIT_EXCEEDED'
+  | 'OUTPUT_LIMIT_EXCEEDED'
+  | 'PROVIDER_UNAVAILABLE'
+  | 'VALIDATION_ERROR';
+
+export type CodingGradeStatusContract =
+  | 'AUTO_GRADED'
+  | 'PENDING_MANUAL_REVIEW'
+  | 'MANUALLY_GRADED'
+  | 'GRADING_FAILED';
+
+export interface CodingPublicTestResultContract {
+  /** 1-based display index; internal hidden test IDs are never exposed */
+  index: number;
+  verdict: CodingVerdictContract;
+  passed: boolean;
+  stdout?: string | undefined;
+  stderr?: string | undefined;
+}
+
+export interface CodingResultSummaryContract {
+  scoreAwarded: number;
+  maxScore: number;
+  status: CodingGradeStatusContract;
+  verdict?: CodingVerdictContract | undefined;
+  /** Safe public test results only — no hidden test details */
+  publicTestResults?: CodingPublicTestResultContract[] | undefined;
+  passedHiddenCount?: number | undefined;
+  totalHiddenCount?: number | undefined;
+  /** Safe user-facing message only */
+  message?: string | undefined;
+}
+
 export interface AssessmentAnswerResultContract {
   questionId: string;
   questionKind: AssessmentQuestionKindContract;
   score?: number | undefined;
   maxScore?: number | undefined;
+  /** Raw feedback field — do not render generically; use codingResult for CODE questions */
   feedback?: Record<string, unknown> | undefined;
   answerStatus: AssessmentAttemptAnswerStatusContract;
+  /** Safe coding result summary present only for CODE questions */
+  codingResult?: CodingResultSummaryContract | undefined;
 }
 
 export interface AssessmentLearnerResultContract extends AssessmentResultSummaryContract {
