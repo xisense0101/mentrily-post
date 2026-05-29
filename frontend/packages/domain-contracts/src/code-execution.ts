@@ -33,6 +33,9 @@ export interface CodeExecutionLimitContract {
   cpuTimeLimitMs: number;
   wallTimeLimitMs: number;
   memoryLimitKb: number;
+  maxPublicTestCases: number;
+  maxPublicTestCaseInputBytes: number;
+  maxPublicTestCaseExpectedOutputBytes: number;
 }
 
 export interface CodeExecutionTestCaseContract {

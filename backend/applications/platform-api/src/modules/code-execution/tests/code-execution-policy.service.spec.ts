@@ -39,6 +39,24 @@ describe('CodeExecutionPolicyService', () => {
     expect(() => service.validateRequest('javascript', 'print(1)', largeStdin)).toThrowError(
       /stdin exceeds limit/,
     );
+
+    // Too many test cases
+    const manyTestCases = Array(11).fill({ input: 'test' });
+    expect(() =>
+      service.validateRequest('javascript', 'print(1)', null, manyTestCases),
+    ).toThrowError(/Public test cases exceed limit/);
+
+    // Oversized test case input
+    const largeInput = [{ input: 'a'.repeat(16385) }];
+    expect(() => service.validateRequest('javascript', 'print(1)', null, largeInput)).toThrowError(
+      /Public test case input exceeds limit/,
+    );
+
+    // Oversized test case expected output
+    const largeExpectedOutput = [{ input: 'test', expectedOutput: 'a'.repeat(16385) }];
+    expect(() =>
+      service.validateRequest('javascript', 'print(1)', null, largeExpectedOutput),
+    ).toThrowError(/Public test case expected output exceeds limit/);
   });
 
   it('sanitizes and truncates output safely without throwing', () => {

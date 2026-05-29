@@ -302,6 +302,78 @@ describe.sequential('Code Execution API (integration)', () => {
       expect(data.error.message).toContain('Source code exceeds limit');
     });
 
+    it('blocks request if too many public test cases', async () => {
+      const res = await app.inject({
+        method: 'POST',
+        url: '/workspace/code-execution/sample-run',
+        headers: creatorHeaders,
+        payload: {
+          language: 'javascript',
+          sourceCode: 'console.log(1)',
+          publicTestCases: Array(11).fill({ input: 'test' }),
+        },
+      });
+
+      expectHttpStatus(res, 400);
+      const data = res.json<any>();
+      expect(data.error.code).toBe('VALIDATION_ERROR');
+      expect(data.error.message).toContain('Public test cases exceed limit');
+    });
+
+    it('blocks request if public test case input is oversized', async () => {
+      const res = await app.inject({
+        method: 'POST',
+        url: '/workspace/code-execution/sample-run',
+        headers: creatorHeaders,
+        payload: {
+          language: 'javascript',
+          sourceCode: 'console.log(1)',
+          publicTestCases: [{ input: 'a'.repeat(16385) }],
+        },
+      });
+
+      expectHttpStatus(res, 400);
+      const data = res.json<any>();
+      expect(data.error.code).toBe('VALIDATION_ERROR');
+      expect(data.error.message).toContain('Public test case input exceeds limit');
+    });
+
+    it('blocks request if public test case expected output is oversized', async () => {
+      const res = await app.inject({
+        method: 'POST',
+        url: '/workspace/code-execution/sample-run',
+        headers: creatorHeaders,
+        payload: {
+          language: 'javascript',
+          sourceCode: 'console.log(1)',
+          publicTestCases: [{ input: 'test', expectedOutput: 'a'.repeat(16385) }],
+        },
+      });
+
+      expectHttpStatus(res, 400);
+      const data = res.json<any>();
+      expect(data.error.code).toBe('VALIDATION_ERROR');
+      expect(data.error.message).toContain('Public test case expected output exceeds limit');
+    });
+
+    it('blocks request if executionMode is RESERVED_GRADING_RUN', async () => {
+      const res = await app.inject({
+        method: 'POST',
+        url: '/workspace/code-execution/sample-run',
+        headers: creatorHeaders,
+        payload: {
+          language: 'javascript',
+          sourceCode: 'console.log(1)',
+          executionMode: 'RESERVED_GRADING_RUN',
+        },
+      });
+
+      expectHttpStatus(res, 400);
+      const data = res.json<any>();
+      expect(data.error.code).toBe('INVALID_EXECUTION_MODE');
+      expect(data.error.message).toContain('GRADING_RUN_NOT_AVAILABLE');
+    });
+
     it('blocks request if user lacks workspace.read permission', async () => {
       allowedPermissions.delete('workspace.read');
 

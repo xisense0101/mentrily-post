@@ -7,4 +7,7 @@ export const DEFAULT_EXECUTION_LIMITS: CodeExecutionLimitContract = {
   cpuTimeLimitMs: 2000,
   wallTimeLimitMs: 8000,
   memoryLimitKb: 262144,
+  maxPublicTestCases: 10,
+  maxPublicTestCaseInputBytes: 16384,
+  maxPublicTestCaseExpectedOutputBytes: 16384,
 };

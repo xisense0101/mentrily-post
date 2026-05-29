@@ -36,9 +36,17 @@ export class RunCodeSampleUseCase {
       throw new AppError('FORBIDDEN', 'permission denied', 403);
     }
 
-    const { language, sourceCode, stdin, publicTestCases } = input;
+    const { language, sourceCode, stdin, publicTestCases, executionMode } = input;
 
-    this.policyService.validateRequest(language, sourceCode, stdin);
+    const mode = executionMode || 'SAMPLE_RUN';
+    if (mode === 'RESERVED_GRADING_RUN') {
+      throw new AppError('INVALID_EXECUTION_MODE', 'GRADING_RUN_NOT_AVAILABLE', 400);
+    }
+    if (mode !== 'SAMPLE_RUN' && mode !== 'PUBLIC_TEST_RUN') {
+      throw new AppError('VALIDATION_ERROR', 'Unsupported execution mode', 400);
+    }
+
+    this.policyService.validateRequest(language, sourceCode, stdin, publicTestCases);
 
     const lang = this.policyService.getLanguageById(language)!;
     const limits = DEFAULT_EXECUTION_LIMITS;

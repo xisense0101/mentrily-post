@@ -13,7 +13,12 @@ export class CodeExecutionPolicyService {
     return SUPPORTED_LANGUAGES.find((lang) => lang.id === id);
   }
 
-  validateRequest(languageId: string, sourceCode: string, stdin?: string | null): void {
+  validateRequest(
+    languageId: string,
+    sourceCode: string,
+    stdin?: string | null,
+    publicTestCases?: { input: string; expectedOutput?: string }[],
+  ): void {
     const lang = this.getLanguageById(languageId);
     if (!lang) {
       throw new AppError('VALIDATION_ERROR', `Unsupported language: ${languageId}`, 400);
@@ -39,6 +44,35 @@ export class CodeExecutionPolicyService {
         `stdin exceeds limit of ${limits.maxStdInBytes} bytes`,
         400,
       );
+    }
+
+    if (publicTestCases) {
+      if (publicTestCases.length > limits.maxPublicTestCases) {
+        throw new AppError(
+          'VALIDATION_ERROR',
+          `Public test cases exceed limit of ${limits.maxPublicTestCases}`,
+          400,
+        );
+      }
+      for (const tc of publicTestCases) {
+        if (Buffer.byteLength(tc.input, 'utf8') > limits.maxPublicTestCaseInputBytes) {
+          throw new AppError(
+            'VALIDATION_ERROR',
+            `Public test case input exceeds limit of ${limits.maxPublicTestCaseInputBytes} bytes`,
+            400,
+          );
+        }
+        if (
+          tc.expectedOutput &&
+          Buffer.byteLength(tc.expectedOutput, 'utf8') > limits.maxPublicTestCaseExpectedOutputBytes
+        ) {
+          throw new AppError(
+            'VALIDATION_ERROR',
+            `Public test case expected output exceeds limit of ${limits.maxPublicTestCaseExpectedOutputBytes} bytes`,
+            400,
+          );
+        }
+      }
     }
   }
 

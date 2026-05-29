@@ -2,6 +2,61 @@
 
 This document serves as a permanent continuity/backtrace system for the Mentrily SaaS codebase. Every task must record its progress here to ensure a reliable audit trail and clear path forward.
 
+### Task 015A1 — Coding Execution Runtime Foundation Hardening
+
+- **Task ID**: 015A1
+- **Previous Task**: Task 015A — Coding Question Execution Runtime Foundation
+- **Implementation Status**: Complete, full validation matrix passed
+- **Baseline Validation Discipline**:
+  - `git status --short`: clean
+  - `pnpm --filter @mentrily/platform-api test`: PASS
+  - `pnpm --filter @mentrily/platform-api typecheck`: PASS
+  - `pnpm --filter @mentrily/platform-api test:integration`: PASS
+- **Work Completed**:
+  - Inspected 015A code execution runtime foundation
+  - Enforced max public test case count (max 10)
+  - Enforced public test case input size limit (16 KB)
+  - Enforced public test case expected output size limit (16 KB)
+  - Rejected `RESERVED_GRADING_RUN` in sample/public execution
+  - Preserved `SAMPLE_RUN` behavior
+  - Preserved `PUBLIC_TEST_RUN` behavior where supported
+  - Aligned docs/ledger with actual execution limits
+  - Added unit tests for limit enforcement in `code-execution-policy.service.spec.ts`
+  - Added integration tests for execution limits in `code-execution-api.integration.spec.ts`
+  - Reran full validation matrix
+- **Validation Performed**:
+  - `pnpm --filter @mentrily/platform-api test`: PASS
+  - `pnpm --filter @mentrily/platform-api typecheck`: PASS
+  - `pnpm --filter @mentrily/platform-api test:integration`: PASS
+  - `pnpm --filter @mentrily/portal test`: PASS
+  - `pnpm --filter @mentrily/portal typecheck`: PASS
+  - `pnpm --filter @mentrily/portal build`: PASS
+  - `pnpm --filter @mentrily/contract-catalog typecheck`: PASS
+  - `pnpm --filter @mentrily/domain-contracts typecheck`: PASS
+  - `pnpm --filter @mentrily/data-platform prisma:validate`: PASS
+  - `pnpm --filter @mentrily/data-platform prisma:generate`: PASS
+  - `pnpm lint`: PASS
+  - `pnpm typecheck`: PASS
+  - `pnpm test`: PASS
+  - `pnpm build`: PASS
+  - `pnpm test:integration`: PASS
+  - `pnpm test:e2e`: PASS
+- **Static Safety Scan Results**:
+  - Confirmed no eval/new Function
+  - Confirmed no child_process/shell/Docker spawning
+  - Confirmed no provider secrets leaked
+  - Confirmed no hidden tests exposed
+- **Remaining Gaps**:
+  - Learner coding attempt runner frontend remains Task 015B
+  - Hidden-test grading pipeline remains Task 015C
+  - Queue/rate-limit/quota/abuse hardening remains Task 015D
+  - Coding results/review UI remains later Task 015E
+  - Production Judge0/Piston deployment remains future infrastructure work
+- **Next Recommended Task**:
+  - Task 015B — Frontend Coding Question Execution Runner Integration
+
+---
+
 ### Task 015A — Coding Question Execution Runtime Foundation
 
 - **Task ID**: 015A
