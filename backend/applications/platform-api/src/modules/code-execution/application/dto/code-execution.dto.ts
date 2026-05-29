@@ -11,6 +11,9 @@ export class RunCodeSampleInput {
   stdin?: string | null;
   publicTestCases?: CodeExecutionTestCaseContract[];
   executionMode?: CodeExecutionModeContract;
+  attemptId?: string | null;
+  questionId?: string | null;
+  idempotencyKey?: string | null;
 }
 
 export type CodeExecutionLanguageResponse = CodeExecutionLanguageContract;

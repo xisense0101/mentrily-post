@@ -109,9 +109,16 @@ describe('GradeAssessmentAttemptUseCase', () => {
   } as unknown as CodingAnswerGradingService;
 
   it('requires actor context', async () => {
-    const attemptRepo = {} as AssessmentAttemptRepository;
+    const attemptRepo = {
+      acquireRowLock: vi.fn(async () => {}),
+    } as unknown as AssessmentAttemptRepository;
     const snapshotRepo = {} as AssessmentSnapshotRepository;
-    const gradingRepo = {} as AssessmentGradingRepository;
+    const gradingRepo = {
+      findLatestRunByAttemptId: vi.fn(async () => null),
+      listRunsByAttemptId: vi.fn(async () => []),
+      saveRun: vi.fn(async (run) => run),
+      findRunById: vi.fn(async () => null),
+    } as unknown as AssessmentGradingRepository;
     const useCase = new GradeAssessmentAttemptUseCase(
       attemptRepo,
       snapshotRepo,
@@ -136,9 +143,14 @@ describe('GradeAssessmentAttemptUseCase', () => {
   it('denies when permission fails before transaction', async () => {
     const txRunner = createTransactionRunner({ transactionId: 'tx-1', client: {} });
     const useCase = new GradeAssessmentAttemptUseCase(
-      {} as AssessmentAttemptRepository,
+      { acquireRowLock: vi.fn(async () => {}) } as unknown as AssessmentAttemptRepository,
       {} as AssessmentSnapshotRepository,
-      {} as AssessmentGradingRepository,
+      {
+        findLatestRunByAttemptId: vi.fn(async () => null),
+        listRunsByAttemptId: vi.fn(async () => []),
+        saveRun: vi.fn(async (run) => run),
+        findRunById: vi.fn(async () => null),
+      } as unknown as AssessmentGradingRepository,
       new AssessmentAutoGradingService(),
       new AssessmentGradingPolicyService(),
       new AssessmentExecutionReservationService(),
@@ -166,9 +178,15 @@ describe('GradeAssessmentAttemptUseCase', () => {
         save: vi.fn(async (value) => value),
         listByLearner: vi.fn(async () => []),
         listByAssessmentAndLearner: vi.fn(async () => []),
+        acquireRowLock: vi.fn(async () => {}),
       } as unknown as AssessmentAttemptRepository,
       { findById: vi.fn(async () => snapshot) } as unknown as AssessmentSnapshotRepository,
-      {} as AssessmentGradingRepository,
+      {
+        findLatestRunByAttemptId: vi.fn(async () => null),
+        listRunsByAttemptId: vi.fn(async () => []),
+        saveRun: vi.fn(async (run) => run),
+        findRunById: vi.fn(async () => null),
+      } as unknown as AssessmentGradingRepository,
       new AssessmentAutoGradingService(),
       new AssessmentGradingPolicyService(),
       new AssessmentExecutionReservationService(),
@@ -194,10 +212,15 @@ describe('GradeAssessmentAttemptUseCase', () => {
       save: vi.fn(async (value) => value),
       listByLearner: vi.fn(async () => []),
       listByAssessmentAndLearner: vi.fn(async () => []),
+      acquireRowLock: vi.fn(async () => {}),
     } as unknown as AssessmentAttemptRepository;
+    let savedRun: any = null;
     const gradingRepo = {
-      saveRun: vi.fn(async (run) => run),
-      findRunById: vi.fn(async () => null),
+      saveRun: vi.fn(async (run) => {
+        savedRun = run;
+        return run;
+      }),
+      findRunById: vi.fn(async () => savedRun),
       findLatestRunByAttemptId: vi.fn(async () => null),
       listRunsByAttemptId: vi.fn(async () => []),
       listPendingManualReview: vi.fn(async () => []),
@@ -241,9 +264,15 @@ describe('GradeAssessmentAttemptUseCase', () => {
         save: vi.fn(async (value) => value),
         listByLearner: vi.fn(async () => []),
         listByAssessmentAndLearner: vi.fn(async () => []),
+        acquireRowLock: vi.fn(async () => {}),
       } as unknown as AssessmentAttemptRepository,
       { findById: vi.fn(async () => snapshot) } as unknown as AssessmentSnapshotRepository,
-      {} as AssessmentGradingRepository,
+      {
+        findLatestRunByAttemptId: vi.fn(async () => null),
+        listRunsByAttemptId: vi.fn(async () => []),
+        saveRun: vi.fn(async (run) => run),
+        findRunById: vi.fn(async () => null),
+      } as unknown as AssessmentGradingRepository,
       new AssessmentAutoGradingService(),
       new AssessmentGradingPolicyService(),
       new AssessmentExecutionReservationService(),
@@ -270,7 +299,6 @@ describe('GradeAssessmentAttemptUseCase', () => {
       title: 'Coding Question',
       prompt: { text: 'Write code' },
       options: [],
-      answerKey: null,
       points: QuestionPoints.create(10),
       gradingMode: GradingModeEnum.AUTO,
       position: 0,
@@ -317,10 +345,18 @@ describe('GradeAssessmentAttemptUseCase', () => {
       save: vi.fn(async (value) => value),
       listByLearner: vi.fn(async () => []),
       listByAssessmentAndLearner: vi.fn(async () => []),
+      acquireRowLock: vi.fn(async () => {}),
     } as unknown as AssessmentAttemptRepository;
 
+    let savedRunCode: any = null;
     const gradingRepo = {
-      saveRun: vi.fn(async (run) => run),
+      saveRun: vi.fn(async (run) => {
+        savedRunCode = run;
+        return run;
+      }),
+      findRunById: vi.fn(async () => savedRunCode),
+      findLatestRunByAttemptId: vi.fn(async () => null),
+      listRunsByAttemptId: vi.fn(async () => []),
     } as unknown as AssessmentGradingRepository;
 
     const useCase = new GradeAssessmentAttemptUseCase(

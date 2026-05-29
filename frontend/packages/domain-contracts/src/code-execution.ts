@@ -50,6 +50,8 @@ export interface CodeExecutionRequestContract {
   publicTestCases?: CodeExecutionTestCaseContract[];
   executionMode: CodeExecutionModeContract;
   idempotencyKey?: string | null;
+  attemptId?: string | null;
+  questionId?: string | null;
 }
 
 export interface CodeExecutionTestCaseResultContract {

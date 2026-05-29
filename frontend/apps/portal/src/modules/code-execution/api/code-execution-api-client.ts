@@ -89,6 +89,9 @@ export interface FrontendCodeExecutionRequest {
   publicTestCases?: Array<{ input: string; expectedOutput?: string }>;
   /** Must be SAMPLE_RUN or PUBLIC_TEST_RUN — RESERVED_GRADING_RUN is rejected by backend */
   executionMode: FrontendCodeExecutionMode;
+  attemptId?: string | null;
+  questionId?: string | null;
+  idempotencyKey?: string | null;
 }
 
 export interface GetLanguagesResponse {
@@ -148,6 +151,15 @@ export function createCodeExecutionApiClient({
         ...(req.stdin !== undefined && req.stdin !== null ? { stdin: req.stdin } : {}),
         ...(req.publicTestCases && req.publicTestCases.length > 0
           ? { publicTestCases: req.publicTestCases }
+          : {}),
+        ...(req.idempotencyKey !== undefined && req.idempotencyKey !== null
+          ? { idempotencyKey: req.idempotencyKey }
+          : {}),
+        ...(req.attemptId !== undefined && req.attemptId !== null
+          ? { attemptId: req.attemptId }
+          : {}),
+        ...(req.questionId !== undefined && req.questionId !== null
+          ? { questionId: req.questionId }
           : {}),
       };
 

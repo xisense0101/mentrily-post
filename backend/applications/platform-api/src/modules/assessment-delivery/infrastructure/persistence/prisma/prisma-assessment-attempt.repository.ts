@@ -166,6 +166,21 @@ export class PrismaAssessmentAttemptRepository implements AssessmentAttemptRepos
     }
   }
 
+  async acquireRowLock(id: string, transaction: TransactionContext): Promise<void> {
+    const tx = transaction.client as any;
+    if (!tx || typeof tx.$queryRawUnsafe !== 'function') {
+      return;
+    }
+    try {
+      await tx.$queryRawUnsafe(
+        `SELECT 1 FROM "AssessmentAttempt" WHERE "id" = $1::uuid FOR UPDATE;`,
+        id,
+      );
+    } catch (error) {
+      throw mapPrismaError(error);
+    }
+  }
+
   private async loadFull(
     id: string,
     transaction?: TransactionContext,

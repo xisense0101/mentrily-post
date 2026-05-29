@@ -1,6 +1,11 @@
-import { Injectable } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma.service.js';
-import type { AuditRecord, AuditRecordInput, RequestContext, TransactionContext } from '@mentrily/service-core';
+import type {
+  AuditRecord,
+  AuditRecordInput,
+  RequestContext,
+  TransactionContext,
+} from '@mentrily/service-core';
 import { Prisma } from '@prisma/client';
 import type { AuditRecord as PrismaAuditRecord } from '@prisma/client';
 import { getPrismaClient } from '../transactions/transaction-client.js';
@@ -15,7 +20,7 @@ import { getPrismaClient } from '../transactions/transaction-client.js';
  */
 @Injectable()
 export class AuditRecordRepository {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(@Inject(PrismaService) private readonly prisma: PrismaService) {}
 
   /**
    * Append a new audit record.

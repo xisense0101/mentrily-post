@@ -2,6 +2,47 @@
 
 This document serves as a permanent continuity/backtrace system for the Mentrily SaaS codebase. Every task must record its progress here to ensure a reliable audit trail and clear path forward.
 
+### Task 015D1 — Code Execution Reliability and Abuse Protection Remediation
+
+- **Task ID**: 015D1
+- **Previous Task**: Task 015D — Code Execution Reliability, Limits, and Abuse Protection
+- **Implementation Status**: Complete, all tests passed and validation matrix green
+- **Work Completed**:
+  - Implemented explicit ownership verification in `RunCodeSampleUseCase` using the injected `PrismaService` to validate that the provided `attemptId` and `questionId` exist and belong to the calling actor's workspace.
+  - Refactored `GradeAssessmentAttemptUseCase` to use a two-phase transaction model: checking and reserving a `RUNNING` status in a pre-grading transaction before calling external code execution providers, and then finalising and scoring in a second transaction, resolving concurrent grading race conditions.
+  - Scoped the idempotency cache key in `CodeExecutionTrackerService` to `workspaceId + actorId + idempotencyKey` to prevent cross-workspace and cross-learner collision attacks.
+  - Updated `CodeExecutionRequestContract` and `code-execution-api-client.ts` to transmit the necessary tracking parameters (`attemptId`, `questionId`, `idempotencyKey`) securely from the portal UI to the backend.
+  - Cleaned up and updated backend unit tests to mock `PrismaService` and pass the scoped cache parameters.
+- **Validation Performed**:
+  - `pnpm lint`: **PASS**
+  - `pnpm typecheck`: **PASS**
+  - `pnpm test`: **PASS (509 tests green)**
+  - `pnpm test:integration`: **PASS (all integration tests green)**
+  - `pnpm build`: **PASS (monorepo build green)**
+- **Next Recommended Task**: Task 015E — Coding Assessment Dashboard and Statistics
+
+---
+
+### Task 015D — Code Execution Reliability, Limits, and Abuse Protection
+
+- **Task ID**: 015D
+- **Previous Task**: Task 015C2 — Coding Grading Pipeline Final Privacy Remediation
+- **Implementation Status**: Complete, all tests passed and validation matrix green
+- **Work Completed**:
+  - Fixed integration test environment dependency injection mismatch by adding explicit `@Inject(PrismaService)` decorator to `AuditRecordRepository` constructor to preserve DI metadata in aliased/cross-package setups.
+  - Satisfied strict TypeScript compilation configurations under `exactOptionalPropertyTypes: true` by updating `CodeExecutionTrackerService` to check truthiness before returning cached result/promise, and using object spreading for optional properties in `GradeAssessmentAttemptUseCase`.
+  - Aligned error code reporting by updating code execution rate-limiting/concurrency exceptions to use the correct defined `RATE_LIMITED` `ErrorCode` from `service-core`.
+  - Verified and passed all unit and integration test suites cleanly without any console logs.
+- **Validation Performed**:
+  - `pnpm lint`: **PASS**
+  - `pnpm typecheck`: **PASS**
+  - `pnpm test`: **PASS (all unit tests green)**
+  - `pnpm test:integration`: **PASS (all integration tests green)**
+  - `pnpm build`: **PASS (monorepo build green)**
+- **Next Recommended Task**: Task 015E — Coding Assessment Dashboard and Statistics
+
+---
+
 ### Task 015C2 — Coding Grading Pipeline Final Privacy Remediation
 
 - **Task ID**: 015C2

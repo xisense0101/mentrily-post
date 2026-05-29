@@ -309,4 +309,31 @@ describe.sequential('Assessment grading API (integration)', () => {
     });
     expectHttpStatus(deniedQueue, 403);
   });
+
+  it('prevents concurrent grading requests from running in parallel and creating duplicate active runs', async () => {
+    const assessmentId = await createAssessment();
+    const questionIds = await publishAssessment(assessmentId);
+    const attemptId = await createSubmittedAttempt(assessmentId, questionIds);
+
+    const [res1, res2] = await Promise.all([
+      app.inject({
+        method: 'POST',
+        url: `/workspace/assessment-attempts/${attemptId}/grade`,
+        headers,
+      }),
+      app.inject({
+        method: 'POST',
+        url: `/workspace/assessment-attempts/${attemptId}/grade`,
+        headers,
+      }),
+    ]);
+
+    const statusCodes = [res1.statusCode, res2.statusCode];
+    expect(statusCodes).toContain(201);
+    expect(statusCodes).toContain(409);
+
+    const conflictRes = res1.statusCode === 409 ? res1 : res2;
+    expect(conflictRes.json().error.code).toBe('CONFLICT');
+    expect(conflictRes.json().error.message).toContain('A grading run is already in progress');
+  });
 });

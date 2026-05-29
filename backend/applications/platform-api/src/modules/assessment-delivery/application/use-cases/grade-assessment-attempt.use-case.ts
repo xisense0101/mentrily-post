@@ -95,29 +95,18 @@ export class GradeAssessmentAttemptUseCase {
       throw new AppError('NOT_FOUND', 'attempt snapshot not found', 404);
     }
 
-    const questionMap = new Map(
-      snapshot.getAllQuestions().map((question) => [question.id, question]),
-    );
+    const run = await this.transactionRunner.run(async (tx) => {
+      await this.attemptRepo.acquireRowLock(attemptId, tx);
 
-    const codingGrades = new Map<
-      string,
-      {
-        status: 'AUTO_GRADED' | 'PENDING_MANUAL_REVIEW' | 'GRADING_FAILED';
-        score?: number;
-        feedback?: Record<string, unknown>;
-        metadata?: Record<string, unknown>;
+      const latestRunTx = await this.gradingRepo.findLatestRunByAttemptId(attemptId, tx);
+      if (latestRunTx && latestRunTx.status === 'RUNNING') {
+        throw new AppError(
+          'CONFLICT',
+          'A grading run is already in progress for this attempt',
+          409,
+        );
       }
-    >();
 
-    for (const answer of attempt.answers.filter((item) => item.isSubmitted())) {
-      const question = questionMap.get(answer.questionId);
-      if (question && question.kind === 'CODE') {
-        const result = await this.codingAnswerGrading.gradeAnswer(answer, question);
-        codingGrades.set(answer.id, result);
-      }
-    }
-
-    return this.transactionRunner.run(async (tx) => {
       const attemptTx = await this.attemptRepo.findById(attemptId, tx);
       if (
         !attemptTx ||
@@ -132,7 +121,7 @@ export class GradeAssessmentAttemptUseCase {
         throw new AppError('VALIDATION_ERROR', policyTx.reason ?? 'Attempt cannot be graded', 400);
       }
 
-      const run = AssessmentGradingRun.start({
+      const startRun = AssessmentGradingRun.start({
         id: randomUUID(),
         tenantId: attemptTx.tenantId,
         workspaceId: attemptTx.workspaceId,
@@ -142,15 +131,120 @@ export class GradeAssessmentAttemptUseCase {
         triggeredByPrincipalId: workspace.actorId,
       });
 
+      await this.gradingRepo.saveRun(startRun, tx);
+
       await this.eventPublisher.publishDomainEvent(
-        createAssessmentGradingRunStartedEvent(run.id, run.tenantId, run.workspaceId, {
-          attemptId: run.attemptId,
-          assessmentId: run.assessmentId,
-          snapshotId: run.snapshotId,
-        }),
+        createAssessmentGradingRunStartedEvent(
+          startRun.id,
+          startRun.tenantId,
+          startRun.workspaceId,
+          {
+            attemptId: startRun.attemptId,
+            assessmentId: startRun.assessmentId,
+            snapshotId: startRun.snapshotId,
+          },
+        ),
         context,
         tx,
       );
+
+      return startRun;
+    });
+
+    const pastRuns = (await this.gradingRepo.listRunsByAttemptId(attemptId)).filter(
+      (r) => r.id !== run.id,
+    );
+
+    const reusableGrades = new Map<
+      string,
+      {
+        status: 'AUTO_GRADED' | 'PENDING_MANUAL_REVIEW' | 'GRADING_FAILED';
+        score?: number;
+        feedback?: Record<string, unknown>;
+        metadata?: Record<string, unknown>;
+      }
+    >();
+
+    for (const pastRun of pastRuns) {
+      for (const grade of pastRun.answerGrades) {
+        if (reusableGrades.has(grade.answerId)) {
+          continue;
+        }
+        const reason = grade.metadata?.reason;
+        const isTransient = reason === 'provider_unavailable' || reason === 'provider_error';
+        if (
+          (grade.status === 'AUTO_GRADED' ||
+            grade.status === 'PENDING_MANUAL_REVIEW' ||
+            grade.status === 'MANUALLY_GRADED') &&
+          !isTransient
+        ) {
+          reusableGrades.set(grade.answerId, {
+            status: grade.status === 'AUTO_GRADED' ? 'AUTO_GRADED' : 'PENDING_MANUAL_REVIEW',
+            ...(grade.score?.value !== undefined ? { score: grade.score.value } : {}),
+            ...(grade.feedback !== undefined ? { feedback: grade.feedback } : {}),
+            ...(grade.metadata !== undefined ? { metadata: grade.metadata } : {}),
+          });
+        }
+      }
+    }
+
+    const questionMap = new Map(
+      snapshot.getAllQuestions().map((question) => [question.id, question]),
+    );
+
+    const codingGrades = new Map<
+      string,
+      {
+        status: 'AUTO_GRADED' | 'PENDING_MANUAL_REVIEW' | 'GRADING_FAILED';
+        score?: number;
+        feedback?: Record<string, unknown>;
+        metadata?: Record<string, unknown>;
+      }
+    >();
+
+    try {
+      for (const answer of attempt.answers.filter((item) => item.isSubmitted())) {
+        const question = questionMap.get(answer.questionId);
+        if (question && question.kind === 'CODE') {
+          const cached = reusableGrades.get(answer.id);
+          if (cached) {
+            codingGrades.set(answer.id, cached);
+          } else {
+            const result = await this.codingAnswerGrading.gradeAnswer(answer, question);
+            codingGrades.set(answer.id, result);
+          }
+        }
+      }
+    } catch (error: unknown) {
+      await this.transactionRunner.run(async (tx) => {
+        const activeRun = await this.gradingRepo.findRunById(run.id, tx);
+        if (activeRun) {
+          activeRun.markFailed(error instanceof Error ? error.message : 'Unknown grading error');
+          await this.gradingRepo.saveRun(activeRun, tx);
+        }
+      });
+      throw error;
+    }
+
+    return this.transactionRunner.run(async (tx) => {
+      const activeRun = await this.gradingRepo.findRunById(run.id, tx);
+      if (!activeRun || activeRun.status !== 'RUNNING') {
+        throw new AppError('CONFLICT', 'A grading run is already in progress or completed', 409);
+      }
+
+      const attemptTx = await this.attemptRepo.findById(attemptId, tx);
+      if (
+        !attemptTx ||
+        attemptTx.workspaceId !== workspace.workspaceId ||
+        attemptTx.tenantId !== workspace.tenantId
+      ) {
+        throw new AppError('NOT_FOUND', 'attempt not found', 404);
+      }
+
+      const policyTx = this.gradingPolicy.canGradeAttempt(attemptTx);
+      if (!policyTx.allowed) {
+        throw new AppError('VALIDATION_ERROR', policyTx.reason ?? 'Attempt cannot be graded', 400);
+      }
 
       for (const answer of attemptTx.answers.filter((item) => item.isSubmitted())) {
         const question = questionMap.get(answer.questionId);
@@ -174,7 +268,7 @@ export class GradeAssessmentAttemptUseCase {
             questionId: question.id,
             questionKind: question.kind,
             maxScore,
-            metadata: run.id ? { gradingRunId: run.id } : {},
+            metadata: activeRun.id ? { gradingRunId: activeRun.id } : {},
           });
 
           if (codeResult.status === 'AUTO_GRADED') {
@@ -193,7 +287,7 @@ export class GradeAssessmentAttemptUseCase {
             attemptId: attemptTx.id,
             answer,
             question,
-            gradingRunId: run.id,
+            gradingRunId: activeRun.id,
           });
         }
 
@@ -206,19 +300,19 @@ export class GradeAssessmentAttemptUseCase {
           answer: answer.answer,
         });
 
-        run.addAnswerGrade(grade);
+        activeRun.addAnswerGrade(grade);
       }
 
-      const hasPendingManualReview = run.answerGrades.some(
+      const hasPendingManualReview = activeRun.answerGrades.some(
         (grade) => grade.status === 'PENDING_MANUAL_REVIEW',
       );
       if (hasPendingManualReview) {
-        run.markPartial();
+        activeRun.markPartial();
       } else {
-        run.markCompleted();
+        activeRun.markCompleted();
       }
 
-      const savedRun = await this.gradingRepo.saveRun(run, tx);
+      const savedRun = await this.gradingRepo.saveRun(activeRun, tx);
 
       const result = attemptTx.result;
       if (!result) {

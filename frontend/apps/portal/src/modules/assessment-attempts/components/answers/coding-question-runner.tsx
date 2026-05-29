@@ -35,7 +35,6 @@ interface CodingQuestionRunnerProps {
   saveConflict?: boolean | undefined;
   saveError?: string | undefined;
   onSave: (value: unknown) => Promise<void> | void;
-  /** Injected for testing — defaults to codeExecutionApiClient */
   executionClient?: {
     getCodeExecutionLanguages: () => Promise<CodeExecutionLanguageContract[]>;
     runCodeSample: (req: {
@@ -44,6 +43,9 @@ interface CodingQuestionRunnerProps {
       stdin?: string | null;
       publicTestCases?: Array<{ input: string; expectedOutput?: string }>;
       executionMode: 'SAMPLE_RUN' | 'PUBLIC_TEST_RUN';
+      attemptId?: string | null;
+      questionId?: string | null;
+      idempotencyKey?: string | null;
     }) => Promise<CodeExecutionResultContract>;
   };
 }
@@ -220,6 +222,7 @@ function OutputPanel({
 }
 
 export function CodingQuestionRunner({
+  attemptId,
   question,
   answer,
   canEdit,
@@ -330,6 +333,13 @@ export function CodingQuestionRunner({
       const result = await executionClient.runCodeSample({
         language: coding.language,
         sourceCode: coding.sourceCode,
+        attemptId,
+        questionId: question.id,
+        idempotencyKey:
+          typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+            ? crypto.randomUUID()
+            : Math.random().toString(36).substring(2, 15) +
+              Math.random().toString(36).substring(2, 15),
         ...(hasPublicTests
           ? { publicTestCases, executionMode: 'PUBLIC_TEST_RUN' }
           : { stdin: stdin || null, executionMode: 'SAMPLE_RUN' }),

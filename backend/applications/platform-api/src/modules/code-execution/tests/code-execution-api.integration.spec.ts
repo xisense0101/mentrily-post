@@ -2,8 +2,11 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { Test } from '@nestjs/testing';
 import { FastifyAdapter, type NestFastifyApplication } from '@nestjs/platform-fastify';
 import { PERMISSION_EVALUATOR, type PermissionEvaluator } from '@mentrily/service-core';
+import { PrismaService } from '@mentrily/data-platform';
+import { truncatePublicSchema } from '@mentrily/testing-toolkit';
 import { AppModule } from '../../app.module.js';
 import { registerCorrelationIdHook } from '../../../foundation/correlation-id.hook.js';
+import { CodeExecutionTrackerService } from '../application/code-execution-tracker.service.js';
 
 describe.sequential('Code Execution API (integration)', () => {
   let app: NestFastifyApplication;
@@ -35,11 +38,81 @@ describe.sequential('Code Execution API (integration)', () => {
     registerCorrelationIdHook(app.getHttpAdapter().getInstance());
     await app.init();
     await app.getHttpAdapter().getInstance().ready();
+
+    const prisma = app.get(PrismaService);
+    await truncatePublicSchema(prisma);
+
+    const workspaceId = creatorHeaders['x-workspace-id'];
+    const tenantId = creatorHeaders['x-tenant-id'];
+
+    const assessment = await prisma.assessment.create({
+      data: {
+        id: 'a1111111-1111-4111-8111-111111111111',
+        workspaceId,
+        tenantId,
+        title: 'Test Assessment',
+        purpose: 'PRACTICE',
+        ownerPrincipalId: creatorHeaders['x-actor-id'],
+        attemptPolicy: {},
+        resultReleasePolicy: 'IMMEDIATE',
+        metadata: {},
+      },
+    });
+
+    await prisma.assessmentVersion.create({
+      data: {
+        id: 'f1111111-1111-4111-8111-111111111111',
+        assessmentId: assessment.id,
+        versionNumber: 1,
+        status: 'DRAFT',
+        createdByPrincipalId: creatorHeaders['x-actor-id'],
+      },
+    });
+
+    await prisma.assessmentPublishedSnapshot.create({
+      data: {
+        id: 'b1111111-1111-4111-8111-111111111111',
+        assessmentId: assessment.id,
+        versionId: 'f1111111-1111-4111-8111-111111111111',
+        versionNumber: 1,
+        sections: [],
+        looseQuestions: [
+          {
+            id: 'd1111111-1111-4111-8111-111111111111',
+            kind: 'CODE',
+            title: 'Test Question',
+            prompt: { text: 'Write code' },
+            options: [],
+            points: 10,
+            gradingMode: 'AUTO',
+            position: 0,
+          },
+        ] as any,
+        publishedByPrincipalId: creatorHeaders['x-actor-id'],
+        publishedAt: new Date(),
+      },
+    });
+
+    await prisma.assessmentAttempt.create({
+      data: {
+        id: 'c1111111-1111-4111-8111-111111111111',
+        tenantId,
+        workspaceId,
+        assessmentId: assessment.id,
+        snapshotId: 'b1111111-1111-4111-8111-111111111111',
+        snapshotVersionId: 'f1111111-1111-4111-8111-111111111111',
+        snapshotVersionNumber: 1,
+        learnerPrincipalId: creatorHeaders['x-actor-id'],
+        startedAt: new Date(),
+        metadata: {},
+      },
+    });
   });
 
   beforeEach(() => {
     allowedPermissions.clear();
     allowedPermissions.add('workspace.read');
+    app.get(CodeExecutionTrackerService).reset();
   });
 
   afterAll(async () => {
@@ -93,6 +166,8 @@ describe.sequential('Code Execution API (integration)', () => {
         url: '/workspace/code-execution/sample-run',
         headers: creatorHeaders,
         payload: {
+          attemptId: 'c1111111-1111-4111-8111-111111111111',
+          questionId: 'd1111111-1111-4111-8111-111111111111',
           language: 'javascript',
           sourceCode: 'console.log("Hello, World!");',
         },
@@ -117,6 +192,8 @@ describe.sequential('Code Execution API (integration)', () => {
         url: '/workspace/code-execution/sample-run',
         headers: creatorHeaders,
         payload: {
+          attemptId: 'c1111111-1111-4111-8111-111111111111',
+          questionId: 'd1111111-1111-4111-8111-111111111111',
           language: 'python',
           sourceCode: 'import sys; print(sys.stdin.read())',
           stdin: 'hello test input',
@@ -134,6 +211,8 @@ describe.sequential('Code Execution API (integration)', () => {
         url: '/workspace/code-execution/sample-run',
         headers: creatorHeaders,
         payload: {
+          attemptId: 'c1111111-1111-4111-8111-111111111111',
+          questionId: 'd1111111-1111-4111-8111-111111111111',
           language: 'javascript',
           sourceCode: 'console.log("hello" // simulate:COMPILE_ERROR',
         },
@@ -152,6 +231,8 @@ describe.sequential('Code Execution API (integration)', () => {
         url: '/workspace/code-execution/sample-run',
         headers: creatorHeaders,
         payload: {
+          attemptId: 'c1111111-1111-4111-8111-111111111111',
+          questionId: 'd1111111-1111-4111-8111-111111111111',
           language: 'javascript',
           sourceCode: '// simulate:RUNTIME_ERROR',
         },
@@ -170,6 +251,8 @@ describe.sequential('Code Execution API (integration)', () => {
         url: '/workspace/code-execution/sample-run',
         headers: creatorHeaders,
         payload: {
+          attemptId: 'c1111111-1111-4111-8111-111111111111',
+          questionId: 'd1111111-1111-4111-8111-111111111111',
           language: 'javascript',
           sourceCode: '// simulate:TIME_LIMIT_EXCEEDED',
         },
@@ -187,6 +270,8 @@ describe.sequential('Code Execution API (integration)', () => {
         url: '/workspace/code-execution/sample-run',
         headers: creatorHeaders,
         payload: {
+          attemptId: 'c1111111-1111-4111-8111-111111111111',
+          questionId: 'd1111111-1111-4111-8111-111111111111',
           language: 'javascript',
           sourceCode: '// simulate:MEMORY_LIMIT_EXCEEDED',
         },
@@ -204,6 +289,8 @@ describe.sequential('Code Execution API (integration)', () => {
         url: '/workspace/code-execution/sample-run',
         headers: creatorHeaders,
         payload: {
+          attemptId: 'c1111111-1111-4111-8111-111111111111',
+          questionId: 'd1111111-1111-4111-8111-111111111111',
           language: 'javascript',
           sourceCode: '// simulate:PROVIDER_UNAVAILABLE',
         },
@@ -225,6 +312,8 @@ describe.sequential('Code Execution API (integration)', () => {
         url: '/workspace/code-execution/sample-run',
         headers: creatorHeaders,
         payload: {
+          attemptId: 'c1111111-1111-4111-8111-111111111111',
+          questionId: 'd1111111-1111-4111-8111-111111111111',
           language: 'javascript',
           sourceCode: '// simulate:OUTPUT_LIMIT_EXCEEDED',
         },
@@ -242,6 +331,8 @@ describe.sequential('Code Execution API (integration)', () => {
         url: '/workspace/code-execution/sample-run',
         headers: creatorHeaders,
         payload: {
+          attemptId: 'c1111111-1111-4111-8111-111111111111',
+          questionId: 'd1111111-1111-4111-8111-111111111111',
           language: 'javascript',
           sourceCode: 'console.log("hello")',
           publicTestCases: [
@@ -274,6 +365,8 @@ describe.sequential('Code Execution API (integration)', () => {
         url: '/workspace/code-execution/sample-run',
         headers: creatorHeaders,
         payload: {
+          attemptId: 'c1111111-1111-4111-8111-111111111111',
+          questionId: 'd1111111-1111-4111-8111-111111111111',
           language: 'unsupported_lang',
           sourceCode: 'print(1)',
         },
@@ -291,6 +384,8 @@ describe.sequential('Code Execution API (integration)', () => {
         url: '/workspace/code-execution/sample-run',
         headers: creatorHeaders,
         payload: {
+          attemptId: 'c1111111-1111-4111-8111-111111111111',
+          questionId: 'd1111111-1111-4111-8111-111111111111',
           language: 'javascript',
           sourceCode: 'a'.repeat(65537),
         },
@@ -308,6 +403,8 @@ describe.sequential('Code Execution API (integration)', () => {
         url: '/workspace/code-execution/sample-run',
         headers: creatorHeaders,
         payload: {
+          attemptId: 'c1111111-1111-4111-8111-111111111111',
+          questionId: 'd1111111-1111-4111-8111-111111111111',
           language: 'javascript',
           sourceCode: 'console.log(1)',
           publicTestCases: Array(11).fill({ input: 'test' }),
@@ -326,6 +423,8 @@ describe.sequential('Code Execution API (integration)', () => {
         url: '/workspace/code-execution/sample-run',
         headers: creatorHeaders,
         payload: {
+          attemptId: 'c1111111-1111-4111-8111-111111111111',
+          questionId: 'd1111111-1111-4111-8111-111111111111',
           language: 'javascript',
           sourceCode: 'console.log(1)',
           publicTestCases: [{ input: 'a'.repeat(16385) }],
@@ -344,6 +443,8 @@ describe.sequential('Code Execution API (integration)', () => {
         url: '/workspace/code-execution/sample-run',
         headers: creatorHeaders,
         payload: {
+          attemptId: 'c1111111-1111-4111-8111-111111111111',
+          questionId: 'd1111111-1111-4111-8111-111111111111',
           language: 'javascript',
           sourceCode: 'console.log(1)',
           publicTestCases: [{ input: 'test', expectedOutput: 'a'.repeat(16385) }],
@@ -362,6 +463,8 @@ describe.sequential('Code Execution API (integration)', () => {
         url: '/workspace/code-execution/sample-run',
         headers: creatorHeaders,
         payload: {
+          attemptId: 'c1111111-1111-4111-8111-111111111111',
+          questionId: 'd1111111-1111-4111-8111-111111111111',
           language: 'javascript',
           sourceCode: 'console.log(1)',
           executionMode: 'RESERVED_GRADING_RUN',
@@ -382,6 +485,44 @@ describe.sequential('Code Execution API (integration)', () => {
         url: '/workspace/code-execution/sample-run',
         headers: creatorHeaders,
         payload: {
+          attemptId: 'c1111111-1111-4111-8111-111111111111',
+          questionId: 'd1111111-1111-4111-8111-111111111111',
+          language: 'javascript',
+          sourceCode: 'console.log(1)',
+        },
+      });
+
+      expectHttpStatus(res, 403);
+    });
+
+    it('blocks request if attemptId or questionId is missing', async () => {
+      const res = await app.inject({
+        method: 'POST',
+        url: '/workspace/code-execution/sample-run',
+        headers: creatorHeaders,
+        payload: {
+          language: 'javascript',
+          sourceCode: 'console.log(1)',
+        },
+      });
+
+      expectHttpStatus(res, 400);
+      const data = res.json<any>();
+      expect(data.error.code).toBe('VALIDATION_ERROR');
+      expect(data.error.message).toContain('attemptId and questionId are required');
+    });
+
+    it('blocks request if attempt does not belong to actor or workspace', async () => {
+      const res = await app.inject({
+        method: 'POST',
+        url: '/workspace/code-execution/sample-run',
+        headers: {
+          ...creatorHeaders,
+          'x-actor-id': 'different-actor',
+        },
+        payload: {
+          attemptId: 'c1111111-1111-4111-8111-111111111111',
+          questionId: 'd1111111-1111-4111-8111-111111111111',
           language: 'javascript',
           sourceCode: 'console.log(1)',
         },

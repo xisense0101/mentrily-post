@@ -46,4 +46,9 @@ export abstract class AssessmentAttemptRepository {
     input: { assessmentId: string; learnerPrincipalId: string },
     transaction?: TransactionContext,
   ): Promise<AssessmentAttempt | null>;
+
+  /**
+   * Acquire a transaction-level lock on the attempt row to prevent concurrent modifications/grading runs.
+   */
+  abstract acquireRowLock(id: string, transaction: TransactionContext): Promise<void>;
 }

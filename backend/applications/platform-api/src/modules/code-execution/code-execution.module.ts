@@ -8,13 +8,18 @@ import { PistonCodeExecutionProvider } from './infrastructure/providers/piston-c
 import { GetCodeExecutionLanguagesUseCase } from './application/use-cases/get-code-execution-languages.use-case.js';
 import { RunCodeSampleUseCase } from './application/use-cases/run-code-sample.use-case.js';
 import { CodeExecutionController } from './presentation/http/code-execution.controller.js';
+import { CodeExecutionTrackerService } from './application/code-execution-tracker.service.js';
+import { CodeExecutionProviderRunner } from './application/code-execution-provider-runner.js';
+
+import { DataPlatformModule } from '@mentrily/data-platform';
 
 @Module({
-  imports: [FoundationModule],
+  imports: [FoundationModule, DataPlatformModule],
   controllers: [CodeExecutionController],
   providers: [
     CodeExecutionConfig,
     CodeExecutionPolicyService,
+    CodeExecutionTrackerService,
     GetCodeExecutionLanguagesUseCase,
     RunCodeSampleUseCase,
     {
@@ -25,13 +30,15 @@ import { CodeExecutionController } from './presentation/http/code-execution.cont
         judge0: Judge0CodeExecutionProvider,
         piston: PistonCodeExecutionProvider,
       ) => {
+        let provider;
         if (config.provider === 'judge0') {
-          return judge0;
+          provider = judge0;
+        } else if (config.provider === 'piston') {
+          provider = piston;
+        } else {
+          provider = fixture;
         }
-        if (config.provider === 'piston') {
-          return piston;
-        }
-        return fixture;
+        return new CodeExecutionProviderRunner(provider);
       },
       inject: [
         CodeExecutionConfig,
@@ -46,6 +53,7 @@ import { CodeExecutionController } from './presentation/http/code-execution.cont
   ],
   exports: [
     CodeExecutionPolicyService,
+    CodeExecutionTrackerService,
     GetCodeExecutionLanguagesUseCase,
     RunCodeSampleUseCase,
     'CODE_EXECUTION_PROVIDER',
