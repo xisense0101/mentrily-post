@@ -2,6 +2,37 @@
 
 This document serves as a permanent continuity/backtrace system for the Mentrily SaaS codebase. Every task must record its progress here to ensure a reliable audit trail and clear path forward.
 
+### Task 015F — Coding Assessment Dashboard and Statistics
+
+- **Task ID**: 015F
+- **Previous Task**: Task 015E — Coding Results and Review UI
+- **Implementation Status**: Complete, full validation matrix passed
+- **Work Completed**:
+  - Implemented the `GetCodingAssessmentAnalyticsUseCase` backend business logic to aggregate metrics for scores, pass rates, language usage distributions, and verdict breakdown.
+  - Exposed the protected endpoint `GET /workspace/assessments/:assessmentId/analytics/coding` under the `ASSESSMENT_RESULT_READ_WORKSPACE` permission within `AssessmentDeliveryController`.
+  - Added comprehensive backend unit tests to verify the correctness of the aggregated metrics, PII/sensitive data exclusion, and error handling.
+  - Implemented database-level API integration tests (`assessment-coding-analytics-api.integration.spec.ts`) validating publisher flow, mock attempt submissions, grading executions, and final analytics extraction.
+  - Updated frontend `assessmentApiClient` in `@/modules/assessment-builder/api` with `getCodingAssessmentAnalytics` method and exported it.
+  - Developed the premium, high-aesthetic `CodingAssessmentAnalyticsView` dashboard component in `frontend/apps/portal/src/modules/assessment-analytics/components/coding-assessment-analytics-view.tsx` featuring:
+    - Overview metrics cards: total submissions, graded attempts, pass rates, average scores, and execution reliability.
+    - Glassmorphic grids presenting language usage and submission verdict breakdowns with custom HSL color styling.
+    - Question Performance table detailing graded answers count, average score, pass rate, average public and hidden test cases success rates, pending reviews, provider failures, and most common verdict tags.
+  - Created Next.js route page `/assessments/[assessmentId]/analytics/page.tsx` rendering the new coding analytics component.
+  - Integrated the "Analytics" action link button in the assessment editor page header.
+  - Added comprehensive frontend unit tests in `coding-assessment-analytics-view.spec.tsx` verifying component render, loading/error states, and successful analytics dashboard metrics mapping.
+- **Validation Performed**:
+  - `pnpm --filter @mentrily/portal test`: **PASS (74 test files, 399 tests)**
+  - `pnpm --filter @mentrily/portal typecheck`: **PASS**
+  - `pnpm --filter @mentrily/platform-api test`: **PASS (98 test files, 522 tests)**
+  - `pnpm --filter @mentrily/platform-api typecheck`: **PASS**
+  - `pnpm typecheck`: **PASS (all packages typechecked successfully)**
+  - `pnpm test`: **PASS (all unit tests green)**
+- **Remaining Gaps**:
+  - None for Task 015F.
+- **Next Recommended Task**: Ready for production deployment / next monorepo task series.
+
+---
+
 ### Task 015E — Coding Results and Review UI
 
 - **Task ID**: 015E

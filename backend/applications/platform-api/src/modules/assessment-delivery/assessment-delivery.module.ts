@@ -63,6 +63,7 @@ import {
   ReleaseAssessmentResultUseCase,
   GetLearnerAssessmentResultUseCase,
   GetInstructorAssessmentResultUseCase,
+  GetCodingAssessmentAnalyticsUseCase,
 } from './application/index.js';
 import {
   AssessmentDeliveryController,
@@ -154,6 +155,7 @@ import {
     RequestAssessmentCodeExecutionUseCase,
     GetAssessmentCodeExecutionResultUseCase,
     CancelAssessmentCodeExecutionUseCase,
+    GetCodingAssessmentAnalyticsUseCase,
   ],
   exports: [
     AssessmentRepository,

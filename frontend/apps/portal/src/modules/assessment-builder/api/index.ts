@@ -11,4 +11,5 @@ export {
   archiveAssessment,
   restoreAssessment,
   getLatestAssessmentSnapshot,
+  getCodingAssessmentAnalytics,
 } from './assessment-api-client';

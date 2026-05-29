@@ -9,6 +9,7 @@ import type {
   RestoreAssessmentRequest,
   UpdateAssessmentRequest,
 } from '../types';
+import type { CodingAssessmentAnalyticsContract } from '@mentrily/domain-contracts';
 import { AssessmentApiError } from './assessment-api-errors';
 
 const PUBLIC_PLATFORM_API_URL =
@@ -170,6 +171,12 @@ export function createAssessmentApiClient({
         `/workspace/assessments/${assessmentId}/snapshots/latest`,
       );
     },
+
+    getCodingAssessmentAnalytics(assessmentId: string): Promise<CodingAssessmentAnalyticsContract> {
+      return request<CodingAssessmentAnalyticsContract>(
+        `/workspace/assessments/${assessmentId}/analytics/coding`,
+      );
+    },
   };
 }
 
@@ -186,3 +193,5 @@ export const archiveAssessment = assessmentApiClient.archiveAssessment.bind(asse
 export const restoreAssessment = assessmentApiClient.restoreAssessment.bind(assessmentApiClient);
 export const getLatestAssessmentSnapshot =
   assessmentApiClient.getLatestAssessmentSnapshot.bind(assessmentApiClient);
+export const getCodingAssessmentAnalytics =
+  assessmentApiClient.getCodingAssessmentAnalytics.bind(assessmentApiClient);

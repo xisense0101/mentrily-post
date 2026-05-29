@@ -70,6 +70,12 @@ export function AssessmentEditorPage({ assessmentId }: AssessmentEditorPageProps
           <div className="flex gap-3">
             <a
               className="rounded-full border border-portal-border bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-sm"
+              href={`/assessments/${assessmentId}/analytics`}
+            >
+              Analytics
+            </a>
+            <a
+              className="rounded-full border border-portal-border bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-sm"
               href={`/assessments/${assessmentId}/security`}
             >
               Security settings

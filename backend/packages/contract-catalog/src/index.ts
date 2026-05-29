@@ -11,3 +11,4 @@ export * from './dashboard/index.js';
 export * from './campaign-management/index.js';
 export * from './proctoring/index.js';
 export * from './code-execution/index.js';
+export * from './assessment-analytics/index.js';

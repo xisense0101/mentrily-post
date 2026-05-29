@@ -35,6 +35,7 @@ import {
   ReleaseAssessmentResultUseCase,
   UpdateAssessmentInput,
   UpdateAssessmentUseCase,
+  GetCodingAssessmentAnalyticsUseCase,
 } from '../../application/index.js';
 import { AssessmentPurpose } from '../../domain/index.js';
 
@@ -74,6 +75,8 @@ export class AssessmentDeliveryController {
     private readonly submitAttempt: SubmitAssessmentAttemptUseCase,
     @Inject(CancelAssessmentAttemptUseCase)
     private readonly cancelAttempt: CancelAssessmentAttemptUseCase,
+    @Inject(GetCodingAssessmentAnalyticsUseCase)
+    private readonly getCodingAssessmentAnalytics: GetCodingAssessmentAnalyticsUseCase,
   ) {}
 
   private requestContext(request: FastifyRequest): RequestContext {
@@ -151,6 +154,14 @@ export class AssessmentDeliveryController {
     @Body() body?: StartAssessmentAttemptInput,
   ) {
     return this.startAttempt.execute(this.requestContext(request), assessmentId, body);
+  }
+
+  @Get('/:assessmentId/analytics/coding')
+  async getCodingAnalytics(
+    @Req() request: FastifyRequest,
+    @Param('assessmentId') assessmentId: string,
+  ) {
+    return this.getCodingAssessmentAnalytics.execute(this.requestContext(request), assessmentId);
   }
 }
 

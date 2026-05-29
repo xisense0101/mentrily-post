@@ -26,3 +26,4 @@ export * from './get-instructor-assessment-result.use-case.js';
 export * from './request-assessment-code-execution.use-case.js';
 export * from './get-assessment-code-execution-result.use-case.js';
 export * from './cancel-assessment-code-execution.use-case.js';
+export * from './get-coding-assessment-analytics.use-case.js';
