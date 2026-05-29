@@ -26,7 +26,7 @@ describe('CodingAnswerGradingService', () => {
     });
   };
 
-  const createMockQuestion = (points: number, testCases: any[]) => {
+  const createMockQuestion = (points: number, testCases: unknown[]) => {
     return AssessmentQuestion.create({
       id: 'question-1',
       assessmentId: 'assessment-1',

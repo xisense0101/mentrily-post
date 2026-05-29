@@ -87,7 +87,7 @@ describe.sequential('Code Execution API (integration)', () => {
             gradingMode: 'AUTO',
             position: 0,
           },
-        ] as any,
+        ] as unknown as unknown[],
         publishedByPrincipalId: creatorHeaders['x-actor-id'],
         publishedAt: new Date(),
       },
@@ -139,7 +139,7 @@ describe.sequential('Code Execution API (integration)', () => {
       });
 
       expectHttpStatus(res, 200);
-      const body = res.json<any[]>();
+      const body = res.json<Record<string, unknown>[]>();
       expect(body).toBeInstanceOf(Array);
       expect(body.map((l) => l.id)).toEqual(['javascript', 'python', 'cpp', 'java']);
       expect(body[0]).toHaveProperty('displayName');
@@ -174,7 +174,7 @@ describe.sequential('Code Execution API (integration)', () => {
       });
 
       expectHttpStatus(res, 201);
-      const data = res.json<any>();
+      const data = res.json<Record<string, unknown>>();
       expect(data.status).toBe('COMPLETED');
       expect(data.verdict).toBe('ACCEPTED');
       expect(data.stdout).toBe('Hello, World!');
@@ -201,7 +201,7 @@ describe.sequential('Code Execution API (integration)', () => {
       });
 
       expectHttpStatus(res, 201);
-      const data = res.json<any>();
+      const data = res.json<Record<string, unknown>>();
       expect(data.stdout).toBe('Echo stdin: hello test input');
     });
 
@@ -219,7 +219,7 @@ describe.sequential('Code Execution API (integration)', () => {
       });
 
       expectHttpStatus(res, 201);
-      const data = res.json<any>();
+      const data = res.json<Record<string, unknown>>();
       expect(data.status).toBe('COMPLETED');
       expect(data.verdict).toBe('COMPILE_ERROR');
       expect(data.compileOutput).toContain('SyntaxError');
@@ -239,7 +239,7 @@ describe.sequential('Code Execution API (integration)', () => {
       });
 
       expectHttpStatus(res, 201);
-      const data = res.json<any>();
+      const data = res.json<Record<string, unknown>>();
       expect(data.status).toBe('COMPLETED');
       expect(data.verdict).toBe('RUNTIME_ERROR');
       expect(data.stderr).toContain('RuntimeError');
@@ -259,7 +259,7 @@ describe.sequential('Code Execution API (integration)', () => {
       });
 
       expectHttpStatus(res, 201);
-      const data = res.json<any>();
+      const data = res.json<Record<string, unknown>>();
       expect(data.status).toBe('FAILED');
       expect(data.verdict).toBe('TIME_LIMIT_EXCEEDED');
     });
@@ -278,7 +278,7 @@ describe.sequential('Code Execution API (integration)', () => {
       });
 
       expectHttpStatus(res, 201);
-      const data = res.json<any>();
+      const data = res.json<Record<string, unknown>>();
       expect(data.status).toBe('FAILED');
       expect(data.verdict).toBe('MEMORY_LIMIT_EXCEEDED');
     });
@@ -297,7 +297,7 @@ describe.sequential('Code Execution API (integration)', () => {
       });
 
       expectHttpStatus(res, 201);
-      const data = res.json<any>();
+      const data = res.json<Record<string, unknown>>();
       expect(data.status).toBe('FAILED');
       expect(data.verdict).toBe('PROVIDER_UNAVAILABLE');
       // Verify safe message
@@ -320,7 +320,7 @@ describe.sequential('Code Execution API (integration)', () => {
       });
 
       expectHttpStatus(res, 201);
-      const data = res.json<any>();
+      const data = res.json<Record<string, unknown>>();
       expect(data.verdict).toBe('OUTPUT_LIMIT_EXCEEDED');
       expect(data.stdout).toContain('[Truncated - output limit exceeded]');
     });
@@ -349,7 +349,7 @@ describe.sequential('Code Execution API (integration)', () => {
       });
 
       expectHttpStatus(res, 201);
-      const data = res.json<any>();
+      const data = res.json<Record<string, unknown>>();
       expect(data.testResults).toBeDefined();
       expect(data.testResults).toHaveLength(2);
       expect(data.testResults[0].passed).toBe(true);
@@ -373,7 +373,7 @@ describe.sequential('Code Execution API (integration)', () => {
       });
 
       expectHttpStatus(res, 400);
-      const data = res.json<any>();
+      const data = res.json<Record<string, unknown>>();
       expect(data.error.code).toBe('VALIDATION_ERROR');
       expect(data.error.message).toContain('Unsupported language');
     });
@@ -392,7 +392,7 @@ describe.sequential('Code Execution API (integration)', () => {
       });
 
       expectHttpStatus(res, 400);
-      const data = res.json<any>();
+      const data = res.json<Record<string, unknown>>();
       expect(data.error.code).toBe('VALIDATION_ERROR');
       expect(data.error.message).toContain('Source code exceeds limit');
     });
@@ -412,7 +412,7 @@ describe.sequential('Code Execution API (integration)', () => {
       });
 
       expectHttpStatus(res, 400);
-      const data = res.json<any>();
+      const data = res.json<Record<string, unknown>>();
       expect(data.error.code).toBe('VALIDATION_ERROR');
       expect(data.error.message).toContain('Public test cases exceed limit');
     });
@@ -432,7 +432,7 @@ describe.sequential('Code Execution API (integration)', () => {
       });
 
       expectHttpStatus(res, 400);
-      const data = res.json<any>();
+      const data = res.json<Record<string, unknown>>();
       expect(data.error.code).toBe('VALIDATION_ERROR');
       expect(data.error.message).toContain('Public test case input exceeds limit');
     });
@@ -452,7 +452,7 @@ describe.sequential('Code Execution API (integration)', () => {
       });
 
       expectHttpStatus(res, 400);
-      const data = res.json<any>();
+      const data = res.json<Record<string, unknown>>();
       expect(data.error.code).toBe('VALIDATION_ERROR');
       expect(data.error.message).toContain('Public test case expected output exceeds limit');
     });
@@ -472,7 +472,7 @@ describe.sequential('Code Execution API (integration)', () => {
       });
 
       expectHttpStatus(res, 400);
-      const data = res.json<any>();
+      const data = res.json<Record<string, unknown>>();
       expect(data.error.code).toBe('VALIDATION_ERROR');
       expect(data.error.message).toContain('GRADING_RUN_NOT_AVAILABLE');
     });
@@ -507,7 +507,7 @@ describe.sequential('Code Execution API (integration)', () => {
       });
 
       expectHttpStatus(res, 400);
-      const data = res.json<any>();
+      const data = res.json<Record<string, unknown>>();
       expect(data.error.code).toBe('VALIDATION_ERROR');
       expect(data.error.message).toContain('attemptId and questionId are required');
     });

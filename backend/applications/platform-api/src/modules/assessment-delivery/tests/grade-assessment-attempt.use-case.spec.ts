@@ -22,6 +22,7 @@ import {
   QuestionOption,
   QuestionPoints,
   GradingModeEnum,
+  AssessmentGradingRun,
 } from '../domain/index.js';
 import {
   AssessmentEventPublisherService,
@@ -214,7 +215,7 @@ describe('GradeAssessmentAttemptUseCase', () => {
       listByAssessmentAndLearner: vi.fn(async () => []),
       acquireRowLock: vi.fn(async () => {}),
     } as unknown as AssessmentAttemptRepository;
-    let savedRun: any = null;
+    let savedRun: AssessmentGradingRun | null = null;
     const gradingRepo = {
       saveRun: vi.fn(async (run) => {
         savedRun = run;
@@ -348,7 +349,7 @@ describe('GradeAssessmentAttemptUseCase', () => {
       acquireRowLock: vi.fn(async () => {}),
     } as unknown as AssessmentAttemptRepository;
 
-    let savedRunCode: any = null;
+    let savedRunCode: AssessmentGradingRun | null = null;
     const gradingRepo = {
       saveRun: vi.fn(async (run) => {
         savedRunCode = run;

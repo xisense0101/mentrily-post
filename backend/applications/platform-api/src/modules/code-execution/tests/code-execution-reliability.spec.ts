@@ -1,5 +1,7 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { AuditRecorder, PermissionEvaluator, RequestContext } from '@mentrily/service-core';
+import { CodeExecutionLimitContract } from '@mentrily/contract-catalog';
+import { PrismaService } from '@mentrily/data-platform';
 import { CodeExecutionTrackerService } from '../application/code-execution-tracker.service.js';
 import { CodeExecutionProviderRunner } from '../application/code-execution-provider-runner.js';
 import { CodeExecutionProvider } from '../application/code-execution-provider.js';
@@ -160,6 +162,18 @@ describe('Code Execution Reliability, Limits & Abuse Protection', () => {
   });
 
   describe('CodeExecutionProviderRunner', () => {
+    const mockLimits: CodeExecutionLimitContract = {
+      maxSourceBytes: 100,
+      maxStdInBytes: 100,
+      maxOutputBytes: 100,
+      cpuTimeLimitMs: 1000,
+      wallTimeLimitMs: 1000,
+      memoryLimitKb: 1024,
+      maxPublicTestCases: 10,
+      maxPublicTestCaseInputBytes: 100,
+      maxPublicTestCaseExpectedOutputBytes: 100,
+    };
+
     it('retries transient PROVIDER_UNAVAILABLE up to 3 times', async () => {
       const mockDelegate: CodeExecutionProvider = {
         providerName: 'mock-provider',
@@ -196,7 +210,7 @@ describe('Code Execution Reliability, Limits & Abuse Protection', () => {
       const res = await runner.execute({
         providerLanguageId: 'javascript',
         sourceCode: 'console.log(1)',
-        limits: { maxSourceBytes: 100, maxStdInBytes: 100, maxOutputBytes: 100 } as any,
+        limits: mockLimits,
       });
 
       expect(res.verdict).toBe('ACCEPTED');
@@ -216,7 +230,7 @@ describe('Code Execution Reliability, Limits & Abuse Protection', () => {
       const res = await runner.execute({
         providerLanguageId: 'javascript',
         sourceCode: 'console.log(1)',
-        limits: { maxSourceBytes: 100, maxStdInBytes: 100, maxOutputBytes: 100 } as any,
+        limits: mockLimits,
       });
 
       expect(res.verdict).toBe('PROVIDER_UNAVAILABLE');
@@ -260,7 +274,7 @@ describe('Code Execution Reliability, Limits & Abuse Protection', () => {
             },
           }),
         },
-      } as any;
+      } as unknown as PrismaService;
 
       const useCase = new RunCodeSampleUseCase(
         policyService,
@@ -277,7 +291,7 @@ describe('Code Execution Reliability, Limits & Abuse Protection', () => {
           workspaceId: 'workspace-456',
           actorId: 'actor-789',
         },
-      } as any;
+      } as unknown as RequestContext;
 
       const result = await useCase.execute(context, {
         language: 'javascript',

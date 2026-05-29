@@ -167,15 +167,11 @@ export class PrismaAssessmentAttemptRepository implements AssessmentAttemptRepos
   }
 
   async acquireRowLock(id: string, transaction: TransactionContext): Promise<void> {
-    const tx = transaction.client as any;
-    if (!tx || typeof tx.$queryRawUnsafe !== 'function') {
-      return;
-    }
+    const client = getPrismaClient(this.prisma, transaction);
     try {
-      await tx.$queryRawUnsafe(
-        `SELECT 1 FROM "AssessmentAttempt" WHERE "id" = $1::uuid FOR UPDATE;`,
-        id,
-      );
+      await client.$queryRaw`
+        SELECT 1 FROM "AssessmentAttempt" WHERE "id" = ${id}::uuid FOR UPDATE
+      `;
     } catch (error) {
       throw mapPrismaError(error);
     }

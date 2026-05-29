@@ -19,7 +19,7 @@ This document serves as a permanent continuity/backtrace system for the Mentrily
   - `pnpm test`: **PASS (509 tests green)**
   - `pnpm test:integration`: **PASS (all integration tests green)**
   - `pnpm build`: **PASS (monorepo build green)**
-- **Next Recommended Task**: Task 015E — Coding Assessment Dashboard and Statistics
+- **Next Recommended Task**: Task 015E — Coding Results and Review UI
 
 ---
 
@@ -39,7 +39,7 @@ This document serves as a permanent continuity/backtrace system for the Mentrily
   - `pnpm test`: **PASS (all unit tests green)**
   - `pnpm test:integration`: **PASS (all integration tests green)**
   - `pnpm build`: **PASS (monorepo build green)**
-- **Next Recommended Task**: Task 015E — Coding Assessment Dashboard and Statistics
+- **Next Recommended Task**: Task 015E — Coding Results and Review UI
 
 ---
 
