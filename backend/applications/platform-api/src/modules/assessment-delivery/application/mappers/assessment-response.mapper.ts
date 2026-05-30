@@ -25,7 +25,9 @@ function mapQuestion(q: AssessmentQuestion): AssessmentQuestionResponse {
     title: q.title,
     prompt: { ...q.prompt },
     options: q.options.map((o) => ({ ...o })),
-    answerKey: q.answerKey ? { ...q.answerKey } : undefined,
+    answerKey: q.answerKey
+      ? (q.answerKey.toObject() as unknown as Record<string, unknown>)
+      : undefined,
     points: q.points.value(),
     gradingMode: q.gradingMode,
     position: q.position,

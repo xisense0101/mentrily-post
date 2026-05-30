@@ -8,6 +8,7 @@ import {
   QuestionKindEnum,
   QuestionPoints,
   GradingModeEnum,
+  QuestionAnswerKey,
 } from '../domain/index.js';
 
 describe('CodingAnswerGradingService', () => {
@@ -35,7 +36,6 @@ describe('CodingAnswerGradingService', () => {
       title: 'Coding Question',
       prompt: { text: 'Prompt' },
       options: [],
-      answerKey: undefined,
       points: QuestionPoints.create(points),
       gradingMode: GradingModeEnum.AUTO,
       position: 0,
@@ -310,5 +310,53 @@ describe('CodingAnswerGradingService', () => {
     // Assert that the raw error details (e.g. connection refused) are not exposed in returned metadata/feedback
     expect(JSON.stringify(result)).not.toContain('connection refused');
     expect(JSON.stringify(result)).not.toContain('Internal server error');
+  });
+
+  it('uses only publicGradedTestCases and hiddenGradedTestCases from codingConfig, and ignores publicSampleTestCases', async () => {
+    const mockProvider = {
+      providerName: 'mock-provider',
+      execute: vi
+        .fn()
+        .mockResolvedValueOnce({
+          status: 'SUCCESS',
+          verdict: 'ACCEPTED',
+          stdout: '4\n',
+        })
+        .mockResolvedValueOnce({
+          status: 'SUCCESS',
+          verdict: 'ACCEPTED',
+          stdout: '5\n',
+        }),
+    } as unknown as CodeExecutionProvider;
+
+    const gradingService = new CodingAnswerGradingService(policyService, mockProvider);
+    const answer = createMockAnswer('print(2+2)', 'python');
+    const question = AssessmentQuestion.create({
+      id: 'question-1',
+      assessmentId: 'assessment-1',
+      kind: QuestionKindEnum.CODE,
+      title: 'Coding Question',
+      prompt: { text: 'Prompt' },
+      options: [],
+      points: QuestionPoints.create(10),
+      gradingMode: GradingModeEnum.AUTO,
+      position: 0,
+      metadata: {},
+      answerKey: QuestionAnswerKey.create({
+        codingConfig: {
+          allowedLanguages: ['python'],
+          starterCodeByLanguage: { python: 'print(2+2)' },
+          publicSampleTestCases: [{ id: 'sample-1', input: '1', expectedOutput: 'ignore-me' }],
+          publicGradedTestCases: [{ id: 'public-1', input: '2', expectedOutput: '4', weight: 1 }],
+          hiddenGradedTestCases: [{ id: 'hidden-1', input: '3', expectedOutput: '5', weight: 1 }],
+        },
+      }),
+    });
+
+    const result = await gradingService.gradeAnswer(answer, question);
+    expect(result.status).toBe('AUTO_GRADED');
+    expect(result.score).toBe(10); // both public-1 and hidden-1 passed
+
+    expect(mockProvider.execute).toHaveBeenCalledTimes(2);
   });
 });

@@ -12,7 +12,7 @@ import {
   QuestionAnswerKey,
   QuestionValidationPolicyService,
 } from '../domain/index.js';
- 
+
 describe('Question Validation Policy', () => {
   const service = new QuestionValidationPolicyService();
 
@@ -185,6 +185,7 @@ describe('Question Validation Policy', () => {
       const question = createBaseQuestion(QuestionKindEnum.CODE, {
         options: [],
         gradingMode: GradingModeEnum.AUTO,
+        metadata: { gradingTestCases: [] },
       });
       const result = service.validateQuestion(question);
       expect(result.valid).toBe(false);

@@ -2,6 +2,47 @@
 
 This document serves as a permanent continuity/backtrace system for the Mentrily SaaS codebase. Every task must record its progress here to ensure a reliable audit trail and clear path forward.
 
+### Task 015G — Coding Question Authoring and Test Case Management
+
+- **Task ID**: 015G
+- **Previous Task**: Task 015F — Coding Assessment Dashboard and Statistics
+- **Implementation Status**: Complete, full validation matrix passed
+- **Work Completed**:
+  - Hardened the `QuestionAnswerKey` value object to support structured `codingConfig` and validated languages, weights, case count, and payload size.
+  - Implemented domain validation checks in `AssessmentQuestion.create` to enforce language allowlist (`['javascript', 'python', 'cpp', 'java']`), max test case count (50), non-negative weights, and size limits (100 KB per test case input/output, 50 KB total starter code).
+  - Ensured manual coding questions or legacy questions without a configuration can still be created by checking if the coding configuration exists before running constraints.
+  - Decoupled creator-facing configurations from learner-facing snapshots by establishing `CodingQuestionLearnerConfigContract`.
+  - Ensured complete omission of hidden/public graded tests from learner snapshots via `AssessmentSnapshotResponseMapper` (preventing any structure or detail leakage of graded test cases to learner client payloads).
+  - Resolved TypeScript `exactOptionalPropertyTypes` compilation errors in `CodingAnswerGradingService` and `AssessmentSnapshotResponseMapper` by conditionally spreading the `weight` property if it is defined.
+  - Resolved TypeScript index reordering and `Input` element value type safety regressions in `EditableCodeQuestion` frontend component.
+  - Cast `answerKey` in responses to generic `Record<string, unknown>` to comply with the DTO contracts.
+  - Refactored `CodingAnswerGradingService` to correctly grade coding answers using only `publicGradedTestCases` and `hiddenGradedTestCases`, explicitly excluding `publicSampleTestCases` from the automated grading execution pipeline.
+  - Implemented the full-featured, interactive `EditableCodeQuestion` React component in `frontend/apps/portal` to allow instructors to manage allowed languages, edit starter code tabs, and add/edit/delete/reorder public sample, public graded, and hidden graded test cases with real-time constraint validation warnings.
+  - Updated `CodingQuestionRunner` (learner coding runner component) to consume `allowedLanguages`, `starterCodeByLanguage`, and `publicSampleTestCases` from `codingLearnerConfig`. Added a unit test proving proper rendering.
+  - **Design Note on Public Sample Tests**: The expected output of public sample test cases (`publicSampleTestCases.expectedOutput`) is intentionally exposed to the learner. This is necessary because sample/practice tests are evaluated directly inside the learner's workspace/browser runner UI so they can verify their logic against expected values before submitting for official grading.
+  - Added comprehensive frontend unit tests in `editable-code-question.spec.tsx` and updated renderer assertions in `question-renderer.spec.tsx`.
+  - Added comprehensive backend unit tests in `coding-question-authoring.spec.ts`, `coding-answer-grading.service.spec.ts`, and updated domain entity tests.
+  - Created and ran `coding-question-integration-loop.integration.spec.ts` end-to-end integration test verifying the secure boundary, learner snapshot filtration, grading runtime execution, and result aggregation.
+- **Validation Performed**:
+  - `pnpm --filter @mentrily/portal build`: **PASS** (Next.js production build compiled successfully)
+  - `pnpm --filter @mentrily/platform-api build`: **PASS** (NestJS production build compiled successfully)
+  - `pnpm --filter @mentrily/domain-contracts typecheck`: **PASS**
+  - `pnpm --filter @mentrily/contract-catalog typecheck`: **PASS**
+  - `pnpm --filter @mentrily/data-platform prisma:validate`: **PASS** (Prisma schema validation checked successfully)
+  - `pnpm --filter @mentrily/data-platform prisma:generate`: **PASS** (Prisma client code generation succeeded)
+  - `pnpm build`: **PASS** (Entire monorepo build succeeded)
+  - `pnpm test:e2e`: **PASS** (All Playwright E2E suites passed: Content Studio, Learning Delivery, Assessment Builder, Assessment Attempt, Assessment Grading, Assessment Result, and Assessment Reliability)
+  - `pnpm --filter @mentrily/platform-api test:integration`: **PASS** (Database integration tests including `coding-question-integration-loop.integration.spec.ts` green)
+  - `pnpm --filter @mentrily/portal typecheck`: **PASS**
+  - `pnpm --filter @mentrily/portal test`: **PASS** (408 portal unit tests green)
+  - `pnpm typecheck`: **PASS** (All packages typecheck succeeded)
+  - `pnpm test`: **PASS** (All unit tests green)
+- **Remaining Gaps**:
+  - None.
+- **Next Recommended Task**: Task 016A — Workspace Switcher and Multi-Organization App Shell
+
+---
+
 ### Task 015F — Coding Assessment Dashboard and Statistics
 
 - **Task ID**: 015F

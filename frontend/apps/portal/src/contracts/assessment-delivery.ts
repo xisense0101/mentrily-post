@@ -69,4 +69,8 @@ export type {
   CodingGradeStatusContract,
   CodingPublicTestResultContract,
   CodingResultSummaryContract,
+  // Task 015G - Coding Authoring & Learner Contracts
+  CodingAuthoringTestCase,
+  CodingQuestionAuthoringConfigContract,
+  CodingQuestionLearnerConfigContract,
 } from '@mentrily/domain-contracts';

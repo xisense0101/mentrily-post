@@ -630,4 +630,48 @@ describe('CodingQuestionRunner', () => {
       expect(rendered.container.querySelector('[data-testid="test-result-1"]')).toBeTruthy();
     });
   });
+
+  it('consumes allowedLanguages, starterCodeByLanguage, and publicSampleTestCases from codingLearnerConfig', async () => {
+    const client = makeExecutionClient();
+    const configQuestion = makeCodeQuestion({
+      answerKey: {
+        codingLearnerConfig: {
+          allowedLanguages: ['javascript'],
+          starterCodeByLanguage: {
+            javascript: '// custom starter code',
+          },
+          publicSampleTestCases: [
+            { id: 'sample-1', input: 'input-val', expectedOutput: 'expected-val' },
+          ],
+        },
+      },
+    });
+
+    const rendered = await render(
+      <CodingQuestionRunner {...baseProps} question={configQuestion} executionClient={client} />,
+    );
+
+    // 1. Verify language selector only shows javascript (python should be filtered out)
+    await waitFor(() => {
+      const selector = rendered.container.querySelector(
+        '[data-testid="lang-selector"]',
+      ) as HTMLSelectElement | null;
+      expect(selector).toBeTruthy();
+      expect(selector!.options.length).toBe(1);
+      expect(selector!.options[0].value).toBe('javascript');
+    });
+
+    // 2. Verify custom starter code is loaded into editor
+    const editor = rendered.container.querySelector(
+      '[data-testid="code-editor"]',
+    ) as HTMLTextAreaElement | null;
+    expect(editor).toBeTruthy();
+    expect(editor!.value).toBe('// custom starter code');
+
+    // 3. Verify public test case from codingLearnerConfig is rendered
+    expect(rendered.container.querySelector('[data-testid="public-test-cases"]')).toBeTruthy();
+    expect(rendered.container.querySelector('[data-testid="public-test-case-0"]')).toBeTruthy();
+    expect(rendered.container.textContent).toContain('input-val');
+    expect(rendered.container.textContent).toContain('expected-val');
+  });
 });

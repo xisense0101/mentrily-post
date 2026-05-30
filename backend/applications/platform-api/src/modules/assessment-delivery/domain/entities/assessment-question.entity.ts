@@ -162,9 +162,135 @@ export class AssessmentQuestion {
         }
         break;
 
-      case 'CODE':
+      case 'CODE': {
+        const answerKey = props.answerKey;
+        if (props.gradingMode === 'AUTO') {
+          const metadata = props.metadata as Record<string, unknown> | null | undefined;
+          const hasLegacyTests =
+            Array.isArray(metadata?.gradingTestCases) || Array.isArray(metadata?.testCases);
+          if (!hasLegacyTests && (!answerKey || !answerKey.codingConfig)) {
+            throw new Error('Auto-graded coding questions must have a coding configuration');
+          }
+        }
+
+        if (answerKey && answerKey.codingConfig) {
+          const config = answerKey.codingConfig;
+          if (!Array.isArray(config.allowedLanguages) || config.allowedLanguages.length === 0) {
+            throw new Error('allowedLanguages must be a non-empty array');
+          }
+          if (config.allowedLanguages.length > 4) {
+            throw new Error('Maximum 4 allowed languages');
+          }
+          const validIds = new Set(['javascript', 'python', 'cpp', 'java']);
+          for (const lang of config.allowedLanguages) {
+            if (!validIds.has(lang)) {
+              throw new Error(`Invalid language ID: ${lang}`);
+            }
+          }
+          if (
+            typeof config.starterCodeByLanguage !== 'object' ||
+            config.starterCodeByLanguage === null
+          ) {
+            throw new Error('starterCodeByLanguage must be an object');
+          }
+          for (const key of Object.keys(config.starterCodeByLanguage)) {
+            if (!config.allowedLanguages.includes(key)) {
+              throw new Error(`Starter code key ${key} is not in allowedLanguages`);
+            }
+          }
+
+          let totalStarterCodeSize = 0;
+          for (const val of Object.values(config.starterCodeByLanguage)) {
+            if (typeof val === 'string') {
+              totalStarterCodeSize += Buffer.byteLength(val, 'utf8');
+            }
+          }
+          if (totalStarterCodeSize > 51200) {
+            throw new Error('Total starter code size must not exceed 50 KB');
+          }
+
+          const samples = Array.isArray(config.publicSampleTestCases)
+            ? config.publicSampleTestCases
+            : [];
+          const publicGraded = Array.isArray(config.publicGradedTestCases)
+            ? config.publicGradedTestCases
+            : [];
+          const hiddenGraded = Array.isArray(config.hiddenGradedTestCases)
+            ? config.hiddenGradedTestCases
+            : [];
+
+          const totalTests = samples.length + publicGraded.length + hiddenGraded.length;
+          if (totalTests > 50) {
+            throw new Error('Total number of test cases must not exceed 50');
+          }
+
+          if (samples.length > 10) {
+            throw new Error('Public sample test cases must not exceed 10');
+          }
+          if (publicGraded.length > 20) {
+            throw new Error('Public graded test cases must not exceed 20');
+          }
+          if (hiddenGraded.length > 20) {
+            throw new Error('Hidden graded test cases must not exceed 20');
+          }
+
+          if (props.gradingMode === 'AUTO' && publicGraded.length + hiddenGraded.length === 0) {
+            throw new Error(
+              'Auto-graded coding questions require at least one graded test case (public or hidden)',
+            );
+          }
+
+          const testCaseIds = new Set<string>();
+
+          const validateTestCase = (tc: unknown, type: string) => {
+            if (!tc || typeof tc !== 'object') {
+              throw new Error(`Invalid test case in ${type}`);
+            }
+            const tcRecord = tc as Record<string, unknown>;
+            if (typeof tcRecord.id !== 'string' || !tcRecord.id) {
+              throw new Error(`Test case id is required and must be a non-empty string in ${type}`);
+            }
+            const id = tcRecord.id;
+            if (testCaseIds.has(id)) {
+              throw new Error(`Duplicate test case ID: ${id}`);
+            }
+            testCaseIds.add(id);
+
+            if (typeof tcRecord.input !== 'string') {
+              throw new Error(`Test case input must be a string in ${type}`);
+            }
+            if (typeof tcRecord.expectedOutput !== 'string') {
+              throw new Error(`Test case expectedOutput must be a string in ${type}`);
+            }
+            if (Buffer.byteLength(tcRecord.input, 'utf8') > 102400) {
+              throw new Error(`Test case input exceeds 100 KB limit in ${type}`);
+            }
+            if (Buffer.byteLength(tcRecord.expectedOutput, 'utf8') > 102400) {
+              throw new Error(`Test case expectedOutput exceeds 100 KB limit in ${type}`);
+            }
+            if (tcRecord.weight !== undefined) {
+              if (
+                typeof tcRecord.weight !== 'number' ||
+                tcRecord.weight < 0 ||
+                isNaN(tcRecord.weight)
+              ) {
+                throw new Error(`Test case weight must be a non-negative number in ${type}`);
+              }
+              if (tcRecord.weight > 1000) {
+                throw new Error(`Test case weight exceeds 1000 limit in ${type}`);
+              }
+            }
+          };
+
+          for (const tc of samples) validateTestCase(tc, 'publicSampleTestCases');
+          for (const tc of publicGraded) validateTestCase(tc, 'publicGradedTestCases');
+          for (const tc of hiddenGraded) validateTestCase(tc, 'hiddenGradedTestCases');
+        }
+        break;
+      }
+
       case 'NOTEBOOK':
-        // CODE and NOTEBOOK are modeled only, no execution yet
+        // NOTEBOOK are modeled only, no execution yet
         // But structural validation still applies
         break;
 

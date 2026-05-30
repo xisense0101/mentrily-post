@@ -74,12 +74,35 @@ export interface AssessmentFileUploadAnswerInputContract {
 
 export type AssessmentSubmittedFileContract = AssessmentMediaAttachmentContract;
 
+export interface CodingAuthoringTestCase {
+  id: string;
+  input: string;
+  expectedOutput: string;
+  weight?: number;
+}
+
+export interface CodingQuestionAuthoringConfigContract {
+  allowedLanguages: string[];
+  starterCodeByLanguage: Record<string, string>;
+  publicSampleTestCases: CodingAuthoringTestCase[];
+  publicGradedTestCases: CodingAuthoringTestCase[];
+  hiddenGradedTestCases: CodingAuthoringTestCase[];
+}
+
+export interface CodingQuestionLearnerConfigContract {
+  allowedLanguages: string[];
+  starterCodeByLanguage: Record<string, string>;
+  publicSampleTestCases: CodingAuthoringTestCase[];
+}
+
 export interface QuestionAnswerKeyContract {
   correctOptionIds?: string[] | undefined;
   acceptedTextAnswers?: string[] | undefined;
   expectedOutput?: string | undefined;
   rubricId?: string | undefined;
   metadata?: Record<string, unknown> | undefined;
+  codingConfig?: CodingQuestionAuthoringConfigContract | undefined;
+  codingLearnerConfig?: CodingQuestionLearnerConfigContract | undefined;
 }
 
 export interface AssessmentQuestionContract {

@@ -2,6 +2,31 @@ import { AssessmentPublishedSnapshot } from '../../domain/entities/index.js';
 import { AssessmentPublishedSnapshotResponse } from '../dto/index.js';
 import { readQuestionMediaState, sanitizeQuestionMetadata } from '../support/index.js';
 
+function sanitizeAnswerKeyForLearner(
+  kind: string,
+  answerKey?: import('../../domain/value-objects/question-answer-key.vo.js').QuestionAnswerKey,
+): Record<string, unknown> | undefined {
+  if (!answerKey) return undefined;
+  const obj = answerKey.toObject();
+  if (kind === 'CODE') {
+    if (obj.codingConfig) {
+      return {
+        codingLearnerConfig: {
+          allowedLanguages: obj.codingConfig.allowedLanguages,
+          starterCodeByLanguage: obj.codingConfig.starterCodeByLanguage,
+          publicSampleTestCases: (obj.codingConfig.publicSampleTestCases ?? []).map((tc) => ({
+            id: tc.id,
+            input: tc.input,
+            expectedOutput: tc.expectedOutput,
+            ...(tc.weight !== undefined ? { weight: tc.weight } : {}),
+          })),
+        },
+      } as unknown as Record<string, unknown>;
+    }
+  }
+  return obj as unknown as Record<string, unknown>;
+}
+
 function mapQuestion(question: import('../../domain/entities/index.js').AssessmentQuestion) {
   const mediaState = readQuestionMediaState(question.metadata);
   return {
@@ -11,7 +36,7 @@ function mapQuestion(question: import('../../domain/entities/index.js').Assessme
     title: question.title,
     prompt: { ...question.prompt },
     options: question.options.map((option) => ({ ...option })),
-    answerKey: question.answerKey ? { ...question.answerKey } : undefined,
+    answerKey: sanitizeAnswerKeyForLearner(question.kind, question.answerKey),
     points: question.points.value(),
     gradingMode: question.gradingMode,
     position: question.position,

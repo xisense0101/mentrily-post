@@ -56,11 +56,30 @@ function readStringField(value: unknown, field: string): string | undefined {
   return typeof record[field] === 'string' ? (record[field] as string) : undefined;
 }
 
-function getInitialCodingState(answer?: AssessmentAttemptAnswerContract): CodingAnswerState {
+function getInitialCodingState(
+  question: AssessmentQuestionContract,
+  answer?: AssessmentAttemptAnswerContract,
+): CodingAnswerState {
   const payload = answer?.answer;
+  const savedLang = readStringField(payload, 'language') ?? '';
+  const savedCode = readStringField(payload, 'sourceCode') ?? '';
+
+  if (savedLang && savedCode) {
+    return { language: savedLang, sourceCode: savedCode };
+  }
+
+  const allowed = question.answerKey?.codingLearnerConfig?.allowedLanguages ?? [];
+  const defaultLang = savedLang || allowed[0] || '';
+  const starterCode =
+    (
+      question.answerKey?.codingLearnerConfig?.starterCodeByLanguage as
+        | Record<string, string>
+        | undefined
+    )?.[defaultLang] ?? '';
+
   return {
-    language: readStringField(payload, 'language') ?? '',
-    sourceCode: readStringField(payload, 'sourceCode') ?? '',
+    language: defaultLang,
+    sourceCode: savedCode || starterCode,
   };
 }
 
@@ -68,6 +87,14 @@ function getInitialCodingState(answer?: AssessmentAttemptAnswerContract): Coding
 function getPublicTestCases(
   question: AssessmentQuestionContract,
 ): Array<{ input: string; expectedOutput?: string }> {
+  const learnerConfig = question.answerKey?.codingLearnerConfig;
+  if (learnerConfig && Array.isArray(learnerConfig.publicSampleTestCases)) {
+    return learnerConfig.publicSampleTestCases.map((tc) => ({
+      input: tc.input,
+      ...(tc.expectedOutput !== undefined ? { expectedOutput: tc.expectedOutput } : {}),
+    }));
+  }
+
   const meta = question.metadata;
   if (!meta || typeof meta !== 'object') return [];
 
@@ -237,12 +264,14 @@ export function CodingQuestionRunner({
   const [langLoading, setLangLoading] = useState(true);
   const [langError, setLangError] = useState<string | null>(null);
 
-  const [coding, setCoding] = useState<CodingAnswerState>(() => getInitialCodingState(answer));
+  const [coding, setCoding] = useState<CodingAnswerState>(() =>
+    getInitialCodingState(question, answer),
+  );
 
   // Reset coding state when answer changes (e.g. on refresh)
   useEffect(() => {
-    setCoding(getInitialCodingState(answer));
-  }, [answer]);
+    setCoding(getInitialCodingState(question, answer));
+  }, [question, answer]);
 
   const [stdin, setStdin] = useState('');
   const [runState, setRunState] = useState<RunState>('idle');
@@ -264,17 +293,35 @@ export function CodingQuestionRunner({
       .getCodeExecutionLanguages()
       .then((langs) => {
         if (cancelled) return;
-        setLanguages(langs);
+
+        const allowed = question.answerKey?.codingLearnerConfig?.allowedLanguages;
+        const filteredLangs =
+          Array.isArray(allowed) && allowed.length > 0
+            ? langs.filter((l) => allowed.includes(l.id))
+            : langs;
+
+        setLanguages(filteredLangs);
 
         // If saved language is valid, keep it. Otherwise pick first allowed.
         setCoding((prev) => {
-          const isValid = langs.some((l) => l.id === prev.language);
+          const isValid = filteredLangs.some((l) => l.id === prev.language);
           if (isValid) return prev;
+
+          const defaultLangId = filteredLangs[0]?.id ?? '';
+          const defaultTemplate =
+            (
+              question.answerKey?.codingLearnerConfig?.starterCodeByLanguage as
+                | Record<string, string>
+                | undefined
+            )?.[defaultLangId] ||
+            filteredLangs[0]?.defaultTemplate ||
+            '';
+
           return {
             ...prev,
-            language: langs[0]?.id ?? '',
+            language: defaultLangId,
             // Apply default template only if no saved source code
-            sourceCode: prev.sourceCode || langs[0]?.defaultTemplate || '',
+            sourceCode: prev.sourceCode || defaultTemplate,
           };
         });
       })
@@ -289,20 +336,29 @@ export function CodingQuestionRunner({
     return () => {
       cancelled = true;
     };
-  }, [executionClient]);
+  }, [executionClient, question]);
 
   const handleLanguageChange = useCallback(
     (langId: string) => {
       const lang = languages.find((l) => l.id === langId);
       if (!lang) return;
 
+      const starterCode =
+        (
+          question.answerKey?.codingLearnerConfig?.starterCodeByLanguage as
+            | Record<string, string>
+            | undefined
+        )?.[lang.id] ||
+        lang.defaultTemplate ||
+        '';
+
       setCoding((prev) => ({
         language: lang.id,
         // Apply default template only when source code is empty
-        sourceCode: prev.sourceCode || lang.defaultTemplate || '',
+        sourceCode: prev.sourceCode || starterCode,
       }));
     },
-    [languages],
+    [languages, question],
   );
 
   const handleCodeChange = useCallback((code: string) => {

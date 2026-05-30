@@ -1,8 +1,17 @@
-/**
- * QuestionAnswerKey Value Object
- * Represents the correct answer(s) for a question
- * Supports various question types with different answer key formats
- */
+export interface CodingAuthoringTestCase {
+  id: string;
+  input: string;
+  expectedOutput: string;
+  weight?: number;
+}
+
+export interface CodingQuestionAuthoringConfig {
+  allowedLanguages: string[];
+  starterCodeByLanguage: Record<string, string>;
+  publicSampleTestCases: CodingAuthoringTestCase[];
+  publicGradedTestCases: CodingAuthoringTestCase[];
+  hiddenGradedTestCases: CodingAuthoringTestCase[];
+}
 
 export interface QuestionAnswerKeyProps {
   correctOptionIds?: string[];
@@ -10,6 +19,7 @@ export interface QuestionAnswerKeyProps {
   expectedOutput?: string;
   rubricId?: string;
   metadata?: Record<string, unknown>;
+  codingConfig?: CodingQuestionAuthoringConfig;
 }
 
 export class QuestionAnswerKey {
@@ -18,6 +28,7 @@ export class QuestionAnswerKey {
   readonly expectedOutput?: string;
   readonly rubricId?: string;
   readonly metadata?: Record<string, unknown>;
+  readonly codingConfig?: CodingQuestionAuthoringConfig;
 
   private constructor(props: QuestionAnswerKeyProps) {
     if (props.correctOptionIds !== undefined) {
@@ -35,6 +46,9 @@ export class QuestionAnswerKey {
     if (props.metadata !== undefined) {
       this.metadata = props.metadata;
     }
+    if (props.codingConfig !== undefined) {
+      this.codingConfig = props.codingConfig;
+    }
   }
 
   /**
@@ -47,7 +61,8 @@ export class QuestionAnswerKey {
       (props.correctOptionIds && props.correctOptionIds.length > 0) ||
       (props.acceptedTextAnswers && props.acceptedTextAnswers.length > 0) ||
       props.expectedOutput ||
-      props.rubricId;
+      props.rubricId ||
+      props.codingConfig;
 
     if (!hasAnswerData) {
       throw new Error('Answer key must include at least one answer specification');
@@ -88,6 +103,11 @@ export class QuestionAnswerKey {
       throw new Error('metadata must be an object');
     }
 
+    // Validate codingConfig
+    if (props.codingConfig !== undefined && typeof props.codingConfig !== 'object') {
+      throw new Error('codingConfig must be an object');
+    }
+
     return new QuestionAnswerKey(props);
   }
 
@@ -109,7 +129,7 @@ export class QuestionAnswerKey {
    * Check if this answer key has code/output answers
    */
   hasCodeOutput(): boolean {
-    return !!this.expectedOutput;
+    return !!this.expectedOutput || !!this.codingConfig;
   }
 
   /**
@@ -131,6 +151,7 @@ export class QuestionAnswerKey {
       ...(this.expectedOutput !== undefined && { expectedOutput: this.expectedOutput }),
       ...(this.rubricId !== undefined && { rubricId: this.rubricId }),
       ...(this.metadata !== undefined && { metadata: this.metadata }),
+      ...(this.codingConfig !== undefined && { codingConfig: this.codingConfig }),
     };
   }
 }

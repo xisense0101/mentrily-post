@@ -32,23 +32,48 @@ export class CodingAnswerGradingService {
     feedback?: Record<string, unknown>;
     metadata?: Record<string, unknown>;
   }> {
-    const metadata = question.metadata as Record<string, unknown> | null | undefined;
-    const rawTestCases = metadata?.gradingTestCases || metadata?.testCases;
-    const testCases: CodingGradingTestCase[] = Array.isArray(rawTestCases)
-      ? rawTestCases.map((tc: unknown) => {
+    const testCases: CodingGradingTestCase[] = [];
+
+    const codingConfig = question.answerKey?.codingConfig;
+    if (codingConfig) {
+      if (Array.isArray(codingConfig.publicGradedTestCases)) {
+        for (const tc of codingConfig.publicGradedTestCases) {
+          testCases.push({
+            id: tc.id,
+            input: tc.input,
+            expectedOutput: tc.expectedOutput,
+            visibility: 'PUBLIC_GRADED',
+            ...(tc.weight !== undefined ? { weight: tc.weight } : {}),
+          });
+        }
+      }
+      if (Array.isArray(codingConfig.hiddenGradedTestCases)) {
+        for (const tc of codingConfig.hiddenGradedTestCases) {
+          testCases.push({
+            id: tc.id,
+            input: tc.input,
+            expectedOutput: tc.expectedOutput,
+            visibility: 'HIDDEN_GRADED',
+            ...(tc.weight !== undefined ? { weight: tc.weight } : {}),
+          });
+        }
+      }
+    } else {
+      const metadata = question.metadata as Record<string, unknown> | null | undefined;
+      const rawTestCases = metadata?.gradingTestCases || metadata?.testCases;
+      if (Array.isArray(rawTestCases)) {
+        for (const tc of rawTestCases) {
           const item = tc as Record<string, unknown>;
-          const base: CodingGradingTestCase = {
+          testCases.push({
             id: String(item.id ?? ''),
             input: String(item.input ?? ''),
             expectedOutput: String(item.expectedOutput ?? ''),
             visibility: item.visibility === 'PUBLIC_GRADED' ? 'PUBLIC_GRADED' : 'HIDDEN_GRADED',
-          };
-          if (typeof item.weight === 'number') {
-            base.weight = item.weight;
-          }
-          return base;
-        })
-      : [];
+            ...(typeof item.weight === 'number' ? { weight: item.weight } : {}),
+          });
+        }
+      }
+    }
 
     if (testCases.length === 0) {
       return {

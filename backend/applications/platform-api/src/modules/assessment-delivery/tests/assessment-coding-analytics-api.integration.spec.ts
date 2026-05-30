@@ -115,6 +115,20 @@ describe.sequential('Assessment coding analytics API (integration)', () => {
             points: 10,
             gradingMode: 'AUTO',
             position: 0,
+            metadata: {},
+            answerKey: {
+              codingConfig: {
+                allowedLanguages: ['python'],
+                starterCodeByLanguage: { python: 'def sum(arr):\n  pass' },
+                publicSampleTestCases: [],
+                publicGradedTestCases: [
+                  { id: 'public-1', input: '[]', expectedOutput: '0', weight: 1 },
+                ],
+                hiddenGradedTestCases: [
+                  { id: 'hidden-1', input: '[1]', expectedOutput: '1', weight: 1 },
+                ],
+              },
+            },
           },
         ],
       },

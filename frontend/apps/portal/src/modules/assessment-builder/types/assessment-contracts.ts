@@ -24,4 +24,7 @@ export type {
   ReplaceAssessmentContentRequest,
   RestoreAssessmentRequest,
   UpdateAssessmentRequest,
+  CodingAuthoringTestCase,
+  CodingQuestionAuthoringConfigContract,
+  CodingQuestionLearnerConfigContract,
 } from '@/contracts/assessment-delivery';

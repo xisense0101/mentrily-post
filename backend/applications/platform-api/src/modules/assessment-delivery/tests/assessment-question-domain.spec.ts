@@ -158,6 +158,7 @@ describe('AssessmentQuestion Domain', () => {
       const question = AssessmentQuestion.create({
         ...baseProps,
         kind: QuestionKindEnum.CODE,
+        gradingMode: GradingModeEnum.MANUAL,
         options: [],
         answerKey: QuestionAnswerKey.create({
           expectedOutput: 'print("hello")',
@@ -173,6 +174,7 @@ describe('AssessmentQuestion Domain', () => {
         kind: QuestionKindEnum.CODE,
         gradingMode: GradingModeEnum.AUTO,
         options: [],
+        metadata: { gradingTestCases: [] },
       });
       expect(question.kind).toBe(QuestionKindEnum.CODE);
     });

@@ -65,11 +65,11 @@ describe('QuestionRenderer', () => {
     expect(getByText(rendered.container, 'Short answer')).toBeTruthy();
   });
 
-  it('renders CODE question as placeholder', async () => {
-    const question = makeQuestion('CODE');
+  it('renders CODE question authoring component', async () => {
+    const question = makeQuestion('CODE', { gradingMode: 'AUTO' });
     const rendered = await render(<QuestionRenderer question={question} />);
     expect(getByText(rendered.container, 'Code')).toBeTruthy();
-    expect(getByText(rendered.container, 'Code question — structural placeholder')).toBeTruthy();
+    expect(rendered.container.querySelector('[data-testid="editable-code-question"]')).toBeTruthy();
   });
 
   it('uses backend-compatible answer key fields for short answer questions', async () => {
